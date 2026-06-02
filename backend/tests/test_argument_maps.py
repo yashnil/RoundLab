@@ -26,6 +26,21 @@ FAKE_SPEECH = {
 FAKE_TRANSCRIPT = {
     "id": "cccccccc-0000-0000-0000-000000000003",
     "speech_id": SPEECH_ID,
+    "text": (
+        "The first contention is economic growth. Lower taxes increase investment because "
+        "reduced tax burdens free capital for private sector deployment into productive activities. "
+        "Smith et al from 2023 finds that GDP growth increases by two percent. "
+        "The impact is more jobs and long-term prosperity for American workers. "
+        "The second contention is innovation. High marginal tax rates reduce the incentive "
+        "for entrepreneurs to take risks and start new companies, slowing technological progress."
+    ),
+    "word_count": 87,
+    "created_at": "2026-05-25T00:00:00+00:00",
+}
+
+FAKE_TRANSCRIPT_SHORT = {
+    "id": "cccccccc-0000-0000-0000-000000000003",
+    "speech_id": SPEECH_ID,
     "text": "The first contention is economic growth. Lower taxes increase investment.",
     "word_count": 12,
     "created_at": "2026-05-25T00:00:00+00:00",
@@ -108,6 +123,17 @@ def test_get_argument_map_success():
     body = response.json()
     assert body["speech_id"] == SPEECH_ID
     assert body["arguments"][0]["claim"] == "Lower taxes increase investment."
+
+
+def test_extract_short_transcript():
+    mock_client = _make_mock_client(
+        speech_data=[FAKE_SPEECH],
+        transcript_data=[FAKE_TRANSCRIPT_SHORT],
+    )
+    with patch("app.api.argument_maps.get_supabase", return_value=mock_client):
+        response = client.post(f"/speeches/{SPEECH_ID}/extract-arguments")
+    assert response.status_code == 400
+    assert "too short" in response.json()["detail"].lower()
 
 
 def test_get_argument_map_not_found():

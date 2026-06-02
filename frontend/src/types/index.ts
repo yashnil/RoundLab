@@ -95,3 +95,26 @@ export interface Speech {
   created_at: string;
   updated_at: string;
 }
+
+export type DrillStatus = "assigned" | "attempted" | "completed";
+export type DrillDifficulty = "beginner" | "intermediate" | "advanced";
+
+export interface Drill {
+  id: string;
+  speech_id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  skill_target: string;
+  prompt: string;
+  order: number;
+  /** Step-by-step guidance (newline-separated) */
+  instructions: string | null;
+  /** Checklist items for self-evaluation */
+  success_criteria: string[];
+  /** The specific feedback weakness this drill targets */
+  source_weakness: string | null;
+  difficulty: DrillDifficulty;
+  status: DrillStatus;
+  created_at: string;
+}

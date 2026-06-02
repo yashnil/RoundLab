@@ -2,1113 +2,902 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Check, ChevronDown, ChevronUp,
+  Mic, RefreshCw, Trash2, Upload,
+} from "lucide-react";
+import AppNav from "@/components/AppNav";
+import WorkflowStepper from "@/components/WorkflowStepper";
+import RecordingStudio from "@/components/RecordingStudio";
+import UploadDropzone from "@/components/UploadDropzone";
+import TranscriptPanel from "@/components/TranscriptPanel";
+import ArgumentCard from "@/components/ArgumentCard";
+import ScoreCard from "@/components/ScoreCard";
+import ScoreBreakdown from "@/components/ScoreBreakdown";
+import LoadingCard from "@/components/LoadingCard";
+import DeleteDialog from "@/components/DeleteDialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
-import type { ArgumentMap, FeedbackReport, Speech, Transcript } from "@/types";
+import { fadeUp, staggerParent, staggerChild, T, EASE } from "@/lib/motion";
+import DrillCard from "@/components/DrillCard";
+import type { ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
+import type { RecordState } from "@/components/RecordingStudio";
 
-const ALLOWED_EXTENSIONS = ["mp3", "wav", "m4a", "webm", "ogg", "mp4"];
-const MAX_BYTES = 50 * 1024 * 1024; // 50 MB — Supabase free tier limit
+// ── Constants ──────────────────────────────────────────────────────────────────
 
-const SPEECH_TYPE_LABEL: Record<string, string> = {
-  constructive: "Constructive",
-  rebuttal: "Rebuttal",
-  summary: "Summary",
-  final_focus: "Final Focus",
-  crossfire: "Crossfire",
+const ALLOWED_EXT = ["mp3", "wav", "m4a", "webm", "ogg", "mp4"];
+const MAX_BYTES   = 50 * 1024 * 1024;
+
+const TYPE_LABEL: Record<string, string> = {
+  constructive: "Constructive", rebuttal: "Rebuttal",
+  summary: "Summary", final_focus: "Final Focus", crossfire: "Crossfire",
 };
 
-type RecordState =
-  | "idle"
-  | "requesting"
-  | "recording"
-  | "recorded"
-  | "uploading"
-  | "error";
+const MSG_TRANSCRIBE = ["Preparing audio…", "Running transcription…", "Processing signal…", "Saving transcript…"];
+const MSG_FLOW       = ["Mapping claims…", "Finding warrants…", "Checking evidence…", "Building flow…"];
+const MSG_FEEDBACK   = ["Reading the flow…", "Scoring clash…", "Checking judge adaptation…", "Writing judge ballot…"];
+const MSG_DRILLS     = ["Reading your ballot…", "Finding skill gaps…", "Building practice drills…"];
 
-type AudioInputMode = "record" | "upload";
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-function validateFile(file: File): string | null {
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return `Unsupported file type ".${ext}". Allowed: ${ALLOWED_EXTENSIONS.join(", ")}.`;
-  }
-  if (file.size > MAX_BYTES) {
-    return `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 50 MB.`;
-  }
+function validateFile(f: File): string | null {
+  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!ALLOWED_EXT.includes(ext)) return `Unsupported ".${ext}". Allowed: ${ALLOWED_EXT.join(", ")}.`;
+  if (f.size > MAX_BYTES)         return `Too large (${(f.size / 1024 / 1024).toFixed(1)} MB). Max 50 MB.`;
   return null;
 }
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60).toString().padStart(2, "0");
-  const s = (seconds % 60).toString().padStart(2, "0");
-  return `${m}:${s}`;
-}
-
-function getBestMimeType(): { mimeType: string; ext: string } {
+function getBestMime(): { mimeType: string; ext: string } {
   if (typeof MediaRecorder === "undefined") return { mimeType: "", ext: "webm" };
-  const candidates = [
+  for (const c of [
     { mimeType: "audio/webm;codecs=opus", ext: "webm" },
-    { mimeType: "audio/webm", ext: "webm" },
-    { mimeType: "audio/ogg;codecs=opus", ext: "ogg" },
-    { mimeType: "audio/mp4", ext: "mp4" },
-  ];
-  for (const c of candidates) {
-    if (MediaRecorder.isTypeSupported(c.mimeType)) return c;
-  }
+    { mimeType: "audio/webm",             ext: "webm" },
+    { mimeType: "audio/ogg;codecs=opus",  ext: "ogg"  },
+    { mimeType: "audio/mp4",              ext: "mp4"  },
+  ]) { if (MediaRecorder.isTypeSupported(c.mimeType)) return c; }
   return { mimeType: "", ext: "webm" };
 }
 
-export default function SpeechDetailPage() {
-  const { id: speechId } = useParams<{ id: string }>();
-  const router = useRouter();
+// ── Sub-components ─────────────────────────────────────────────────────────────
 
-  // ── Page state ─────────────────────────────────────────────────────────────
-  const [userId, setUserId] = useState<string | null>(null);
-  const [speech, setSpeech] = useState<Speech | null>(null);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [pageError, setPageError] = useState("");
-
-  // ── Audio input mode toggle ────────────────────────────────────────────────
-  const [audioInputMode, setAudioInputMode] = useState<AudioInputMode>("record");
-
-  // ── Recording state ────────────────────────────────────────────────────────
-  const [recordState, setRecordState] = useState<RecordState>("idle");
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordBlob, setRecordBlob] = useState<Blob | null>(null);
-  const [recordObjectUrl, setRecordObjectUrl] = useState<string | null>(null);
-  const [recordError, setRecordError] = useState("");
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recordExtRef = useRef<string>("webm");
-  const recordObjectUrlRef = useRef<string | null>(null);
-
-  // ── File upload state ──────────────────────────────────────────────────────
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileError, setFileError] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-
-  // ── Transcript state ───────────────────────────────────────────────────────
-  const [transcript, setTranscript] = useState<Transcript | null>(null);
-  const [transcribing, setTranscribing] = useState(false);
-  const [transcribeError, setTranscribeError] = useState("");
-
-  // ── Argument map state ─────────────────────────────────────────────────────
-  const [argumentMap, setArgumentMap] = useState<ArgumentMap | null>(null);
-  const [generatingFlow, setGeneratingFlow] = useState(false);
-  const [flowError, setFlowError] = useState("");
-
-  // ── Feedback report state ──────────────────────────────────────────────────
-  const [feedbackReport, setFeedbackReport] = useState<FeedbackReport | null>(null);
-  const [generatingFeedback, setGeneratingFeedback] = useState(false);
-  const [feedbackError, setFeedbackError] = useState("");
-
-  // Cleanup media resources on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      if (recordObjectUrlRef.current) URL.revokeObjectURL(recordObjectUrlRef.current);
-    };
-  }, []);
-
-  // Load user + speech + existing transcript on mount
-  useEffect(() => {
-    createClient()
-      .auth.getUser()
-      .then(({ data }) => {
-        if (!data.user) {
-          router.replace("/login");
-          return null;
-        }
-        setUserId(data.user.id);
-        return apiFetch<Speech>(`/speeches/${speechId}`);
-      })
-      .then(async (s) => {
-        if (!s) return;
-        setSpeech(s);
-        try {
-          const t = await apiFetch<Transcript>(`/speeches/${speechId}/transcript`);
-          setTranscript(t);
-        } catch {
-          // 404 expected when no transcript yet — ignore
-        }
-        try {
-          const m = await apiFetch<ArgumentMap>(`/speeches/${speechId}/argument-map`);
-          setArgumentMap(m);
-        } catch {
-          // 404 expected when no argument map yet — ignore
-        }
-        try {
-          const fb = await apiFetch<FeedbackReport>(`/speeches/${speechId}/feedback`);
-          setFeedbackReport(fb);
-        } catch {
-          // 404 expected when no feedback yet — ignore
-        }
-      })
-      .catch(() => setPageError("Could not load speech. Is the backend running?"))
-      .finally(() => setPageLoading(false));
-  }, [speechId, router]);
-
-  // ── Recording handlers ─────────────────────────────────────────────────────
-
-  async function handleStartRecording() {
-    setRecordError("");
-    setRecordState("requesting");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const { mimeType, ext } = getBestMimeType();
-      recordExtRef.current = ext;
-
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: mimeType || "audio/webm",
-        });
-
-        // Revoke previous URL before creating a new one
-        if (recordObjectUrlRef.current) {
-          URL.revokeObjectURL(recordObjectUrlRef.current);
-        }
-        const url = URL.createObjectURL(blob);
-        recordObjectUrlRef.current = url;
-
-        setRecordBlob(blob);
-        setRecordObjectUrl(url);
-        setRecordState("recorded");
-
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
-      };
-
-      recorder.start();
-      setRecordingSeconds(0);
-      timerRef.current = setInterval(
-        () => setRecordingSeconds((s) => s + 1),
-        1000,
-      );
-      setRecordState("recording");
-    } catch (err: unknown) {
-      setRecordState("error");
-      if (err instanceof Error && err.name === "NotAllowedError") {
-        setRecordError(
-          "Microphone permission denied. Allow microphone access in your browser settings and try again.",
-        );
-      } else {
-        setRecordError(
-          "Could not access microphone. Check your browser settings.",
-        );
-      }
-    }
-  }
-
-  function handleStopRecording() {
-    mediaRecorderRef.current?.stop();
-  }
-
-  function handleDiscardRecording() {
-    if (recordObjectUrlRef.current) {
-      URL.revokeObjectURL(recordObjectUrlRef.current);
-      recordObjectUrlRef.current = null;
-    }
-    setRecordObjectUrl(null);
-    setRecordBlob(null);
-    setRecordState("idle");
-    setRecordingSeconds(0);
-    setRecordError("");
-  }
-
-  async function handleSaveRecording() {
-    if (!recordBlob || !userId) return;
-    setRecordState("uploading");
-
-    const ext = recordExtRef.current;
-    const storagePath = `${userId}/${speechId}/audio.${ext}`;
-
-    try {
-      const supabase = createClient();
-      const { error: storageError } = await supabase.storage
-        .from("audio")
-        .upload(storagePath, recordBlob, {
-          upsert: true,
-          contentType: recordBlob.type || "audio/webm",
-        });
-
-      if (storageError) {
-        setRecordState("error");
-        setRecordError(`Upload failed: ${storageError.message}`);
-        return;
-      }
-
-      const updated = await apiFetch<Speech>(`/speeches/${speechId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: storagePath }),
-      });
-
-      setSpeech(updated);
-      if (recordObjectUrlRef.current) {
-        URL.revokeObjectURL(recordObjectUrlRef.current);
-        recordObjectUrlRef.current = null;
-      }
-      setRecordObjectUrl(null);
-      setRecordBlob(null);
-      setRecordState("idle");
-    } catch (err: unknown) {
-      setRecordState("error");
-      setRecordError(
-        err instanceof Error ? err.message : "Upload failed. Please try again.",
-      );
-    }
-  }
-
-  // ── File upload handlers ───────────────────────────────────────────────────
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFileError("");
-    setUploadError("");
-    const file = e.target.files?.[0] ?? null;
-    if (!file) return;
-    const err = validateFile(file);
-    if (err) {
-      setFileError(err);
-      setSelectedFile(null);
-      e.target.value = "";
-    } else {
-      setSelectedFile(file);
-    }
-  }
-
-  async function handleUpload() {
-    if (!selectedFile || !userId || !speech) return;
-    setUploadError("");
-    setUploading(true);
-
-    const ext = selectedFile.name.split(".").pop()!.toLowerCase();
-    const storagePath = `${userId}/${speechId}/audio.${ext}`;
-
-    try {
-      const supabase = createClient();
-      const { error: storageError } = await supabase.storage
-        .from("audio")
-        .upload(storagePath, selectedFile, { upsert: true });
-
-      if (storageError) {
-        setUploadError(`Upload failed: ${storageError.message}`);
-        return;
-      }
-
-      const updated = await apiFetch<Speech>(`/speeches/${speechId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: storagePath }),
-      });
-
-      setSpeech(updated);
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (err: unknown) {
-      setUploadError(
-        err instanceof Error ? err.message : "Upload failed. Please try again.",
-      );
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  // ── Transcription handler ──────────────────────────────────────────────────
-
-  async function handleTranscribe() {
-    if (!speech?.audio_url) return;
-    setTranscribeError("");
-    setTranscribing(true);
-    try {
-      const t = await apiFetch<Transcript>(`/speeches/${speechId}/transcribe`, {
-        method: "POST",
-      });
-      setTranscript(t);
-      setSpeech((prev) => (prev ? { ...prev, status: "done" } : prev));
-    } catch (err: unknown) {
-      setTranscribeError(
-        err instanceof Error ? err.message : "Transcription failed. Please try again.",
-      );
-      setSpeech((prev) => (prev ? { ...prev, status: "error" } : prev));
-    } finally {
-      setTranscribing(false);
-    }
-  }
-
-  // ── Feedback generation handler ────────────────────────────────────────────
-
-  async function handleGenerateFeedback() {
-    if (!argumentMap) return;
-    setFeedbackError("");
-    setGeneratingFeedback(true);
-    try {
-      const fb = await apiFetch<FeedbackReport>(
-        `/speeches/${speechId}/generate-feedback`,
-        { method: "POST" },
-      );
-      setFeedbackReport(fb);
-      setSpeech((prev) => (prev ? { ...prev, status: "done" } : prev));
-    } catch (err: unknown) {
-      setFeedbackError(
-        err instanceof Error ? err.message : "Feedback generation failed. Please try again.",
-      );
-      setSpeech((prev) => (prev ? { ...prev, status: "error" } : prev));
-    } finally {
-      setGeneratingFeedback(false);
-    }
-  }
-
-  // ── Flow generation handler ────────────────────────────────────────────────
-
-  async function handleGenerateFlow() {
-    if (!transcript) return;
-    setFlowError("");
-    setGeneratingFlow(true);
-    try {
-      const m = await apiFetch<ArgumentMap>(
-        `/speeches/${speechId}/extract-arguments`,
-        { method: "POST" },
-      );
-      setArgumentMap(m);
-      setSpeech((prev) => (prev ? { ...prev, status: "done" } : prev));
-    } catch (err: unknown) {
-      setFlowError(
-        err instanceof Error ? err.message : "Flow generation failed. Please try again.",
-      );
-      setSpeech((prev) => (prev ? { ...prev, status: "error" } : prev));
-    } finally {
-      setGeneratingFlow(false);
-    }
-  }
-
-  // ── Loading / error states ─────────────────────────────────────────────────
-
-  if (pageLoading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-zinc-400">Loading…</p>
-      </main>
-    );
-  }
-
-  if (pageError || !speech) {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-6 py-16">
-        <Link href="/dashboard" className="text-sm text-zinc-500 hover:text-zinc-800">
-          ← Dashboard
-        </Link>
-        <p className="text-sm text-red-600">{pageError || "Speech not found."}</p>
-      </main>
-    );
-  }
-
-  const date = new Date(speech.created_at).toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  // Disable mode toggle while actively using mic or uploading a recording
-  const recordingBusy =
-    recordState === "requesting" ||
-    recordState === "recording" ||
-    recordState === "uploading";
-
-  // ── Page ───────────────────────────────────────────────────────────────────
-
+function StepHeader({ n, title, done, aside }: {
+  n: number; title: string; done: boolean; aside?: React.ReactNode;
+}) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-8 px-6 py-16">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <Link
-          href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-        >
-          ← Dashboard
-        </Link>
-      </div>
-
-      {/* Speech metadata */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {speech.title}
-        </h1>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500">
-          <span>{SPEECH_TYPE_LABEL[speech.speech_type] ?? speech.speech_type}</span>
-          {speech.side && <span className="capitalize">{speech.side}</span>}
-          {speech.judge_type && (
-            <span className="capitalize">{speech.judge_type} judge</span>
-          )}
-          <span>{date}</span>
-        </div>
-        {speech.topic && (
-          <p className="mt-1 text-sm text-zinc-400">{speech.topic}</p>
-        )}
-      </div>
-
-      {/* Audio card */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 pt-6 pb-6">
-          <p className="font-medium text-zinc-800 dark:text-zinc-100">Audio</p>
-
-          {speech.audio_url ? (
-            // ── Audio already uploaded ──────────────────────────────────────
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-                <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                  Audio uploaded
-                </span>
-              </div>
-              <p className="break-all font-mono text-xs text-zinc-400">
-                {speech.audio_url}
-              </p>
-              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                <p className="mb-2 text-xs text-zinc-400">Replace audio file:</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".mp3,.wav,.m4a,.webm,.ogg,.mp4"
-                    onChange={handleFileChange}
-                    disabled={uploading}
-                    className="text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-700 hover:file:bg-zinc-200 dark:file:bg-zinc-800 dark:file:text-zinc-300"
-                  />
-                  {selectedFile && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={uploading}
-                      onClick={handleUpload}
-                    >
-                      {uploading ? "Uploading…" : "Replace"}
-                    </Button>
-                  )}
-                </div>
-                {uploadError && (
-                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                    {uploadError}
-                  </p>
-                )}
-              </div>
-            </div>
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2.5">
+        <AnimatePresence mode="wait">
+          {done ? (
+            <motion.span
+              key="done"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={T.snap}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lav text-white"
+            >
+              <Check size={10} strokeWidth={2.5} />
+            </motion.span>
           ) : (
-            // ── No audio yet ────────────────────────────────────────────────
-            <div className="flex flex-col gap-4">
-              {/* Mode toggle */}
-              <div className="flex gap-1 rounded-lg border border-zinc-200 p-1 dark:border-zinc-700">
-                {(["record", "upload"] as AudioInputMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    disabled={recordingBusy}
-                    onClick={() => setAudioInputMode(mode)}
-                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
-                      audioInputMode === mode
-                        ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-50"
-                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-                    }`}
-                  >
-                    {mode === "record" ? "Record" : "Upload file"}
-                  </button>
-                ))}
-              </div>
-
-              {audioInputMode === "record" ? (
-                // ── Record mode ───────────────────────────────────────────
-                <div className="flex flex-col gap-3">
-                  {recordState === "idle" && (
-                    <Button onClick={handleStartRecording} className="w-full">
-                      Start Recording
-                    </Button>
-                  )}
-
-                  {recordState === "requesting" && (
-                    <p className="text-center text-sm text-zinc-500">
-                      Requesting microphone permission…
-                    </p>
-                  )}
-
-                  {recordState === "recording" && (
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
-                        <span className="font-mono text-lg font-semibold text-zinc-800 dark:text-zinc-200">
-                          {formatTime(recordingSeconds)}
-                        </span>
-                      </div>
-                      <Button
-                        onClick={handleStopRecording}
-                        className="w-full border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
-                        variant="outline"
-                      >
-                        Stop Recording
-                      </Button>
-                    </div>
-                  )}
-
-                  {recordState === "recorded" && recordObjectUrl && (
-                    <div className="flex flex-col gap-3">
-                      <audio src={recordObjectUrl} controls className="w-full" />
-                      <p className="text-center text-xs text-zinc-400">
-                        {formatTime(recordingSeconds)} recorded
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={handleSaveRecording}
-                          className="flex-1"
-                        >
-                          Save Recording
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={handleDiscardRecording}
-                        >
-                          Discard
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {recordState === "uploading" && (
-                    <p className="text-center text-sm text-zinc-500">
-                      Saving recording…
-                    </p>
-                  )}
-
-                  {recordState === "error" && (
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm text-red-600 dark:text-red-400">
-                        {recordError}
-                      </p>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setRecordState("idle");
-                          setRecordError("");
-                        }}
-                        className="w-full"
-                      >
-                        Try Again
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // ── Upload mode ───────────────────────────────────────────
-                <div className="flex flex-col gap-4">
-                  <p className="text-sm text-zinc-500">
-                    Accepted formats: {ALLOWED_EXTENSIONS.join(", ")}. Max 50 MB.
-                  </p>
-
-                  <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-zinc-200 p-8 text-center transition-colors hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500">
-                    <span className="text-2xl">📁</span>
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      {selectedFile ? selectedFile.name : "Click to select a file"}
-                    </span>
-                    {selectedFile && (
-                      <span className="text-xs text-zinc-400">
-                        {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
-                      </span>
-                    )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".mp3,.wav,.m4a,.webm,.ogg,.mp4"
-                      onChange={handleFileChange}
-                      disabled={uploading}
-                      className="sr-only"
-                    />
-                  </label>
-
-                  {fileError && (
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      {fileError}
-                    </p>
-                  )}
-
-                  {uploadError && (
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      {uploadError}
-                      {uploadError.includes("403") || uploadError.includes("policy") ? (
-                        <span className="mt-1 block text-xs text-zinc-500">
-                          Check that the Supabase Storage &quot;audio&quot; bucket has
-                          INSERT policy for authenticated users.
-                        </span>
-                      ) : null}
-                    </p>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Button
-                      disabled={!selectedFile || uploading}
-                      onClick={handleUpload}
-                      className="w-full"
-                    >
-                      {uploading ? "Uploading…" : "Upload Audio"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push("/dashboard")}
-                      disabled={uploading}
-                    >
-                      Skip
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <motion.span
+              key="pending"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={T.snap}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-hairline-strong text-xs font-bold text-ink-faint"
+            >
+              {n}
+            </motion.span>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Transcript card — only shown once audio is uploaded */}
-      {speech.audio_url && (
-        <Card>
-          <CardContent className="flex flex-col gap-4 pt-6 pb-6">
-            <p className="font-medium text-zinc-800 dark:text-zinc-100">Transcript</p>
-
-            {transcript ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                    Transcribed
-                    {transcript.word_count != null
-                      ? ` · ${transcript.word_count} words`
-                      : ""}
-                  </span>
-                </div>
-                <p className="whitespace-pre-wrap rounded-md bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                  {transcript.text}
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <p className="text-sm text-zinc-500">
-                  Transcribe your speech using OpenAI Whisper. This usually takes
-                  10–30 seconds depending on length.
-                </p>
-                {transcribeError && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {transcribeError}
-                  </p>
-                )}
-                <Button
-                  disabled={transcribing}
-                  onClick={handleTranscribe}
-                  className="w-full"
-                >
-                  {transcribing ? "Transcribing…" : "Transcribe Audio"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Flow card — only shown once a transcript exists */}
-      {transcript && (
-        <Card>
-          <CardContent className="flex flex-col gap-4 pt-6 pb-6">
-            <p className="font-medium text-zinc-800 dark:text-zinc-100">Flow</p>
-
-            {argumentMap ? (
-              // ── Flow table ──────────────────────────────────────────────
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                      {["Label", "Claim", "Warrant", "Evidence", "Impact", "Type", "Issues"].map(
-                        (h) => (
-                          <th
-                            key={h}
-                            className="pb-2 pr-4 font-medium text-zinc-500 dark:text-zinc-400"
-                          >
-                            {h}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {argumentMap.arguments.map((arg, i) => (
-                      <tr
-                        key={i}
-                        className="border-b border-zinc-100 align-top last:border-0 dark:border-zinc-800"
-                      >
-                        <td className="py-3 pr-4 font-medium text-zinc-800 dark:text-zinc-200 min-w-[120px]">
-                          {arg.label}
-                        </td>
-                        <td className="py-3 pr-4 text-zinc-700 dark:text-zinc-300 max-w-[180px]">
-                          {arg.claim}
-                        </td>
-                        <td className="py-3 pr-4 text-zinc-600 dark:text-zinc-400 max-w-[180px]">
-                          {arg.warrant}
-                        </td>
-                        <td className="py-3 pr-4 text-zinc-500 dark:text-zinc-500 max-w-[160px] italic">
-                          {arg.evidence ?? <span className="not-italic text-zinc-300 dark:text-zinc-600">—</span>}
-                        </td>
-                        <td className="py-3 pr-4 text-zinc-700 dark:text-zinc-300 max-w-[180px]">
-                          {arg.impact}
-                        </td>
-                        <td className="py-3 pr-4">
-                          <ArgumentTypeBadge type={arg.argument_type} />
-                        </td>
-                        <td className="py-3 text-zinc-500 dark:text-zinc-400 max-w-[180px]">
-                          {arg.issues.length === 0 ? (
-                            <span className="text-green-600 dark:text-green-400">none</span>
-                          ) : (
-                            <ul className="list-inside list-disc space-y-0.5">
-                              {arg.issues.map((issue, j) => (
-                                <li key={j} className="text-xs">
-                                  {issue}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {argumentMap.arguments.length === 0 && (
-                  <p className="mt-3 text-sm text-zinc-400">
-                    No arguments were extracted from this transcript.
-                  </p>
-                )}
-              </div>
-            ) : (
-              // ── No flow yet ─────────────────────────────────────────────
-              <div className="flex flex-col gap-3">
-                <p className="text-sm text-zinc-500">
-                  Generate a structured flow from your transcript using AI.
-                  This extracts claims, warrants, evidence, and impacts.
-                </p>
-                {flowError && (
-                  <p className="text-sm text-red-600 dark:text-red-400">{flowError}</p>
-                )}
-                <Button
-                  disabled={generatingFlow}
-                  onClick={handleGenerateFlow}
-                  className="w-full"
-                >
-                  {generatingFlow ? "Generating flow…" : "Generate Flow"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Feedback card — only shown once an argument map exists */}
-      {argumentMap && (
-        <Card>
-          <CardContent className="flex flex-col gap-6 pt-6 pb-6">
-            <p className="font-medium text-zinc-800 dark:text-zinc-100">Feedback</p>
-
-            {feedbackReport ? (
-              <div className="flex flex-col gap-8">
-                {/* Section 1: Judge Ballot Overview */}
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-5xl font-bold text-zinc-900 dark:text-zinc-50">
-                      {feedbackReport.overall_score ?? "—"}
-                    </span>
-                    <span className="text-sm text-zinc-500">/ 100</span>
-                  </div>
-                  {feedbackReport.summary && (
-                    <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-                      {feedbackReport.summary}
-                    </p>
-                  )}
-                </div>
-
-                {/* Section 2: Score Breakdown */}
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                    Score Breakdown
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {(
-                      [
-                        ["Clash", feedbackReport.scores.clash],
-                        ["Weighing", feedbackReport.scores.weighing],
-                        ["Extensions", feedbackReport.scores.extensions],
-                        ["Drops", feedbackReport.scores.drops],
-                        ["Judge Adapt.", feedbackReport.scores.judge_adaptation],
-                      ] as [string, number][]
-                    ).map(([label, score]) => (
-                      <div
-                        key={label}
-                        className="flex flex-col items-center rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900"
-                      >
-                        <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-                          {score}
-                        </span>
-                        <span className="text-xs text-zinc-400">/ 20</span>
-                        <span className="mt-1 text-center text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                          {label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Section 3: Decision Logic / RFD */}
-                {feedbackReport.raw_feedback?.decision_logic && (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                      Decision Logic (RFD)
-                    </p>
-                    <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-                      {feedbackReport.raw_feedback.decision_logic}
-                    </p>
-                  </div>
-                )}
-
-                {/* Section 4: Argument-Level Diagnostics */}
-                {(feedbackReport.raw_feedback?.dropped_or_undercovered_arguments?.length ||
-                  feedbackReport.raw_feedback?.warranting_diagnostics?.length ||
-                  feedbackReport.raw_feedback?.weighing_diagnostics?.length ||
-                  feedbackReport.raw_feedback?.evidence_diagnostics?.length) ? (
-                  <div className="flex flex-col gap-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                      Argument-Level Diagnostics
-                    </p>
-                    {feedbackReport.raw_feedback?.dropped_or_undercovered_arguments?.length ? (
-                      <DiagnosticList
-                        label="Dropped / Undercovered Arguments"
-                        items={feedbackReport.raw_feedback.dropped_or_undercovered_arguments}
-                        variant="warn"
-                      />
-                    ) : null}
-                    {feedbackReport.raw_feedback?.warranting_diagnostics?.length ? (
-                      <DiagnosticList
-                        label="Warranting"
-                        items={feedbackReport.raw_feedback.warranting_diagnostics}
-                      />
-                    ) : null}
-                    {feedbackReport.raw_feedback?.weighing_diagnostics?.length ? (
-                      <DiagnosticList
-                        label="Weighing"
-                        items={feedbackReport.raw_feedback.weighing_diagnostics}
-                      />
-                    ) : null}
-                    {feedbackReport.raw_feedback?.evidence_diagnostics?.length ? (
-                      <DiagnosticList
-                        label="Evidence"
-                        items={feedbackReport.raw_feedback.evidence_diagnostics}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {/* Section 5: Strengths & Weaknesses */}
-                {(feedbackReport.strengths.length > 0 || feedbackReport.weaknesses.length > 0) && (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {feedbackReport.strengths.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-green-600 dark:text-green-400">
-                          Strengths
-                        </p>
-                        <ul className="flex flex-col gap-1.5">
-                          {feedbackReport.strengths.map((s, i) => (
-                            <li
-                              key={i}
-                              className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="mt-0.5 shrink-0 text-green-500">✓</span>
-                              {s}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {feedbackReport.weaknesses.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-red-500 dark:text-red-400">
-                          Weaknesses
-                        </p>
-                        <ul className="flex flex-col gap-1.5">
-                          {feedbackReport.weaknesses.map((w, i) => (
-                            <li
-                              key={i}
-                              className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="mt-0.5 shrink-0 text-red-500">✕</span>
-                              {w}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Section 6: Judge Adaptation */}
-                {feedbackReport.raw_feedback?.judge_adaptation_notes && (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                      Judge Adaptation
-                    </p>
-                    <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-                      {feedbackReport.raw_feedback.judge_adaptation_notes}
-                    </p>
-                  </div>
-                )}
-
-                {/* Section 7: Top 3 Priorities & Recommendations */}
-                {(feedbackReport.raw_feedback?.top_3_priorities?.length ||
-                  feedbackReport.raw_feedback?.recommendations?.length) ? (
-                  <div className="flex flex-col gap-4">
-                    {feedbackReport.raw_feedback?.top_3_priorities?.length ? (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                          Top 3 Priorities for Next Recording
-                        </p>
-                        <ol className="flex flex-col gap-2">
-                          {feedbackReport.raw_feedback.top_3_priorities.map((p, i) => (
-                            <li
-                              key={i}
-                              className="flex items-start gap-2.5 text-sm text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
-                                {i + 1}
-                              </span>
-                              {p}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    ) : null}
-                    {feedbackReport.raw_feedback?.recommendations?.length ? (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                          Recommendations
-                        </p>
-                        <ul className="flex flex-col gap-1.5">
-                          {feedbackReport.raw_feedback.recommendations.map((r, i) => (
-                            <li
-                              key={i}
-                              className="flex gap-2 text-sm text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="mt-0.5 shrink-0 text-zinc-400">→</span>
-                              {r}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <p className="text-sm text-zinc-500">
-                  Generate an AI ballot from your speech. The judge evaluates argument
-                  structure, clash, weighing, drops, and judge adaptation.
-                </p>
-                {feedbackError && (
-                  <p className="text-sm text-red-600 dark:text-red-400">{feedbackError}</p>
-                )}
-                <Button
-                  disabled={generatingFeedback}
-                  onClick={handleGenerateFeedback}
-                  className="w-full"
-                >
-                  {generatingFeedback ? "Generating feedback…" : "Generate Feedback"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={() => router.push("/dashboard")}
-      >
-        Back to Dashboard
-      </Button>
-    </main>
+        </AnimatePresence>
+        <p className="text-heading text-ink">{title}</p>
+      </div>
+      {aside}
+    </div>
   );
 }
 
-function DiagnosticList({
-  label,
-  items,
-  variant = "default",
-}: {
-  label: string;
-  items: string[];
-  variant?: "default" | "warn";
+function Collapsible({ label, children, open: defaultOpen = false }: {
+  label: string; children: React.ReactNode; open?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-t border-hairline">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between py-3 text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-eyebrow text-ink-faint">{label}</span>
+        <motion.span
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={T.fast}
+        >
+          <ChevronDown size={12} className="text-ink-faint" />
+        </motion.span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="pb-4">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function InlineAlert({ variant, children }: { variant: "danger" | "warn"; children: React.ReactNode }) {
+  const s = variant === "danger"
+    ? "border-danger/20 bg-danger/5 text-danger/90"
+    : "border-warn/20 bg-warn/5 text-warn/90";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={T.base}
+      className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${s}`}
+    >
+      <span className="mt-0.5 shrink-0">⚠</span>
+      <p>{children}</p>
+    </motion.div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  type V = "default" | "indigo" | "green" | "amber" | "red";
+  const MAP: Record<string, [string, V]> = {
+    pending:      ["Pending",      "default"],
+    transcribing: ["Transcribing", "indigo" ],
+    analyzing:    ["Analyzing",    "amber"  ],
+    done:         ["Complete",     "green"  ],
+    error:        ["Error",        "red"    ],
+  };
+  const [label, variant] = MAP[status] ?? [status, "default" as V];
+  return <Badge variant={variant} className="shrink-0">{label}</Badge>;
+}
+
+function DiagList({ label, items, warn }: { label: string; items: string[]; warn?: boolean }) {
+  if (!items.length) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-zinc-500">{label}</p>
+      <p className="text-xs font-medium text-ink-faint">{label}</p>
       <ul className="flex flex-col gap-1">
         {items.map((item, i) => (
-          <li
-            key={i}
-            className={`text-sm ${
-              variant === "warn"
-                ? "text-amber-700 dark:text-amber-400"
-                : "text-zinc-700 dark:text-zinc-300"
-            }`}
-          >
-            · {item}
-          </li>
+          <li key={i} className={`text-sm ${warn ? "text-warn" : "text-ink-muted"}`}>· {item}</li>
         ))}
       </ul>
     </div>
   );
 }
 
-function ArgumentTypeBadge({ type }: { type: string }) {
-  const styles: Record<string, string> = {
-    offense:
-      "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    defense:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    weighing:
-      "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    response:
-      "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-    unclear:
-      "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  };
+/** Wraps a workspace section card — animates in when it first appears */
+function WorkspaceCard({ children, motionKey }: { children: React.ReactNode; motionKey: string }) {
   return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-        styles[type] ?? styles.unclear
-      }`}
+    <motion.div
+      key={motionKey}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: EASE }}
     >
-      {type}
-    </span>
+      <Card>{children}</Card>
+    </motion.div>
+  );
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────────
+
+export default function SpeechPage() {
+  const { id: speechId } = useParams<{ id: string }>();
+  const router = useRouter();
+
+  const [userId,     setUserId]     = useState<string | null>(null);
+  const [speech,     setSpeech]     = useState<Speech | null>(null);
+  const [pageLoad,   setPageLoad]   = useState(true);
+  const [pageErr,    setPageErr]    = useState("");
+
+  const [mode,       setMode]       = useState<"record" | "upload">("record");
+  const [recState,   setRecState]   = useState<RecordState>("idle");
+  const [recSecs,    setRecSecs]    = useState(0);
+  const [recBlob,    setRecBlob]    = useState<Blob | null>(null);
+  const [recUrl,     setRecUrl]     = useState<string | null>(null);
+  const [recErr,     setRecErr]     = useState("");
+  const [selFile,    setSelFile]    = useState<File | null>(null);
+  const [fileErr,    setFileErr]    = useState("");
+  const [upErr,      setUpErr]      = useState("");
+  const [uploading,  setUploading]  = useState(false);
+  const [resetting,  setResetting]  = useState(false);
+
+  const [transcript,   setTranscript]   = useState<Transcript | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [txErr,        setTxErr]        = useState("");
+  const [argMap,       setArgMap]       = useState<ArgumentMap | null>(null);
+  const [genFlow,      setGenFlow]      = useState(false);
+  const [flowErr,      setFlowErr]      = useState("");
+  const [feedback,     setFeedback]     = useState<FeedbackReport | null>(null);
+  const [genFb,        setGenFb]        = useState(false);
+  const [fbErr,        setFbErr]        = useState("");
+
+  const [drills,        setDrills]        = useState<Drill[]>([]);
+  const [genDrills,     setGenDrills]     = useState(false);
+  const [drillErr,      setDrillErr]      = useState("");
+  const [updatingDrill, setUpdatingDrill] = useState<string | null>(null);
+
+  const [delOpen,  setDelOpen]  = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const mrRef   = useRef<MediaRecorder | null>(null);
+  const chunks  = useRef<Blob[]>([]);
+  const stream  = useRef<MediaStream | null>(null);
+  const timer   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const extRef  = useRef("webm");
+  const urlRef  = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    if (timer.current) clearInterval(timer.current);
+    stream.current?.getTracks().forEach((t) => t.stop());
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+  }, []);
+
+  useEffect(() => {
+    createClient().auth.getUser()
+      .then(({ data }) => {
+        if (!data.user) { router.replace("/login"); return null; }
+        setUserId(data.user.id);
+        return apiFetch<Speech>(`/speeches/${speechId}`);
+      })
+      .then(async (s) => {
+        if (!s) return;
+        setSpeech(s);
+        try { setTranscript(await apiFetch<Transcript>(`/speeches/${speechId}/transcript`)); }    catch {}
+        try { setArgMap(await apiFetch<ArgumentMap>(`/speeches/${speechId}/argument-map`)); }     catch {}
+        try { setFeedback(await apiFetch<FeedbackReport>(`/speeches/${speechId}/feedback`)); }    catch {}
+        try { setDrills(await apiFetch<Drill[]>(`/speeches/${speechId}/drills`)); }               catch {}
+      })
+      .catch(() => setPageErr("Could not load speech. Is the backend running?"))
+      .finally(() => setPageLoad(false));
+  }, [speechId, router]);
+
+  // ── Recording ──────────────────────────────────────────────────────────────
+
+  async function startRec() {
+    setRecErr(""); setRecState("requesting");
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.current = s;
+      const { mimeType, ext } = getBestMime();
+      extRef.current = ext;
+      const mr = new MediaRecorder(s, mimeType ? { mimeType } : {});
+      mrRef.current = mr; chunks.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunks.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunks.current, { type: mimeType || "audio/webm" });
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+        const u = URL.createObjectURL(blob);
+        urlRef.current = u;
+        setRecBlob(blob); setRecUrl(u); setRecState("recorded");
+        stream.current?.getTracks().forEach((t) => t.stop());
+        stream.current = null;
+        if (timer.current) { clearInterval(timer.current); timer.current = null; }
+      };
+      mr.start();
+      setRecSecs(0);
+      timer.current = setInterval(() => setRecSecs((n) => n + 1), 1000);
+      setRecState("recording");
+    } catch (err: unknown) {
+      setRecState("error");
+      setRecErr(err instanceof Error && err.name === "NotAllowedError"
+        ? "Microphone permission denied." : "Could not access microphone.");
+    }
+  }
+
+  function stopRec()    { mrRef.current?.stop(); }
+
+  function discardRec() {
+    if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; }
+    setRecUrl(null); setRecBlob(null); setRecState("idle"); setRecSecs(0); setRecErr("");
+  }
+
+  async function saveRec() {
+    if (!recBlob || !userId) return;
+    setRecState("uploading");
+    const path = `${userId}/${speechId}/audio.${extRef.current}`;
+    try {
+      const sb = createClient();
+      const { error: se } = await sb.storage.from("audio").upload(path, recBlob, {
+        upsert: true, contentType: recBlob.type || "audio/webm",
+      });
+      if (se) { setRecState("error"); setRecErr(`Upload failed: ${se.message}`); return; }
+      const upd = await apiFetch<Speech>(`/speeches/${speechId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio_url: path }),
+      });
+      setSpeech(upd);
+      if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; }
+      setRecUrl(null); setRecBlob(null); setRecState("idle");
+    } catch (err: unknown) {
+      setRecState("error");
+      setRecErr(err instanceof Error ? err.message : "Upload failed.");
+    }
+  }
+
+  // ── File upload ────────────────────────────────────────────────────────────
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setFileErr(""); setUpErr("");
+    const f = e.target.files?.[0] ?? null;
+    if (!f) return;
+    const ve = validateFile(f);
+    if (ve) { setFileErr(ve); setSelFile(null); e.target.value = ""; }
+    else setSelFile(f);
+  }
+
+  async function uploadFile() {
+    if (!selFile || !userId) return;
+    setUpErr(""); setUploading(true);
+    const ext  = selFile.name.split(".").pop()!.toLowerCase();
+    const path = `${userId}/${speechId}/audio.${ext}`;
+    try {
+      const sb = createClient();
+      const { error: se } = await sb.storage.from("audio").upload(path, selFile, { upsert: true });
+      if (se) { setUpErr(`Upload failed: ${se.message}`); return; }
+      const upd = await apiFetch<Speech>(`/speeches/${speechId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio_url: path }),
+      });
+      setSpeech(upd); setSelFile(null);
+    } catch (err: unknown) {
+      setUpErr(err instanceof Error ? err.message : "Upload failed.");
+    } finally { setUploading(false); }
+  }
+
+  function clearFile() { setSelFile(null); setFileErr(""); }
+
+  // ── Reset audio ────────────────────────────────────────────────────────────
+
+  async function resetAudio() {
+    setResetting(true);
+    try {
+      const upd = await apiFetch<Speech>(`/speeches/${speechId}/reset-audio`, { method: "POST" });
+      setSpeech(upd);
+      setTranscript(null); setArgMap(null); setFeedback(null);
+      setRecState("idle"); setRecUrl(null); setRecBlob(null); setRecErr("");
+    } catch {}
+    finally { setResetting(false); }
+  }
+
+  // ── AI operations ──────────────────────────────────────────────────────────
+
+  async function transcribe() {
+    setTxErr(""); setTranscribing(true);
+    try { setTranscript(await apiFetch<Transcript>(`/speeches/${speechId}/transcribe`, { method: "POST" })); }
+    catch (e: unknown) { setTxErr(e instanceof Error ? e.message : "Transcription failed."); }
+    finally { setTranscribing(false); }
+  }
+
+  async function generateFlow() {
+    setFlowErr(""); setGenFlow(true);
+    try { setArgMap(await apiFetch<ArgumentMap>(`/speeches/${speechId}/extract-arguments`, { method: "POST" })); }
+    catch (e: unknown) { setFlowErr(e instanceof Error ? e.message : "Flow generation failed."); }
+    finally { setGenFlow(false); }
+  }
+
+  async function generateFeedback() {
+    setFbErr(""); setGenFb(true);
+    try { setFeedback(await apiFetch<FeedbackReport>(`/speeches/${speechId}/generate-feedback`, { method: "POST" })); }
+    catch (e: unknown) { setFbErr(e instanceof Error ? e.message : "Feedback generation failed."); }
+    finally { setGenFb(false); }
+  }
+
+  async function deleteSession() {
+    setDeleting(true);
+    try { await apiFetch(`/speeches/${speechId}`, { method: "DELETE" }); router.replace("/dashboard"); }
+    catch {}
+    finally { setDeleting(false); }
+  }
+
+  // ── Drills ─────────────────────────────────────────────────────────────────
+
+  async function generateDrills() {
+    setDrillErr(""); setGenDrills(true);
+    try {
+      const result = await apiFetch<Drill[]>(`/speeches/${speechId}/generate-drills`, { method: "POST" });
+      setDrills(result);
+    } catch (e: unknown) {
+      setDrillErr(e instanceof Error ? e.message : "Drill generation failed.");
+    } finally { setGenDrills(false); }
+  }
+
+  async function updateDrillStatus(drillId: string, status: DrillStatus) {
+    setUpdatingDrill(drillId);
+    try {
+      const updated = await apiFetch<Drill>(`/drills/${drillId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      setDrills((prev) => prev.map((d) => d.id === drillId ? updated : d));
+    } catch { /* silently ignore */ }
+    finally { setUpdatingDrill(null); }
+  }
+
+  /** Start a fresh session with the same speech metadata. */
+  async function startNewAttempt() {
+    if (!speech || !userId) return;
+    try {
+      const newSpeech = await apiFetch<Speech>("/speeches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id:     userId,
+          title:       `${speech.title} (Attempt 2)`,
+          speech_type: speech.speech_type,
+          side:        speech.side,
+          judge_type:  speech.judge_type,
+          topic:       speech.topic,
+        }),
+      });
+      router.push(`/speech/${newSpeech.id}`);
+    } catch { /* fallback: just go to new session */ router.push("/session"); }
+  }
+
+  // ── States ─────────────────────────────────────────────────────────────────
+
+  if (pageLoad) {
+    return (
+      <>
+        <AppNav />
+        <main className="min-h-screen bg-canvas">
+          <div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-9">
+            <Skeleton className="h-6 w-48 rounded-lg" />
+            <Skeleton className="h-4 w-60 rounded-lg" />
+            <Skeleton className="h-8 w-full rounded-full" />
+            {[1, 2].map((i) => (
+              <Card key={i}><CardContent className="py-8"><Skeleton className="h-20 w-full rounded-lg" /></CardContent></Card>
+            ))}
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  if (pageErr || !speech) {
+    return (
+      <>
+        <AppNav />
+        <main className="min-h-screen bg-canvas">
+          <div className="mx-auto max-w-3xl px-6 py-16">
+            <p className="text-sm text-danger">{pageErr || "Speech not found."}</p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // ── Computed ───────────────────────────────────────────────────────────────
+
+  const wc         = transcript?.word_count ?? null;
+  const canAnalyze = wc !== null && wc >= 20;
+  const recBusy    = recState === "requesting" || recState === "recording" || recState === "uploading";
+
+  const date = new Date(speech.created_at).toLocaleDateString(undefined, {
+    month: "long", day: "numeric", year: "numeric",
+  });
+
+  const steps = [
+    { label: "Audio",      done: !!speech.audio_url        },
+    { label: "Transcript", done: !!transcript              },
+    { label: "Flow",       done: !!argMap                  },
+    { label: "Feedback",   done: !!feedback                },
+    { label: "Drills",     done: drills.length > 0        },
+  ];
+
+  const deleteBtn = (
+    <button
+      type="button"
+      onClick={() => setDelOpen(true)}
+      className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger"
+    >
+      <Trash2 size={12} />
+      Delete
+    </button>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  return (
+    <>
+      <AppNav rightSlot={deleteBtn} />
+      <main className="min-h-screen bg-canvas">
+        <motion.div
+          className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-9"
+          variants={staggerParent(0.08, 0.05)}
+          initial="hidden"
+          animate="show"
+        >
+          {/* Header */}
+          <motion.div variants={staggerChild} className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-title text-ink">{speech.title}</h1>
+              <StatusBadge status={speech.status} />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0 text-xs text-ink-subtle">
+              <span>{TYPE_LABEL[speech.speech_type] ?? speech.speech_type}</span>
+              {speech.side       && <span className="capitalize">{speech.side}</span>}
+              {speech.judge_type && <span className="capitalize">{speech.judge_type} judge</span>}
+              <span className="text-ink-faint">{date}</span>
+            </div>
+            {speech.topic && <p className="text-xs text-ink-faint">{speech.topic}</p>}
+          </motion.div>
+
+          {/* Stepper */}
+          <motion.div variants={staggerChild}>
+            <WorkflowStepper steps={steps} />
+          </motion.div>
+
+          {/* Workspace cards — each animates in when it first appears */}
+          <AnimatePresence mode="popLayout">
+
+            {/* ── Step 1: Audio ─────────────────────────────────────────── */}
+            <WorkspaceCard motionKey="audio">
+              <CardContent className="flex flex-col gap-4 px-5 py-5">
+                <StepHeader n={1} title="Audio" done={!!speech.audio_url} />
+
+                {speech.audio_url ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3 rounded-lg border border-ok/20 bg-ok/5 px-4 py-3">
+                      <Mic size={13} className="shrink-0 text-ok" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-ok">Audio ready</p>
+                        <p className="mt-0.5 truncate font-mono text-xs text-ok/50">
+                          {speech.audio_url.split("/").pop()}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary" size="sm" disabled={resetting} onClick={resetAudio}
+                      className="w-fit gap-1.5 text-ink-faint hover:border-danger/30 hover:text-danger"
+                    >
+                      <RefreshCw size={11} className={resetting ? "animate-spin" : ""} />
+                      {resetting ? "Resetting…" : "Delete audio & re-record"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex gap-0.5 rounded-lg border border-hairline bg-surface-2 p-0.5">
+                      {(["record", "upload"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          disabled={recBusy}
+                          onClick={() => setMode(m)}
+                          className={[
+                            "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40",
+                            mode === m
+                              ? "border border-hairline bg-surface-3 text-ink"
+                              : "text-ink-subtle hover:text-ink-muted",
+                          ].join(" ")}
+                        >
+                          {m === "record" ? <><Mic size={12} /> Record</> : <><Upload size={12} /> Upload</>}
+                        </button>
+                      ))}
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                      {mode === "record" ? (
+                        <motion.div key="record"
+                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                          transition={T.fast}
+                        >
+                          <RecordingStudio
+                            recordState={recState} recordingSeconds={recSecs}
+                            recordObjectUrl={recUrl} recordError={recErr}
+                            onStartRecording={startRec} onStopRecording={stopRec}
+                            onSaveRecording={saveRec}  onDiscardRecording={discardRec}
+                          />
+                        </motion.div>
+                      ) : (
+                        <motion.div key="upload"
+                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                          transition={T.fast}
+                        >
+                          <UploadDropzone
+                            selectedFile={selFile} fileError={fileErr}
+                            uploadError={upErr}    uploading={uploading}
+                            onFileChange={onFileChange} onUpload={uploadFile} onClearFile={clearFile}
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </CardContent>
+            </WorkspaceCard>
+
+            {/* ── Step 2: Transcript ────────────────────────────────────── */}
+            {speech.audio_url && (
+              transcribing ? (
+                <motion.div key="tx-loading" {...fadeUp(0)}>
+                  <LoadingCard title="Transcribing audio" messages={MSG_TRANSCRIBE} />
+                </motion.div>
+              ) : transcript ? (
+                <WorkspaceCard motionKey="tx-done">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={2} title="Transcript" done />
+                    <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
+                  </CardContent>
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceCard motionKey="tx-empty">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={2} title="Transcript" done={false} />
+                    <p className="text-sm text-ink-subtle">
+                      Transcribe via OpenAI Whisper — usually 10–30 seconds.
+                    </p>
+                    {txErr && <InlineAlert variant="danger">{txErr}</InlineAlert>}
+                    <Button onClick={transcribe} size="sm" className="w-full">Transcribe Audio</Button>
+                  </CardContent>
+                </WorkspaceCard>
+              )
+            )}
+
+            {/* ── Step 3: Flow ──────────────────────────────────────────── */}
+            {transcript && (
+              genFlow ? (
+                <motion.div key="flow-loading" {...fadeUp(0)}>
+                  <LoadingCard title="Generating flow" messages={MSG_FLOW} />
+                </motion.div>
+              ) : argMap ? (
+                <WorkspaceCard motionKey="flow-done">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={3} title="Flow" done aside={
+                      <Badge variant="indigo">
+                        {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
+                      </Badge>
+                    } />
+                    {argMap.arguments.length === 0 ? (
+                      <p className="text-sm text-ink-faint">No arguments extracted.</p>
+                    ) : (
+                      <motion.div
+                        className="grid grid-cols-1 gap-3 md:grid-cols-2"
+                        variants={staggerParent(0.06)}
+                        initial="hidden"
+                        animate="show"
+                      >
+                        {argMap.arguments.map((a, i) => (
+                          <ArgumentCard key={i} arg={a} index={i} />
+                        ))}
+                      </motion.div>
+                    )}
+                  </CardContent>
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceCard motionKey="flow-empty">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={3} title="Flow" done={false} />
+                    {!canAnalyze
+                      ? <InlineAlert variant="danger">Transcript too short. Record at least 30 seconds.</InlineAlert>
+                      : <p className="text-sm text-ink-subtle">Extract claims, warrants, evidence, and impacts.</p>}
+                    {flowErr && <InlineAlert variant="danger">{flowErr}</InlineAlert>}
+                    <Button disabled={!canAnalyze} onClick={generateFlow} size="sm" className="w-full">
+                      Generate Flow
+                    </Button>
+                  </CardContent>
+                </WorkspaceCard>
+              )
+            )}
+
+            {/* ── Step 4: Feedback ──────────────────────────────────────── */}
+            {argMap && (
+              genFb ? (
+                <motion.div key="fb-loading" {...fadeUp(0)}>
+                  <LoadingCard title="Generating feedback" messages={MSG_FEEDBACK} />
+                </motion.div>
+              ) : feedback ? (
+                <WorkspaceCard motionKey="fb-done">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={4} title="Feedback" done />
+
+                    <ScoreCard score={feedback.overall_score} summary={feedback.summary} />
+
+                    <Collapsible label="Score Breakdown" open>
+                      <ScoreBreakdown scores={feedback.scores} />
+                    </Collapsible>
+
+                    {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
+                      <Collapsible label="Strengths & Weaknesses" open>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {feedback.strengths.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                              <p className="text-eyebrow text-ok">Strengths</p>
+                              <ul className="flex flex-col gap-1.5">
+                                {feedback.strengths.map((s, i) => (
+                                  <li key={i} className="flex gap-2 text-sm text-ink-muted">
+                                    <span className="shrink-0 text-ok">✓</span>{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {feedback.weaknesses.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                              <p className="text-eyebrow text-danger">Weaknesses</p>
+                              <ul className="flex flex-col gap-1.5">
+                                {feedback.weaknesses.map((w, i) => (
+                                  <li key={i} className="flex gap-2 text-sm text-ink-muted">
+                                    <span className="shrink-0 text-danger">✕</span>{w}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </Collapsible>
+                    )}
+
+                    {feedback.raw_feedback?.top_3_priorities?.length ? (
+                      <Collapsible label="Top 3 Priorities" open>
+                        <ol className="flex flex-col gap-2">
+                          {feedback.raw_feedback.top_3_priorities.map((p, i) => (
+                            <li key={i} className="flex items-start gap-2.5 text-sm text-ink-muted">
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lav text-xs font-bold text-white">
+                                {i + 1}
+                              </span>
+                              {p}
+                            </li>
+                          ))}
+                        </ol>
+                      </Collapsible>
+                    ) : null}
+
+                    {feedback.raw_feedback?.decision_logic && (
+                      <Collapsible label="Decision Logic (RFD)">
+                        <p className="text-sm leading-relaxed text-ink-muted">
+                          {feedback.raw_feedback.decision_logic}
+                        </p>
+                      </Collapsible>
+                    )}
+
+                    {(feedback.raw_feedback?.dropped_or_undercovered_arguments?.length ||
+                      feedback.raw_feedback?.warranting_diagnostics?.length ||
+                      feedback.raw_feedback?.weighing_diagnostics?.length ||
+                      feedback.raw_feedback?.evidence_diagnostics?.length) ? (
+                      <Collapsible label="Argument Diagnostics">
+                        <div className="flex flex-col gap-4">
+                          <DiagList label="Dropped / Undercovered" items={feedback.raw_feedback?.dropped_or_undercovered_arguments ?? []} warn />
+                          <DiagList label="Warranting" items={feedback.raw_feedback?.warranting_diagnostics ?? []} />
+                          <DiagList label="Weighing"   items={feedback.raw_feedback?.weighing_diagnostics ?? []} />
+                          <DiagList label="Evidence"   items={feedback.raw_feedback?.evidence_diagnostics ?? []} />
+                        </div>
+                      </Collapsible>
+                    ) : null}
+
+                    {feedback.raw_feedback?.judge_adaptation_notes && (
+                      <Collapsible label="Judge Adaptation">
+                        <p className="text-sm leading-relaxed text-ink-muted">
+                          {feedback.raw_feedback.judge_adaptation_notes}
+                        </p>
+                      </Collapsible>
+                    )}
+
+                    {feedback.raw_feedback?.recommendations?.length ? (
+                      <Collapsible label="Recommendations">
+                        <ul className="flex flex-col gap-1.5">
+                          {feedback.raw_feedback.recommendations.map((r, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-ink-muted">
+                              <span className="shrink-0 text-ink-faint">→</span>{r}
+                            </li>
+                          ))}
+                        </ul>
+                      </Collapsible>
+                    ) : null}
+                    {/* Re-record CTA */}
+                    <div className="flex items-center gap-3 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-ink">Ready to re-record?</p>
+                        <p className="text-xs text-ink-subtle">Practice the drills below, then start a fresh attempt with the same setup.</p>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={startNewAttempt}
+                        className="shrink-0 gap-1.5 text-lav hover:border-lav/40"
+                      >
+                        <RefreshCw size={11} />
+                        New Attempt
+                      </Button>
+                    </div>
+                  </CardContent>
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceCard motionKey="fb-empty">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={4} title="Feedback" done={false} />
+                    {!canAnalyze
+                      ? <InlineAlert variant="danger">Transcript too short for meaningful feedback.</InlineAlert>
+                      : <p className="text-sm text-ink-subtle">Generate ballot-style critique: clash, weighing, drops, judge adaptation, drills.</p>}
+                    {fbErr && <InlineAlert variant="danger">{fbErr}</InlineAlert>}
+                    <Button disabled={!canAnalyze} onClick={generateFeedback} size="sm" className="w-full">
+                      Generate Feedback
+                    </Button>
+                  </CardContent>
+                </WorkspaceCard>
+              )
+            )}
+
+            {/* ── Step 5: Drills ────────────────────────────────────────── */}
+            {feedback && (
+              genDrills ? (
+                <motion.div key="drills-loading" {...fadeUp(0)}>
+                  <LoadingCard title="Generating drills" messages={MSG_DRILLS} />
+                </motion.div>
+              ) : drills.length > 0 ? (
+                <WorkspaceCard motionKey="drills-done">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader
+                      n={5}
+                      title="Practice Drills"
+                      done
+                      aside={
+                        <Badge variant="indigo">
+                          {drills.filter((d) => d.status !== "assigned").length}/{drills.length} done
+                        </Badge>
+                      }
+                    />
+                    <p className="text-xs text-ink-subtle">
+                      3 drills generated from your feedback. Practice each one before re-recording.
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {drills.map((drill, i) => (
+                        <DrillCard
+                          key={drill.id}
+                          drill={drill}
+                          index={i}
+                          onStatusChange={updateDrillStatus}
+                          updatingId={updatingDrill}
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                </WorkspaceCard>
+              ) : (
+                <WorkspaceCard motionKey="drills-empty">
+                  <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <StepHeader n={5} title="Practice Drills" done={false} />
+                    <p className="text-sm text-ink-subtle">
+                      Generate 3 personalized drills based on your feedback weaknesses.
+                    </p>
+                    {drillErr && <InlineAlert variant="danger">{drillErr}</InlineAlert>}
+                    <Button onClick={generateDrills} size="sm" className="w-full">
+                      Generate Drills
+                    </Button>
+                  </CardContent>
+                </WorkspaceCard>
+              )
+            )}
+
+          </AnimatePresence>
+        </motion.div>
+      </main>
+
+      <DeleteDialog
+        open={delOpen}
+        onOpenChange={(v) => { if (!v && !deleting) setDelOpen(false); }}
+        title="Delete this session?"
+        description={`"${speech.title}" will be permanently deleted along with its transcript, flow, and feedback.`}
+        onConfirm={deleteSession}
+        isDeleting={deleting}
+      />
+    </>
   );
 }

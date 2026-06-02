@@ -143,6 +143,7 @@ def generate_feedback(
     side: Optional[str],
     topic: Optional[str],
     judge_type: Optional[str],
+    word_count: int = 0,
 ) -> _FeedbackOutput:
     """Generate a PF-native ballot-style feedback report using GPT-4o-mini.
 
@@ -157,6 +158,15 @@ def generate_feedback(
         bool(settings.openai_api_key),
     )
 
+    calibration_note = ""
+    if 0 < word_count < 75:
+        calibration_note = (
+            f"\n\nSCORING CALIBRATION: This transcript is short ({word_count} words — typically under 30 seconds). "
+            "Score conservatively. Do not infer sophisticated debate performance from limited evidence. "
+            "Score only what is actually present. If content is absent, score it as absent. "
+            "A short sample cannot demonstrate clash, drops, or extensions — score those at 0–5 unless explicitly shown."
+        )
+
     judge_key = judge_type or ""
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
         speech_type=speech_type,
@@ -170,6 +180,7 @@ def generate_feedback(
             judge_key, "Evaluate on general debate quality."
         ),
     )
+    system_prompt += calibration_note
 
     arguments_summary = (
         json.dumps(arguments, indent=2) if arguments else "No argument map available."

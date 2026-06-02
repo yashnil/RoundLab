@@ -1,0 +1,79 @@
+"use client";
+
+import { motion } from "motion/react";
+import { Badge } from "@/components/ui/badge";
+import { T } from "@/lib/motion";
+import type { ArgumentItem, ArgumentType } from "@/types";
+
+const TYPE_CONFIG: Record<
+  ArgumentType,
+  { badge: "green" | "blue" | "violet" | "orange" | "default"; border: string }
+> = {
+  offense:  { badge: "green",   border: "border-l-ok"              },
+  defense:  { badge: "blue",    border: "border-l-blue"            },
+  weighing: { badge: "violet",  border: "border-l-violet"          },
+  response: { badge: "orange",  border: "border-l-orange"          },
+  unclear:  { badge: "default", border: "border-l-hairline-strong" },
+};
+
+function confBadge(c: number | null) {
+  if (c === null) return null;
+  if (c >= 0.8) return { label: "High", variant: "green"  as const };
+  if (c >= 0.5) return { label: "Med",  variant: "amber"  as const };
+  return            { label: "Low",  variant: "red"    as const };
+}
+
+function Field({ label, text, italic }: { label: string; text: string; italic?: boolean }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-eyebrow text-ink-faint">{label}</span>
+      <p className={`text-sm leading-relaxed text-ink-muted${italic ? " italic" : ""}`}>{text}</p>
+    </div>
+  );
+}
+
+export default function ArgumentCard({ arg, index }: { arg: ArgumentItem; index: number }) {
+  const config = TYPE_CONFIG[arg.argument_type] ?? TYPE_CONFIG.unclear;
+  const conf   = confBadge(arg.confidence);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.06, ...T.base }}
+      whileHover={{
+        y: -2,
+        boxShadow: "0 4px 16px -4px oklch(0.510 0.156 278 / 0.12)",
+        borderColor: "oklch(0.270 0.006 264)",
+        transition: T.fast,
+      }}
+      className={`flex flex-col gap-3 rounded-lg border border-l-4 border-hairline bg-surface-2 p-4 ${config.border} cursor-default`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold leading-snug text-ink">{arg.label}</p>
+        <div className="flex shrink-0 items-center gap-1">
+          {conf && <Badge variant={conf.variant}>{conf.label}</Badge>}
+          <Badge variant={config.badge} className="capitalize">{arg.argument_type}</Badge>
+        </div>
+      </div>
+
+      {/* Structured fields */}
+      <div className="flex flex-col gap-2">
+        <Field label="Claim"   text={arg.claim} />
+        <Field label="Warrant" text={arg.warrant} />
+        {arg.evidence && <Field label="Evidence" text={arg.evidence} italic />}
+        <Field label="Impact"  text={arg.impact} />
+      </div>
+
+      {/* Issue chips */}
+      {arg.issues.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-t border-hairline pt-2.5">
+          {arg.issues.map((issue, j) => (
+            <Badge key={j} variant="red">{issue}</Badge>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+}

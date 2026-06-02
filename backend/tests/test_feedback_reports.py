@@ -26,6 +26,21 @@ FAKE_SPEECH = {
 FAKE_TRANSCRIPT = {
     "id": "cccccccc-0000-0000-0000-000000000003",
     "speech_id": SPEECH_ID,
+    "text": (
+        "The first contention is economic growth. Lower taxes increase investment because "
+        "reduced tax burdens free capital for private sector deployment into productive activities. "
+        "Smith et al from 2023 finds that GDP growth increases by two percent. "
+        "The impact is more jobs and long-term prosperity for American workers. "
+        "The second contention is innovation. High marginal tax rates reduce the incentive "
+        "for entrepreneurs to take risks and start new companies, slowing technological progress."
+    ),
+    "word_count": 87,
+    "created_at": "2026-05-25T00:00:00+00:00",
+}
+
+FAKE_TRANSCRIPT_SHORT = {
+    "id": "cccccccc-0000-0000-0000-000000000003",
+    "speech_id": SPEECH_ID,
     "text": "The first contention is economic growth. Lower taxes increase investment.",
     "word_count": 12,
     "created_at": "2026-05-25T00:00:00+00:00",
@@ -173,6 +188,61 @@ def test_get_feedback_not_found():
     with patch("app.api.feedback_reports.get_supabase", return_value=mock_client):
         response = client.get(f"/speeches/{SPEECH_ID}/feedback")
     assert response.status_code == 404
+
+
+def test_generate_short_transcript():
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = [
+        MagicMock(data=[FAKE_SPEECH]),
+        MagicMock(data=[FAKE_TRANSCRIPT_SHORT]),  # < 50 words
+    ]
+    with patch("app.api.feedback_reports.get_supabase", return_value=mock_client):
+        response = client.post(f"/speeches/{SPEECH_ID}/generate-feedback")
+    assert response.status_code == 400
+    assert "too short" in response.json()["detail"].lower()
+
+
+def test_generate_score_derived_from_categories():
+    """overall_score stored must be sum of category scores, ignoring LLM self-report."""
+    from app.models.feedback_report import FeedbackScores
+    from app.services.feedback_generation import _FeedbackOutput
+
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = [
+        MagicMock(data=[FAKE_SPEECH]),
+        MagicMock(data=[FAKE_TRANSCRIPT]),
+        MagicMock(data=[FAKE_ARGUMENT_MAP_ROW]),
+    ]
+    mock_client.table.return_value.upsert.return_value.execute.return_value.data = [
+        FAKE_FEEDBACK_ROW
+    ]
+
+    # LLM reports overall_score=99 but the sum of FAKE_SCORES is 72 — handler must ignore 99.
+    fake_output = _FeedbackOutput(
+        overall_score=99,
+        scores=FeedbackScores(**FAKE_SCORES),
+        summary="Test summary.",
+        strengths=["Clear taglines"],
+        weaknesses=["Missing warrants"],
+        decision_logic="Pro winning.",
+        dropped_or_undercovered_arguments=[],
+        warranting_diagnostics=["C1: thin"],
+        weighing_diagnostics=["No weighing"],
+        evidence_diagnostics=[],
+        judge_adaptation_notes="Adapt to flow.",
+        top_3_priorities=["Warrants"],
+        recommendations=["Drill warrants"],
+    )
+
+    with patch("app.api.feedback_reports.get_supabase", return_value=mock_client), patch(
+        "app.api.feedback_reports.generate_feedback", return_value=fake_output
+    ):
+        client.post(f"/speeches/{SPEECH_ID}/generate-feedback")
+
+    upserted = mock_client.table.return_value.upsert.call_args.args[0]
+    expected = FAKE_SCORES["clash"] + FAKE_SCORES["weighing"] + FAKE_SCORES["extensions"] + FAKE_SCORES["drops"] + FAKE_SCORES["judge_adaptation"]
+    assert upserted["overall_score"] == expected
+    assert upserted["overall_score"] != 99
 
 
 def test_generate_llm_error():

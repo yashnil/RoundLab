@@ -118,3 +118,104 @@ def test_patch_speech_not_found():
             json={"audio_url": "user-id/speech-id/audio.mp3"},
         )
     assert response.status_code == 404
+
+
+# ── DELETE /speeches/{id} ─────────────────────────────────────────────────────
+
+def test_delete_speech():
+    mock_client = MagicMock()
+    # SELECT to verify exists (no audio_url)
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        FAKE_ROW
+    ]
+    # DELETE calls return empty data (we don't check their return values)
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = []
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.delete(f"/speeches/{FAKE_ROW['id']}")
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+
+
+def test_delete_speech_not_found():
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.delete(f"/speeches/{FAKE_ROW['id']}")
+    assert response.status_code == 404
+
+
+def test_delete_speech_with_audio_removes_storage():
+    row_with_audio = {**FAKE_ROW, "audio_url": "user-id/speech-id/audio.mp3"}
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        row_with_audio
+    ]
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = []
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.delete(f"/speeches/{FAKE_ROW['id']}")
+    assert response.status_code == 200
+    mock_client.storage.from_.assert_called_with("audio")
+    mock_client.storage.from_.return_value.remove.assert_called_once_with(
+        ["user-id/speech-id/audio.mp3"]
+    )
+
+
+def test_delete_speech_db_error():
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = Exception(
+        "db error"
+    )
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.delete(f"/speeches/{FAKE_ROW['id']}")
+    assert response.status_code == 500
+
+
+# ── POST /speeches/{id}/reset-audio ──────────────────────────────────────────
+
+def test_reset_audio_success():
+    row_with_audio = {**FAKE_ROW, "audio_url": "user-id/speech-id/audio.mp3"}
+    reset_row = {**FAKE_ROW, "audio_url": None, "status": "pending"}
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        row_with_audio
+    ]
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = []
+    mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value.data = [
+        reset_row
+    ]
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.post(f"/speeches/{FAKE_ROW['id']}/reset-audio")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["audio_url"] is None
+    assert body["status"] == "pending"
+    mock_client.storage.from_.assert_called_with("audio")
+    mock_client.storage.from_.return_value.remove.assert_called_once_with(
+        ["user-id/speech-id/audio.mp3"]
+    )
+
+
+def test_reset_audio_no_audio():
+    reset_row = {**FAKE_ROW, "audio_url": None, "status": "pending"}
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        FAKE_ROW  # no audio_url
+    ]
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = []
+    mock_client.table.return_value.update.return_value.eq.return_value.execute.return_value.data = [
+        reset_row
+    ]
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.post(f"/speeches/{FAKE_ROW['id']}/reset-audio")
+    assert response.status_code == 200
+    assert response.json()["audio_url"] is None
+    # Storage remove should NOT be called when no audio_url
+    mock_client.storage.from_.return_value.remove.assert_not_called()
+
+
+def test_reset_audio_not_found():
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.post(f"/speeches/{FAKE_ROW['id']}/reset-audio")
+    assert response.status_code == 404

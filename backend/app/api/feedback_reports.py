@@ -55,6 +55,16 @@ async def generate_feedback_report(speech_id: str) -> FeedbackReportRow:
         )
     transcript_text: str = transcript_result.data[0]["text"]
 
+    word_count = len(transcript_text.split())
+    if word_count < 20:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Transcript is too short ({word_count} words). "
+                "Record at least 30 seconds for meaningful feedback."
+            ),
+        )
+
     # 3. Fetch argument map — required before feedback
     try:
         map_result = (
@@ -102,6 +112,7 @@ async def generate_feedback_report(speech_id: str) -> FeedbackReportRow:
             side=speech.get("side"),
             topic=speech.get("topic"),
             judge_type=speech.get("judge_type"),
+            word_count=word_count,
         )
         logger.info(
             "generate_feedback: generation succeeded | overall_score=%d | speech_id=%s",
@@ -125,14 +136,24 @@ async def generate_feedback_report(speech_id: str) -> FeedbackReportRow:
 
     # 6. Persist and mark done
     try:
+        # Derive overall_score from category sum — never trust the LLM's self-report.
+        derived_score = (
+            output.scores.clash
+            + output.scores.weighing
+            + output.scores.extensions
+            + output.scores.drops
+            + output.scores.judge_adaptation
+        )
+        raw = output.model_dump()
+        raw["overall_score"] = derived_score  # Keep raw_feedback consistent too.
         feedback_data = {
             "speech_id": speech_id,
-            "overall_score": output.overall_score,
+            "overall_score": derived_score,
             "scores": output.scores.model_dump(),
             "summary": output.summary,
             "strengths": output.strengths,
             "weaknesses": output.weaknesses,
-            "raw_feedback": output.model_dump(),
+            "raw_feedback": raw,
         }
         result = (
             supabase.table("feedback_reports")

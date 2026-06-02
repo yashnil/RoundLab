@@ -52,6 +52,17 @@ async def extract(speech_id: str) -> ArgumentMapRow:
             detail="Transcript not found. Transcribe the speech before generating the flow.",
         )
     transcript_text: str = transcript_result.data[0]["text"]
+
+    word_count = len(transcript_text.split())
+    if word_count < 20:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Transcript is too short ({word_count} words). "
+                "Record at least 30 seconds for a meaningful flow."
+            ),
+        )
+
     logger.info("extract_arguments: transcript found | speech_id=%s", speech_id)
 
     # 3. Mark analyzing (best-effort)

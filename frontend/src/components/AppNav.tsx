@@ -33,6 +33,12 @@ export default function AppNav({ rightSlot }: AppNavProps) {
         >
           Dashboard
         </Link>
+        <Link
+          href="/team"
+          className="hidden text-sm text-ink-subtle transition-colors hover:text-ink sm:block"
+        >
+          Team
+        </Link>
         {rightSlot}
         <Button asChild size="sm" className="h-7 gap-1.5 px-3 text-xs">
           <Link href="/session">

@@ -158,3 +158,28 @@ export interface ProgressSummary {
   incomplete_drills: IncompleteDrill[];
   skill_averages: SkillAverages | null;
 }
+
+export interface UserTeam {
+  team_id: string;
+  team_name: string;
+  role: "coach" | "student";
+  invite_code: string;
+}
+
+export interface StudentProgress {
+  user_id: string;
+  display_name: string | null;
+  speech_count: number;
+  feedback_ready_count: number;
+  drills_assigned_count: number;
+  drill_attempts_count: number;
+  latest_practice_at: string | null;
+}
+
+export interface TeamDashboard {
+  team_id: string;
+  team_name: string;
+  invite_code: string;
+  member_count: number;
+  students: StudentProgress[];
+}

@@ -23,11 +23,11 @@ function confBadge(c: number | null) {
   return            { label: "Low",  variant: "red"    as const };
 }
 
-function Field({ label, text, italic }: { label: string; text: string; italic?: boolean }) {
+function Field({ label, text, italic, highlight }: { label: string; text: string; italic?: boolean; highlight?: boolean }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-eyebrow text-ink-faint">{label}</span>
-      <p className={`text-sm leading-relaxed text-ink-muted${italic ? " italic" : ""}`}>{text}</p>
+    <div className="flex flex-col gap-1">
+      <span className={`text-eyebrow ${highlight ? "text-lav" : "text-ink-faint"}`}>{label}</span>
+      <p className={`text-sm leading-relaxed ${highlight ? "font-medium text-ink" : "text-ink-muted"}${italic ? " italic" : ""}`}>{text}</p>
     </div>
   );
 }
@@ -42,20 +42,20 @@ function getCoachNote(issues: string[]): string | null {
   const hasWeighingIssue = issues.some(i => i.toLowerCase().includes("weigh"));
 
   if (hasWarrantIssue) {
-    return "Add a 'because' sentence explaining why this claim is true.";
+    return "Add a 'because' sentence after your claim. Explain the logical link: why is this claim true?";
   }
   if (hasEvidenceIssue) {
-    return "Explain exactly what your evidence proves, not just what the source says.";
+    return "After citing your source, add: 'This proves [claim] because [one sentence explanation].'";
   }
   if (hasImpactIssue) {
-    return "Tell the judge why this impact matters in the real world.";
+    return "Describe the real-world consequence. Who is affected? How severe is it? How soon does it happen?";
   }
   if (hasWeighingIssue) {
-    return "Compare this impact to your opponent's using magnitude, probability, or timeframe.";
+    return "Add a comparison: 'This outweighs [opponent's impact] because [magnitude/probability/timeframe].'";
   }
 
   // Generic fallback
-  return "This argument needs stronger development. Make sure every part connects clearly.";
+  return "Strengthen each part: claim → warrant → evidence → impact. Every link should be crystal clear.";
 }
 
 export default function ArgumentCard({ arg, index }: { arg: ArgumentItem; index: number }) {
@@ -85,12 +85,14 @@ export default function ArgumentCard({ arg, index }: { arg: ArgumentItem; index:
         </div>
       </div>
 
-      {/* Structured fields */}
-      <div className="flex flex-col gap-2">
-        <Field label="Claim"   text={arg.claim} />
-        <Field label="Warrant" text={arg.warrant} />
-        {arg.evidence && <Field label="Evidence" text={arg.evidence} italic />}
-        <Field label="Impact"  text={arg.impact} />
+      {/* Structured fields with visual flow */}
+      <div className="flex flex-col gap-3">
+        <Field label="Claim" text={arg.claim} highlight />
+        <div className="ml-2 flex flex-col gap-3 border-l-2 border-hairline pl-3">
+          <Field label="Warrant" text={arg.warrant} />
+          {arg.evidence && <Field label="Evidence" text={arg.evidence} italic />}
+        </div>
+        <Field label="Impact" text={arg.impact} highlight />
       </div>
 
       {/* Coach Note */}

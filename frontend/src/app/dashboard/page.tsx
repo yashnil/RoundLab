@@ -290,12 +290,20 @@ export default function DashboardPage() {
                               <div
                                 className="h-full rounded-full bg-lav transition-all"
                                 style={{
-                                  width: `${((progress.xp - (progress.level === 1 ? 0 : progress.level === 2 ? 50 : progress.level === 3 ? 150 : progress.level === 4 ? 300 : 500)) / progress.xp_to_next_level) * 100}%`
+                                  width: `${Math.min(((
+                                    progress.level === 1 ? progress.xp :
+                                    progress.level === 2 ? progress.xp - 100 :
+                                    progress.level === 3 ? progress.xp - 250 :
+                                    progress.level === 4 ? progress.xp - 500 :
+                                    progress.level === 5 ? progress.xp - 900 :
+                                    progress.xp - 1400 - (Math.floor((progress.xp - 1400) / 300) * 300)
+                                  ) / progress.xp_to_next_level) * 100, 100)}%`
                                 }}
                               />
                             </div>
                             <span className="text-xs text-ink-faint">{progress.xp_to_next_level} to Lv{progress.level + 1}</span>
                           </div>
+                          <p className="text-xs text-ink-faint">Drill attempts earn the most XP</p>
                         </div>
                       </div>
                     </div>
@@ -338,7 +346,7 @@ export default function DashboardPage() {
                     <p className="text-sm font-semibold text-lav">Start Your First Practice</p>
                   </div>
                   <p className="mb-5 text-sm leading-relaxed text-ink">
-                    RoundLab works like a personal debate coach. Record a speech, get judge-style feedback, and practice with personalized drills.
+                    RoundLab works like a personal debate coach. Record a speech, get judge-style feedback, and practice with personalized drills. Completing drills earns the most XP.
                   </p>
                   <div className="mb-5 flex flex-col gap-2.5">
                     {[

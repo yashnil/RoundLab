@@ -168,6 +168,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function CoachDiagnosis({ category, items, label }: { category: string; items: string[]; label: string }) {
+  const [showExample, setShowExample] = useState(false);
+
   if (!items || items.length === 0) return null;
 
   // Determine status based on content
@@ -176,6 +178,8 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
   let statusColor: string;
   let explanation: string;
   let fix: string;
+  let exampleBefore: string;
+  let exampleAfter: string;
 
   if (rawText.includes("none") || rawText.includes("absent") || rawText.includes("missing") || items.length === 0) {
     status = "missing";
@@ -188,42 +192,60 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
     statusColor = "text-ok";
   }
 
-  // Generate student-friendly explanations
+  // Generate student-friendly explanations and examples
   if (category === "warranting") {
     if (status === "missing") {
       explanation = "You often state what happened, but do not explain why it proves your argument.";
       fix = "Add one sentence after each claim that starts with 'This matters because…' or 'This is true because…'";
+      exampleBefore = "Healthcare costs are rising rapidly.";
+      exampleAfter = "Healthcare costs are rising rapidly. This is true because the CDC reports a 15% increase in premiums over the last two years, and this happens because insurance companies face higher hospital fees.";
     } else if (status === "needs-work") {
       explanation = "Some warrants are present but could be stronger and more explicit.";
       fix = "Make sure every claim has a clear 'because' sentence explaining the logical connection.";
+      exampleBefore = "Universal healthcare improves outcomes.";
+      exampleAfter = "Universal healthcare improves outcomes because when patients don't worry about costs, they seek preventive care earlier, which catches diseases before they become severe.";
     } else {
       explanation = "Your warranting is solid. You explain why your claims are true.";
       fix = "";
+      exampleBefore = "";
+      exampleAfter = "";
     }
   } else if (category === "weighing") {
     if (status === "missing") {
       explanation = "RoundLab did not detect clear weighing or comparative analysis.";
       fix = "Add comparisons using magnitude (how big), probability (how likely), or timeframe (how soon).";
+      exampleBefore = "Our policy helps the economy.";
+      exampleAfter = "Our impact outweighs on magnitude: while they prevent a 2% GDP loss, we save 500,000 lives annually. Even if their economic harm is true, human lives matter more than percentage points.";
     } else if (status === "needs-work") {
       explanation = "Some weighing is present but needs to be more explicit.";
       fix = "Directly compare your impacts to your opponent's. Say 'Our impact outweighs because…'";
+      exampleBefore = "This causes more harm.";
+      exampleAfter = "Our impact outweighs on probability: their scenario requires three uncertain assumptions, but ours is already happening in 15 countries today.";
     } else {
       explanation = "You're weighing impacts against each other effectively.";
       fix = "";
+      exampleBefore = "";
+      exampleAfter = "";
     }
   } else if (category === "evidence") {
     if (status === "missing") {
       explanation = "You mention sources but don't clearly explain what they prove.";
       fix = "After citing evidence, explain exactly what the card proves in one sentence.";
+      exampleBefore = "According to the WHO, mortality rates declined.";
+      exampleAfter = "According to the WHO, mortality rates declined by 40%. This proves universal healthcare saves lives because the study tracked 2 million patients before and after policy implementation.";
     } else if (status === "needs-work") {
       explanation = "Your sources are mentioned, but some connections to claims are unclear.";
       fix = "After each piece of evidence, add: 'This proves that [claim] because [explanation].'";
+      exampleBefore = "Studies show pollution increased.";
+      exampleAfter = "Jones 2023 finds air quality worsened in 80% of tested cities. This proves our regulation point because the baseline was measured before deregulation, isolating the policy as the cause.";
     } else {
       explanation = "Your evidence is well-connected to your arguments.";
       fix = "";
+      exampleBefore = "";
+      exampleAfter = "";
     }
   } else {
-    // Generic fallback for other categories
+    // Generic fallback
     if (status === "missing") {
       explanation = `${label} is not clearly present in your speech.`;
       fix = "Focus on developing this area in your next attempt.";
@@ -234,6 +256,8 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
       explanation = `${label} is working well.`;
       fix = "";
     }
+    exampleBefore = "";
+    exampleAfter = "";
   }
 
   return (
@@ -249,6 +273,47 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
         <div className="flex items-start gap-2 rounded-md border border-lav/10 bg-lav/5 px-3 py-2">
           <span className="text-xs font-semibold text-lav">Fix:</span>
           <p className="text-xs leading-relaxed text-ink-subtle">{fix}</p>
+        </div>
+      )}
+      {/* Show example toggle if we have examples */}
+      {exampleBefore && exampleAfter && (
+        <div className="flex flex-col gap-2 border-t border-hairline pt-2">
+          <button
+            type="button"
+            onClick={() => setShowExample(!showExample)}
+            className="flex items-center gap-1.5 text-xs font-medium text-lav transition-colors hover:text-lav-hi"
+          >
+            <ChevronDown
+              size={12}
+              className={`transition-transform ${showExample ? "rotate-180" : ""}`}
+            />
+            {showExample ? "Hide" : "See"} Example
+          </button>
+          <AnimatePresence>
+            {showExample && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="flex flex-col gap-2 rounded-md border border-amber/20 bg-amber/5 px-3 py-2">
+                  <p className="text-xs font-medium text-amber">⚠ Example Only — Not Your Argument</p>
+                  <div className="flex flex-col gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-ink-subtle">Before:</p>
+                      <p className="text-xs italic leading-relaxed text-ink-muted">{exampleBefore}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-ink-subtle">After:</p>
+                      <p className="text-xs italic leading-relaxed text-ink-muted">{exampleAfter}</p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
     </div>
@@ -893,124 +958,145 @@ export default function SpeechPage() {
                 </motion.div>
               ) : feedback ? (
                 <WorkspaceCard key="fb-done">
-                  <CardContent className="flex flex-col gap-4 px-5 py-5">
-                    <StepHeader n={4} title="Feedback" done />
+                  <CardContent className="flex flex-col gap-5 px-5 py-5">
+                    <StepHeader n={4} title="Coaching Report" done />
 
-                    <ScoreCard score={feedback.overall_score} summary={feedback.summary} />
+                    {/* Summary Card */}
+                    <div className="rounded-xl border border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10 p-5">
+                      <ScoreCard score={feedback.overall_score} summary={feedback.summary} />
+                    </div>
 
-                    <Collapsible label="Score Breakdown" open>
-                      <ScoreBreakdown scores={feedback.scores} />
-                    </Collapsible>
-
-                    {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
-                      <Collapsible label="Strengths & Weaknesses" open>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          {feedback.strengths.length > 0 && (
-                            <div className="flex flex-col gap-2">
-                              <p className="text-eyebrow text-ok">Strengths</p>
-                              <ul className="flex flex-col gap-1.5">
-                                {feedback.strengths.map((s, i) => (
-                                  <li key={i} className="flex gap-2 text-sm text-ink-muted">
-                                    <span className="shrink-0 text-ok">✓</span>{s}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {feedback.weaknesses.length > 0 && (
-                            <div className="flex flex-col gap-2">
-                              <p className="text-eyebrow text-danger">Weaknesses</p>
-                              <ul className="flex flex-col gap-1.5">
-                                {feedback.weaknesses.map((w, i) => (
-                                  <li key={i} className="flex gap-2 text-sm text-ink-muted">
-                                    <span className="shrink-0 text-danger">✕</span>{w}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </Collapsible>
-                    )}
-
+                    {/* Priority Cards - Top 3 Issues */}
                     {feedback.raw_feedback?.top_3_priorities?.length ? (
-                      <Collapsible label="Top 3 Priorities" open>
-                        <ol className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-1 w-1 rounded-full bg-danger" />
+                          <p className="text-eyebrow text-ink-subtle">Fix These First</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
                           {feedback.raw_feedback.top_3_priorities.map((p, i) => (
-                            <li key={i} className="flex items-start gap-2.5 text-sm text-ink-muted">
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lav text-xs font-bold text-white">
+                            <div key={i} className="flex items-start gap-3 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger text-xs font-bold text-white">
                                 {i + 1}
                               </span>
-                              {p}
-                            </li>
+                              <p className="text-sm leading-relaxed text-ink">{p}</p>
+                            </div>
                           ))}
-                        </ol>
-                      </Collapsible>
+                        </div>
+                      </div>
                     ) : null}
 
-                    {feedback.raw_feedback?.decision_logic && (
-                      <Collapsible label="Decision Logic (RFD)">
-                        <p className="text-sm leading-relaxed text-ink-muted">
-                          {feedback.raw_feedback.decision_logic}
-                        </p>
-                      </Collapsible>
+                    {/* Judge Ballot */}
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="h-1 w-1 rounded-full bg-lav" />
+                        <p className="text-eyebrow text-ink-subtle">Judge Ballot</p>
+                      </div>
+                      <div className="rounded-lg border border-hairline bg-surface-2 p-4">
+                        <ScoreBreakdown scores={feedback.scores} />
+                      </div>
+                    </div>
+
+                    {/* Strengths & Weaknesses as Cards */}
+                    {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {feedback.strengths.length > 0 && (
+                          <div className="flex flex-col gap-2 rounded-lg border border-ok/20 bg-ok/5 p-4">
+                            <p className="text-sm font-semibold text-ok">✓ What Worked</p>
+                            <ul className="flex flex-col gap-1.5">
+                              {feedback.strengths.map((s, i) => (
+                                <li key={i} className="text-sm leading-relaxed text-ink-muted">· {s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {feedback.weaknesses.length > 0 && (
+                          <div className="flex flex-col gap-2 rounded-lg border border-amber/20 bg-amber/5 p-4">
+                            <p className="text-sm font-semibold text-amber">⚠ Needs Improvement</p>
+                            <ul className="flex flex-col gap-1.5">
+                              {feedback.weaknesses.map((w, i) => (
+                                <li key={i} className="text-sm leading-relaxed text-ink-muted">· {w}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     )}
 
+                    {/* Coach Diagnosis Cards */}
                     {(feedback.raw_feedback?.dropped_or_undercovered_arguments?.length ||
                       feedback.raw_feedback?.warranting_diagnostics?.length ||
                       feedback.raw_feedback?.weighing_diagnostics?.length ||
                       feedback.raw_feedback?.evidence_diagnostics?.length) ? (
-                      <Collapsible label="Coach Diagnosis" open>
-                        <div className="flex flex-col gap-3">
-                          {/* Dropped arguments - show as warning */}
-                          {feedback.raw_feedback?.dropped_or_undercovered_arguments && feedback.raw_feedback.dropped_or_undercovered_arguments.length > 0 && (
-                            <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
-                              <p className="text-sm font-semibold text-danger">Dropped / Undercovered</p>
-                              <ul className="flex flex-col gap-1">
-                                {feedback.raw_feedback.dropped_or_undercovered_arguments.map((item, i) => (
-                                  <li key={i} className="text-sm text-ink-muted">· {item}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          <CoachDiagnosis
-                            category="warranting"
-                            label="Warranting"
-                            items={feedback.raw_feedback?.warranting_diagnostics ?? []}
-                          />
-                          <CoachDiagnosis
-                            category="weighing"
-                            label="Impact Weighing"
-                            items={feedback.raw_feedback?.weighing_diagnostics ?? []}
-                          />
-                          <CoachDiagnosis
-                            category="evidence"
-                            label="Evidence Use"
-                            items={feedback.raw_feedback?.evidence_diagnostics ?? []}
-                          />
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-1 w-1 rounded-full bg-ink-subtle" />
+                          <p className="text-eyebrow text-ink-subtle">Coach Diagnosis</p>
                         </div>
-                      </Collapsible>
+
+                        {/* Dropped arguments */}
+                        {feedback.raw_feedback?.dropped_or_undercovered_arguments && feedback.raw_feedback.dropped_or_undercovered_arguments.length > 0 && (
+                          <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                            <p className="text-sm font-semibold text-danger">Dropped / Undercovered</p>
+                            <ul className="flex flex-col gap-1">
+                              {feedback.raw_feedback.dropped_or_undercovered_arguments.map((item, i) => (
+                                <li key={i} className="text-sm leading-relaxed text-ink-muted">· {item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <CoachDiagnosis
+                          category="warranting"
+                          label="Warranting"
+                          items={feedback.raw_feedback?.warranting_diagnostics ?? []}
+                        />
+                        <CoachDiagnosis
+                          category="weighing"
+                          label="Impact Weighing"
+                          items={feedback.raw_feedback?.weighing_diagnostics ?? []}
+                        />
+                        <CoachDiagnosis
+                          category="evidence"
+                          label="Evidence Use"
+                          items={feedback.raw_feedback?.evidence_diagnostics ?? []}
+                        />
+                      </div>
                     ) : null}
 
+                    {/* Judge Adaptation Notes */}
                     {feedback.raw_feedback?.judge_adaptation_notes && (
-                      <Collapsible label="Judge Adaptation">
+                      <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                        <p className="text-sm font-semibold text-ink">Judge Adaptation</p>
                         <p className="text-sm leading-relaxed text-ink-muted">
                           {feedback.raw_feedback.judge_adaptation_notes}
                         </p>
-                      </Collapsible>
+                      </div>
                     )}
 
+                    {/* Decision Logic (RFD) */}
+                    {feedback.raw_feedback?.decision_logic && (
+                      <div className="flex flex-col gap-2 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3">
+                        <p className="text-sm font-semibold text-lav">Reason For Decision (RFD)</p>
+                        <p className="text-sm leading-relaxed text-ink-muted">
+                          {feedback.raw_feedback.decision_logic}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Action Checklist */}
                     {feedback.raw_feedback?.recommendations?.length ? (
-                      <Collapsible label="Recommendations">
-                        <ul className="flex flex-col gap-1.5">
+                      <div className="flex flex-col gap-3 rounded-lg border border-lav/20 bg-lav/5 p-4">
+                        <p className="text-sm font-semibold text-lav">Before You Re-Record</p>
+                        <ul className="flex flex-col gap-2">
                           {feedback.raw_feedback.recommendations.map((r, i) => (
-                            <li key={i} className="flex gap-2 text-sm text-ink-muted">
-                              <span className="shrink-0 text-ink-faint">→</span>{r}
+                            <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink">
+                              <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-lav/30 bg-surface-1" />
+                              {r}
                             </li>
                           ))}
                         </ul>
-                      </Collapsible>
+                      </div>
                     ) : null}
 
                     {/* Feedback Rating */}

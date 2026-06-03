@@ -180,29 +180,61 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
         skill_averages = None
 
     # 6. Calculate gamification: XP, level, badges
+    # New XP system: heavily reward drills and attempts, not just speech uploads
     xp = 0
-    xp += speech_count * 10  # +10 XP per speech
-    xp += feedback_ready_count * 20  # +20 XP per feedback
-    xp += drills_assigned_count * 15  # +15 XP per drill generated
-    xp += drill_attempts_count * 25  # +25 XP per drill attempt
+    xp += speech_count * 5  # +5 XP per speech (reduced from 10)
+    xp += feedback_ready_count * 10  # +10 XP per feedback (reduced from 20)
+    xp += drills_assigned_count * 25  # +25 XP per drill generated (increased from 15)
+
+    # Calculate first-time vs repeat attempts
+    # First attempt on each drill = 50 XP, repeat attempts = 20 XP
+    try:
+        attempts_breakdown = (
+            supabase.table("drill_attempts")
+            .select("drill_id")
+            .eq("user_id", user_id)
+            .order("created_at")
+            .execute()
+        )
+
+        seen_drills = set()
+        first_attempts = 0
+        repeat_attempts = 0
+        for attempt in attempts_breakdown.data:
+            drill_id = attempt["drill_id"]
+            if drill_id not in seen_drills:
+                first_attempts += 1
+                seen_drills.add(drill_id)
+            else:
+                repeat_attempts += 1
+
+        xp += first_attempts * 50  # +50 XP per first drill attempt
+        xp += repeat_attempts * 20  # +20 XP per repeat attempt
+    except Exception as exc:
+        logger.error("get_user_progress: attempt breakdown failed | %s", type(exc).__name__)
+        # Fallback: treat all attempts as first attempts
+        xp += drill_attempts_count * 50
 
     # Calculate level from XP
-    # Level 1: 0-49, Level 2: 50-149, Level 3: 150-299, Level 4: 300-499, Level 5+: 500+
-    if xp < 50:
+    # New thresholds: Level 1: 0-99, Level 2: 100-249, Level 3: 250-499, Level 4: 500-899, Level 5: 900-1399, Level 6+: 1400+
+    if xp < 100:
         level = 1
-        xp_to_next_level = 50 - xp
-    elif xp < 150:
+        xp_to_next_level = 100 - xp
+    elif xp < 250:
         level = 2
-        xp_to_next_level = 150 - xp
-    elif xp < 300:
-        level = 3
-        xp_to_next_level = 300 - xp
+        xp_to_next_level = 250 - xp
     elif xp < 500:
-        level = 4
+        level = 3
         xp_to_next_level = 500 - xp
+    elif xp < 900:
+        level = 4
+        xp_to_next_level = 900 - xp
+    elif xp < 1400:
+        level = 5
+        xp_to_next_level = 1400 - xp
     else:
-        level = 5 + ((xp - 500) // 200)  # Each additional level requires 200 XP
-        xp_to_next_level = 200 - ((xp - 500) % 200)
+        level = 6 + ((xp - 1400) // 300)  # Each additional level requires 300 XP
+        xp_to_next_level = 300 - ((xp - 1400) % 300)
 
     # Calculate badges based on achievements
     badges = []

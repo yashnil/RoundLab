@@ -150,7 +150,14 @@ RoundLab uses SQL migrations in `supabase/migrations/`. Apply them **in order** 
        - `http://localhost:3000/dashboard`
        - `http://localhost:3000/**`
 
-⚠️ **Important**: The `/auth/callback` route is required for Google OAuth. Without it, users will be created in Supabase but won't be logged into the frontend.
+⚠️ **Important OAuth Setup**: 
+- The `/auth/callback` route is **required** for Google OAuth to work
+- RoundLab uses browser-side PKCE flow (code verifier stored in cookies via `@supabase/ssr`)
+- If you see "PKCE code verifier missing" errors:
+  - Verify redirect URLs are configured correctly in Supabase Auth → URL Configuration
+  - Ensure `@supabase/ssr` is installed and `createBrowserClient` is used consistently
+  - Clear browser cookies and try again
+  - Try a different browser (Safari/Chrome privacy settings can interfere)
 
 ---
 

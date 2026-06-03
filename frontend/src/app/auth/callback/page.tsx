@@ -13,9 +13,19 @@ function AuthCallbackContent() {
     const handleCallback = async () => {
       try {
         const code = searchParams.get("code");
+        const errorParam = searchParams.get("error");
+        const errorDescription = searchParams.get("error_description");
+
+        // Handle OAuth errors from Supabase
+        if (errorParam) {
+          console.error("OAuth error from Supabase:", errorParam, errorDescription);
+          setError(errorDescription || "Authentication failed");
+          setTimeout(() => router.replace("/login?error=oauth_failed"), 2000);
+          return;
+        }
 
         if (!code) {
-          // No code present, redirect to login with error
+          console.error("No code in OAuth callback");
           router.replace("/login?error=oauth_callback_failed");
           return;
         }
@@ -23,15 +33,26 @@ function AuthCallbackContent() {
         const supabase = createClient();
 
         // Exchange the code for a session
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
         if (exchangeError) {
-          console.error("OAuth callback error:", exchangeError);
+          console.error("Code exchange error:", exchangeError);
+          // Check if it's a PKCE-specific error
+          if (exchangeError.message?.includes("code verifier")) {
+            router.replace("/login?error=pkce_failed");
+          } else {
+            router.replace("/login?error=oauth_callback_failed");
+          }
+          return;
+        }
+
+        if (!data?.session) {
+          console.error("No session after code exchange");
           router.replace("/login?error=oauth_callback_failed");
           return;
         }
 
-        // Success - redirect to dashboard
+        // Success - session is now stored in cookies
         router.replace("/dashboard");
       } catch (err) {
         console.error("Unexpected callback error:", err);

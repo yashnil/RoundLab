@@ -671,18 +671,36 @@ export default function SpeechPage() {
                   <CardContent className="flex flex-col gap-4 px-5 py-5">
                     <StepHeader n={2} title="Transcript" done />
                     <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
+
+                    {/* Next step CTA */}
+                    {!argMap && (
+                      <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lav text-xs font-bold text-white">
+                          3
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">Next: Build your flow</p>
+                          <p className="text-xs text-ink-subtle">Extract every claim, warrant, evidence, and impact from your speech.</p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </WorkspaceCard>
               ) : (
                 <WorkspaceCard key="tx-empty">
                   <CardContent className="flex flex-col gap-4 px-5 py-5">
                     <StepHeader n={2} title="Transcript" done={false} />
-                    <p className="text-sm text-ink-subtle">
-                      Transcribe via OpenAI Whisper — usually 10–30 seconds.
-                    </p>
+                    <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-ink">Transcribe first</p>
+                        <p className="text-xs text-ink-subtle">
+                          RoundLab uses AI to transcribe your speech so it can understand what you said. Takes 10–30 seconds.
+                        </p>
+                      </div>
+                    </div>
                     {txErr && <InlineAlert variant="danger">{txErr}</InlineAlert>}
                     <Button onClick={transcribe} disabled={transcribing} size="sm" className="w-full">
-                      {transcribing ? "Transcribing…" : "Transcribe Audio"}
+                      {transcribing ? "Transcribing…" : "Transcribe My Speech"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>
@@ -717,18 +735,40 @@ export default function SpeechPage() {
                         ))}
                       </motion.div>
                     )}
+
+                    {/* Next step CTA */}
+                    {!feedback && (
+                      <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lav text-xs font-bold text-white">
+                          4
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">Next: Get judge feedback</p>
+                          <p className="text-xs text-ink-subtle">See what a judge would notice: clash, weighing, drops, and adaptation.</p>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </WorkspaceCard>
               ) : (
                 <WorkspaceCard key="flow-empty">
                   <CardContent className="flex flex-col gap-4 px-5 py-5">
                     <StepHeader n={3} title="Flow" done={false} />
-                    {!canAnalyze
-                      ? <InlineAlert variant="danger">Transcript too short. Record at least 30 seconds.</InlineAlert>
-                      : <p className="text-sm text-ink-subtle">Extract claims, warrants, evidence, and impacts.</p>}
+                    {!canAnalyze ? (
+                      <InlineAlert variant="danger">Transcript too short. Record at least 30 seconds.</InlineAlert>
+                    ) : (
+                      <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">Build your debate flow</p>
+                          <p className="text-xs text-ink-subtle">
+                            RoundLab maps out every claim, warrant, evidence, and impact. This is what a judge would flow during your speech.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {flowErr && <InlineAlert variant="danger">{flowErr}</InlineAlert>}
                     <Button disabled={!canAnalyze || genFlow} onClick={generateFlow} size="sm" className="w-full">
-                      {genFlow ? "Generating…" : "Generate Flow"}
+                      {genFlow ? "Building Flow…" : "Build My Flow"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>
@@ -873,34 +913,39 @@ export default function SpeechPage() {
                       </div>
                     )}
 
-                    {/* Re-record CTA */}
-                    <div className="flex items-center gap-3 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-ink">Ready to re-record?</p>
-                        <p className="text-xs text-ink-subtle">Practice the drills below, then start a fresh attempt with the same setup.</p>
+                    {/* Next step CTA - Generate Drills */}
+                    {drills.length === 0 && (
+                      <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lav text-xs font-bold text-white">
+                          5
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">Next: Generate practice drills</p>
+                          <p className="text-xs text-ink-subtle">Get 3 personalized drills targeting your weakest skills. Practice them before re-recording.</p>
+                        </div>
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={startNewAttempt}
-                        className="shrink-0 gap-1.5 text-lav hover:border-lav/40"
-                      >
-                        <RefreshCw size={11} />
-                        New Attempt
-                      </Button>
-                    </div>
+                    )}
                   </CardContent>
                 </WorkspaceCard>
               ) : (
                 <WorkspaceCard key="fb-empty">
                   <CardContent className="flex flex-col gap-4 px-5 py-5">
                     <StepHeader n={4} title="Feedback" done={false} />
-                    {!canAnalyze
-                      ? <InlineAlert variant="danger">Transcript too short for meaningful feedback.</InlineAlert>
-                      : <p className="text-sm text-ink-subtle">Generate ballot-style critique: clash, weighing, drops, judge adaptation, drills.</p>}
+                    {!canAnalyze ? (
+                      <InlineAlert variant="danger">Transcript too short for meaningful feedback.</InlineAlert>
+                    ) : (
+                      <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">Get judge-style feedback</p>
+                          <p className="text-xs text-ink-subtle">
+                            RoundLab scores your speech like a debate judge: clash, weighing, extensions, drops, and judge adaptation.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {fbErr && <InlineAlert variant="danger">{fbErr}</InlineAlert>}
                     <Button disabled={!canAnalyze || genFb} onClick={generateFeedback} size="sm" className="w-full">
-                      {genFb ? "Generating…" : "Generate Feedback"}
+                      {genFb ? "Generating Feedback…" : "Get Judge Feedback"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>
@@ -922,13 +967,18 @@ export default function SpeechPage() {
                       done
                       aside={
                         <Badge variant="indigo">
-                          {drills.filter((d) => d.status !== "assigned").length}/{drills.length} done
+                          {drills.filter((d) => d.status !== "assigned").length}/{drills.length} attempted
                         </Badge>
                       }
                     />
-                    <p className="text-xs text-ink-subtle">
-                      3 drills generated from your feedback. Practice each one before re-recording.
-                    </p>
+                    <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-ink">Practice these drills</p>
+                        <p className="text-xs text-ink-subtle">
+                          Each drill targets a specific weakness from your feedback. Record yourself doing the exercise, then re-record your speech to see improvement.
+                        </p>
+                      </div>
+                    </div>
                     <div className="flex flex-col gap-2">
                       {drills.map((drill, i) => (
                         <DrillCard
@@ -941,18 +991,40 @@ export default function SpeechPage() {
                         />
                       ))}
                     </div>
+
+                    {/* Re-record CTA after drills */}
+                    <div className="flex items-center gap-3 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-ink">Ready to re-record?</p>
+                        <p className="text-xs text-ink-subtle">Practice a few drills above, then start a fresh attempt to track your progress.</p>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={startNewAttempt}
+                        className="shrink-0 gap-1.5 text-lav hover:border-lav/40"
+                      >
+                        <RefreshCw size={11} />
+                        New Attempt
+                      </Button>
+                    </div>
                   </CardContent>
                 </WorkspaceCard>
               ) : (
                 <WorkspaceCard key="drills-empty">
                   <CardContent className="flex flex-col gap-4 px-5 py-5">
                     <StepHeader n={5} title="Practice Drills" done={false} />
-                    <p className="text-sm text-ink-subtle">
-                      Generate 3 personalized drills based on your feedback weaknesses.
-                    </p>
+                    <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-ink">Create personalized drills</p>
+                        <p className="text-xs text-ink-subtle">
+                          RoundLab analyzes your feedback to generate 3 targeted practice exercises. Each drill helps you improve a specific skill.
+                        </p>
+                      </div>
+                    </div>
                     {drillErr && <InlineAlert variant="danger">{drillErr}</InlineAlert>}
                     <Button onClick={generateDrills} disabled={genDrills} size="sm" className="w-full">
-                      {genDrills ? "Generating…" : "Generate Drills"}
+                      {genDrills ? "Creating Drills…" : "Create My Practice Drills"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>

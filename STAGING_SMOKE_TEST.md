@@ -64,7 +64,16 @@ Run this checklist after deploying to staging (Vercel + Render/Railway) to verif
 2. Click "Continue with Google"
 3. Should redirect to Google sign-in
 4. Sign in with Google account
-5. Should redirect to dashboard
+5. Should redirect to `/auth/callback` briefly (shows "Completing sign-in...")
+6. Should then redirect to `/dashboard`
+7. Verify user is logged in (shows dashboard content, not login page)
+
+**Expected behavior**: Smooth redirect from Google → callback → dashboard with no errors.
+
+**Common issues**:
+- If you see "PKCE code verifier missing": Check Supabase Auth redirect URLs include `/auth/callback`
+- If stuck on callback page: Check browser console for errors, verify Supabase keys in `.env.local`
+- If redirected back to login with error: Check Supabase OAuth provider is enabled and configured
 
 **Pass/Fail**: ______
 

@@ -224,7 +224,7 @@ export default function DashboardPage() {
       <AppNav />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-4xl flex-col gap-7 px-6 py-9"
+          className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-7"
           variants={staggerParent(0.07, 0.05)}
           initial="hidden"
           animate="show"
@@ -272,51 +272,54 @@ export default function DashboardPage() {
           {!loading && !err && progress && progress.drill_attempts_count === 0 && (
             <motion.div variants={staggerChild}>
               <Card className="border-lav/20 bg-lav/5">
-                <CardContent className="px-5 py-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <Play size={14} className="text-lav" />
-                    <p className="text-eyebrow text-lav">Getting Started</p>
+                <CardContent className="px-6 py-6">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Play size={15} className="text-lav" />
+                    <p className="text-sm font-semibold text-lav">Start Your First Practice</p>
                   </div>
-                  <p className="mb-4 text-sm font-semibold text-ink">
-                    Complete your first practice session
+                  <p className="mb-5 text-sm leading-relaxed text-ink">
+                    RoundLab works like a personal debate coach. Record a speech, get judge-style feedback, and practice with personalized drills.
                   </p>
-                  <div className="mb-4 flex flex-col gap-2">
+                  <div className="mb-5 flex flex-col gap-2.5">
                     {[
-                      { label: "Join a team (optional)", done: false, icon: Users },
                       { label: "Create a practice session", done: progress.speech_count > 0, icon: Mic },
                       { label: "Record a 45-90 second speech", done: speeches.some(s => s.audio_url), icon: Mic },
-                      { label: "Generate feedback", done: progress.feedback_ready_count > 0, icon: CheckCircle2 },
+                      { label: "Get judge-style feedback", done: progress.feedback_ready_count > 0, icon: CheckCircle2 },
                       { label: "Complete one drill", done: progress.drill_attempts_count > 0, icon: Target },
                     ].map((step, i) => (
-                      <div key={i} className="flex items-center gap-2">
+                      <div key={i} className="flex items-center gap-2.5">
                         {step.done ? (
-                          <CheckCircle2 size={14} className="shrink-0 text-ok" />
+                          <CheckCircle2 size={15} className="shrink-0 text-ok" />
                         ) : (
-                          <div className="h-3.5 w-3.5 shrink-0 rounded-full border border-hairline-strong" />
+                          <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-lav/40 bg-lav/10">
+                            <div className="h-1.5 w-1.5 rounded-full bg-lav/60" />
+                          </div>
                         )}
-                        <span className={`text-xs ${step.done ? "text-ink-subtle line-through" : "text-ink-muted"}`}>
+                        <span className={`text-sm ${step.done ? "text-ink-subtle line-through" : "text-ink"}`}>
                           {step.label}
                         </span>
                       </div>
                     ))}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Button asChild size="sm" className="gap-1.5">
                       <Link href="/session">
-                        <Mic size={11} />
-                        New Session
+                        <Mic size={12} />
+                        Start Practice Session
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="secondary" className="gap-1.5">
                       <Link href="/team">
-                        <Users size={11} />
-                        Join Team
+                        <Users size={12} />
+                        Join Team (Optional)
                       </Link>
                     </Button>
                   </div>
-                  <p className="mt-3 text-xs text-ink-faint">
-                    If you join a team, your coach can see your practice progress and feedback status.
-                  </p>
+                  <div className="mt-4 rounded-lg border border-lav/10 bg-lav/5 px-3 py-2">
+                    <p className="text-xs text-ink-muted">
+                      <span className="font-medium text-ink-subtle">Privacy:</span> If you join a team, your coach can see your practice progress and feedback status. Your audio and transcripts stay private.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -329,14 +332,14 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* Empty state */}
-          {!loading && !err && speeches.length === 0 && (
+          {/* Empty state - only show if no onboarding card */}
+          {!loading && !err && speeches.length === 0 && progress && progress.drill_attempts_count > 0 && (
             <motion.div variants={staggerChild}>
               <EmptyState
                 Icon={Mic}
                 title="Ready to start practicing?"
-                description="Record your first Public Forum speech and get judge-style feedback on your arguments, weighing, extensions, and drops. You'll receive personalized drills to improve your weakest skills."
-                action={{ label: "Record Your First Speech", href: "/session" }}
+                description="Record a new Public Forum speech and track your progress. You'll get judge-style feedback and personalized drills to improve."
+                action={{ label: "New Practice Session", href: "/session" }}
               />
             </motion.div>
           )}

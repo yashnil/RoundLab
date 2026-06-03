@@ -26,6 +26,10 @@ function LoginContent() {
     const oauthError = searchParams.get("error");
     if (oauthError === "oauth_callback_failed") {
       setError("Google sign-in did not complete. Please try again.");
+    } else if (oauthError === "pkce_failed") {
+      setError("Google sign-in failed (browser issue). Try email/password or a different browser.");
+    } else if (oauthError === "oauth_failed") {
+      setError("Google sign-in was cancelled or denied.");
     }
   }, [searchParams]);
 
@@ -59,19 +63,29 @@ function LoginContent() {
     setError(""); setNotice(""); setGoogleLoading(true);
     const sb = createClient();
     try {
-      const { error } = await sb.auth.signInWithOAuth({
+      const { data, error } = await sb.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          // Use PKCE flow (default for @supabase/ssr)
+          // queryParams: {
+          //   access_type: 'offline',
+          //   prompt: 'consent',
+          // },
         },
       });
-      if (error) setError(error.message);
-      // If successful, user will be redirected to Google OAuth
+      if (error) {
+        setError(error.message);
+        setGoogleLoading(false);
+      }
+      // If successful (data.url exists), user will be redirected to Google OAuth
+      // Don't set googleLoading to false here - user is being redirected
     } catch (err) {
       setError(err instanceof TypeError
         ? "Could not reach Supabase. Check frontend/.env.local."
         : "An unexpected error occurred.");
-    } finally { setGoogleLoading(false); }
+      setGoogleLoading(false);
+    }
   }
 
   return (

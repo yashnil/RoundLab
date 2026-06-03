@@ -113,8 +113,18 @@ Speech type guidance:
 Judge type guidance:
 {judge_guidance}
 
-Scoring instructions (be accurate and honest — do not inflate scores):
-- overall_score: Integer 1–100. A 70 is a solid novice performance. 85+ is exceptional for JV/novice.
+Scoring instructions (be accurate, consistent, and honest — do not inflate scores):
+
+SCORING CALIBRATION:
+- 90–100: Tournament-ready. Clear warranting on all arguments, explicit weighing with magnitude/probability/timeframe, clean extensions through the speech, strong judge adaptation. Minimal weaknesses.
+- 75–89: Strong performance but missing some strategic depth. Most arguments warranted, some weighing present, extensions mostly done, adapted to judge type.
+- 60–74: Understandable but with notable debate weaknesses. Some warranting present, limited weighing, inconsistent extensions, or generic judge approach.
+- 40–59: Major missing components. Thin warranting, no weighing, dropped arguments, or inappropriate for judge type.
+- Below 40: Incomplete, very unclear, or too short to evaluate fairly.
+
+IMPORTANT: Score consistently. The same transcript should produce similar scores. Use the rubric anchors above.
+
+- overall_score: Integer 1–100. Derived from the sum of the 5 category scores below (max 100).
 - scores.clash (0–20): Direct engagement with opponent arguments. 0 = none, 20 = thorough line-by-line.
 - scores.weighing (0–20): Impact comparison and magnitude/probability/timeframe analysis. 0 = none, 20 = precise.
 - scores.extensions (0–20): Whether own arguments were clearly extended. 0 = dropped, 20 = fully extended.
@@ -196,6 +206,7 @@ def generate_feedback(
                 {"role": "user", "content": user_message},
             ],
             response_format=_FeedbackOutput,
+            temperature=0.0,
         )
     except openai.AuthenticationError as exc:
         logger.error("feedback_generation: openai_auth_error | exc_type=%s", type(exc).__name__)

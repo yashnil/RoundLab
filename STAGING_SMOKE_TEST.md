@@ -24,9 +24,9 @@ Run this checklist after deploying to staging (Vercel + Render/Railway) to verif
 
 ---
 
-## 2. Sign Up
+## 2. Sign Up (Email/Password)
 
-**Test**: New user can create an account.
+**Test**: New user can create an account with email.
 
 1. Open staging frontend
 2. Click "Sign Up"
@@ -41,9 +41,9 @@ Run this checklist after deploying to staging (Vercel + Render/Railway) to verif
 
 ---
 
-## 3. Sign In
+## 3. Sign In (Email/Password)
 
-**Test**: User can sign in with credentials.
+**Test**: User can sign in with email credentials.
 
 1. Go to login page
 2. Enter email and password from step 2
@@ -51,6 +51,24 @@ Run this checklist after deploying to staging (Vercel + Render/Railway) to verif
 4. Should reach dashboard
 
 **Pass/Fail**: ______
+
+---
+
+## 3b. Sign In (Google OAuth)
+
+**Test**: User can sign in with Google account.
+
+**Prerequisites**: Google OAuth must be configured in Supabase (see DEPLOYMENT.md).
+
+1. Go to login page
+2. Click "Continue with Google"
+3. Should redirect to Google sign-in
+4. Sign in with Google account
+5. Should redirect to dashboard
+
+**Pass/Fail**: ______
+
+**Notes**: _____________
 
 ---
 

@@ -234,6 +234,7 @@ export default function SpeechPage() {
 
   const [delOpen,  setDelOpen]  = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteErr, setDeleteErr] = useState("");
 
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
@@ -407,8 +408,14 @@ export default function SpeechPage() {
   async function deleteSession() {
     if (!userId) return;
     setDeleting(true);
-    try { await apiFetch(`/speeches/${speechId}?user_id=${userId}`, { method: "DELETE" }); router.replace("/dashboard"); }
-    catch {}
+    setDeleteErr("");
+    try {
+      await apiFetch(`/speeches/${speechId}?user_id=${userId}`, { method: "DELETE" });
+      router.replace("/dashboard");
+    }
+    catch (e: unknown) {
+      setDeleteErr(e instanceof Error ? e.message : "Could not delete this session. Please refresh and try again.");
+    }
     finally { setDeleting(false); }
   }
 
@@ -653,7 +660,9 @@ export default function SpeechPage() {
                       Transcribe via OpenAI Whisper — usually 10–30 seconds.
                     </p>
                     {txErr && <InlineAlert variant="danger">{txErr}</InlineAlert>}
-                    <Button onClick={transcribe} size="sm" className="w-full">Transcribe Audio</Button>
+                    <Button onClick={transcribe} disabled={transcribing} size="sm" className="w-full">
+                      {transcribing ? "Transcribing…" : "Transcribe Audio"}
+                    </Button>
                   </CardContent>
                 </WorkspaceCard>
               )
@@ -697,8 +706,8 @@ export default function SpeechPage() {
                       ? <InlineAlert variant="danger">Transcript too short. Record at least 30 seconds.</InlineAlert>
                       : <p className="text-sm text-ink-subtle">Extract claims, warrants, evidence, and impacts.</p>}
                     {flowErr && <InlineAlert variant="danger">{flowErr}</InlineAlert>}
-                    <Button disabled={!canAnalyze} onClick={generateFlow} size="sm" className="w-full">
-                      Generate Flow
+                    <Button disabled={!canAnalyze || genFlow} onClick={generateFlow} size="sm" className="w-full">
+                      {genFlow ? "Generating…" : "Generate Flow"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>
@@ -835,8 +844,8 @@ export default function SpeechPage() {
                       ? <InlineAlert variant="danger">Transcript too short for meaningful feedback.</InlineAlert>
                       : <p className="text-sm text-ink-subtle">Generate ballot-style critique: clash, weighing, drops, judge adaptation, drills.</p>}
                     {fbErr && <InlineAlert variant="danger">{fbErr}</InlineAlert>}
-                    <Button disabled={!canAnalyze} onClick={generateFeedback} size="sm" className="w-full">
-                      Generate Feedback
+                    <Button disabled={!canAnalyze || genFb} onClick={generateFeedback} size="sm" className="w-full">
+                      {genFb ? "Generating…" : "Generate Feedback"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>
@@ -887,8 +896,8 @@ export default function SpeechPage() {
                       Generate 3 personalized drills based on your feedback weaknesses.
                     </p>
                     {drillErr && <InlineAlert variant="danger">{drillErr}</InlineAlert>}
-                    <Button onClick={generateDrills} size="sm" className="w-full">
-                      Generate Drills
+                    <Button onClick={generateDrills} disabled={genDrills} size="sm" className="w-full">
+                      {genDrills ? "Generating…" : "Generate Drills"}
                     </Button>
                   </CardContent>
                 </WorkspaceCard>
@@ -901,11 +910,12 @@ export default function SpeechPage() {
 
       <DeleteDialog
         open={delOpen}
-        onOpenChange={(v) => { if (!v && !deleting) setDelOpen(false); }}
+        onOpenChange={(v) => { if (!v && !deleting) { setDelOpen(false); setDeleteErr(""); } }}
         title="Delete this session?"
         description={`"${speech.title}" will be permanently deleted along with its transcript, flow, and feedback.`}
         onConfirm={deleteSession}
         isDeleting={deleting}
+        error={deleteErr}
       />
     </>
   );

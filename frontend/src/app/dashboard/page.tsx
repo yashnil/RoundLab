@@ -180,6 +180,7 @@ export default function DashboardPage() {
   const [err,       setErr]       = useState("");
   const [del,       setDel]       = useState<Speech | null>(null);
   const [deleting,  setDeleting]  = useState(false);
+  const [deleteErr, setDeleteErr] = useState("");
 
   useEffect(() => {
     createClient().auth.getUser()
@@ -203,15 +204,18 @@ export default function DashboardPage() {
   async function handleDelete() {
     if (!del || !userId) return;
     setDeleting(true);
+    setDeleteErr("");
     try {
-      await apiFetch(`/speeches/${del.id}`, { method: "DELETE" });
+      await apiFetch(`/speeches/${del.id}?user_id=${userId}`, { method: "DELETE" });
       setSpeeches((p) => p.filter((s) => s.id !== del.id));
 
       // Refresh progress
       const progressData = await apiFetch<ProgressSummary>(`/users/${userId}/progress`);
       setProgress(progressData);
       setDel(null);
-    } catch { /* keep open */ }
+    } catch (e: unknown) {
+      setDeleteErr(e instanceof Error ? e.message : "Could not delete this session. Please refresh and try again.");
+    }
     finally { setDeleting(false); }
   }
 
@@ -425,11 +429,12 @@ export default function DashboardPage() {
 
       <DeleteDialog
         open={del !== null}
-        onOpenChange={(o) => { if (!o && !deleting) setDel(null); }}
+        onOpenChange={(o) => { if (!o && !deleting) { setDel(null); setDeleteErr(""); } }}
         title="Delete session?"
         description={`"${del?.title}" will be permanently deleted along with its transcript, flow, feedback, and drills.`}
         onConfirm={handleDelete}
         isDeleting={deleting}
+        error={deleteErr}
       />
     </>
   );

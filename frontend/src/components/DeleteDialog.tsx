@@ -14,10 +14,11 @@ interface DeleteDialogProps {
   description: string;
   onConfirm: () => void;
   isDeleting?: boolean;
+  error?: string;
 }
 
 export default function DeleteDialog({
-  open, onOpenChange, title, description, onConfirm, isDeleting = false,
+  open, onOpenChange, title, description, onConfirm, isDeleting = false, error,
 }: DeleteDialogProps) {
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
@@ -29,6 +30,11 @@ export default function DeleteDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {error && (
+          <div className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-xs text-danger">
+            {error}
+          </div>
+        )}
         <DialogFooter>
           <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)} disabled={isDeleting}>
             Cancel

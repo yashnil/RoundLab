@@ -110,14 +110,38 @@ RoundLab uses SQL migrations in `supabase/migrations/`. Apply them **in order** 
 
 ### 4. Configure Authentication
 
+#### Email Provider
+
 1. Go to Authentication → Providers
 2. Enable Email provider
 3. Configure email templates (optional but recommended):
    - Customize signup confirmation email
    - Customize password reset email
-4. Go to Authentication → URL Configuration
+
+#### Google OAuth Provider
+
+1. Go to Authentication → Providers → Google
+2. Enable Google provider
+3. Get Google OAuth credentials:
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Create a new project or select existing
+   - Go to APIs & Services → Credentials
+   - Click "Create Credentials" → "OAuth 2.0 Client ID"
+   - Application type: Web application
+   - Authorized redirect URIs:
+     ```
+     https://YOUR_SUPABASE_PROJECT_REF.supabase.co/auth/v1/callback
+     ```
+     Example: `https://wvfpkhjdpxmvjbdvvimb.supabase.co/auth/v1/callback`
+4. Copy Client ID and Client Secret
+5. Paste them into Supabase Authentication → Providers → Google configuration
+
+#### URL Configuration
+
+1. Go to Authentication → URL Configuration
    - Set Site URL to your frontend domain: `https://your-app.vercel.app`
    - Add redirect URLs: `https://your-app.vercel.app/**`
+   - For local development also add: `http://localhost:3000/**`
 
 ---
 

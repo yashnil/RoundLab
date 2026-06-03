@@ -150,6 +150,14 @@ export interface SkillAverages {
   judge_adaptation: number;
 }
 
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  earned_at: string | null;
+}
+
 export interface ProgressSummary {
   speech_count: number;
   feedback_ready_count: number;
@@ -159,6 +167,11 @@ export interface ProgressSummary {
   drill_completion_rate: number | null;
   incomplete_drills: IncompleteDrill[];
   skill_averages: SkillAverages | null;
+  // Gamification
+  xp: number;
+  level: number;
+  xp_to_next_level: number;
+  badges: Badge[];
 }
 
 export interface UserTeam {

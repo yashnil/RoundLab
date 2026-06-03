@@ -28,6 +28,14 @@ class SkillAverage(BaseModel):
     judge_adaptation: float
 
 
+class Badge(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    earned_at: str | None
+
+
 class ProgressSummary(BaseModel):
     speech_count: int
     feedback_ready_count: int
@@ -37,6 +45,11 @@ class ProgressSummary(BaseModel):
     drill_completion_rate: float | None
     incomplete_drills: list[IncompleteDrill]
     skill_averages: SkillAverage | None
+    # Gamification
+    xp: int
+    level: int
+    xp_to_next_level: int
+    badges: list[Badge]
 
 
 @router.get("/{user_id}/progress", response_model=ProgressSummary)
@@ -166,6 +179,112 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
         logger.error("get_user_progress: feedback averages failed | %s", type(exc).__name__)
         skill_averages = None
 
+    # 6. Calculate gamification: XP, level, badges
+    xp = 0
+    xp += speech_count * 10  # +10 XP per speech
+    xp += feedback_ready_count * 20  # +20 XP per feedback
+    xp += drills_assigned_count * 15  # +15 XP per drill generated
+    xp += drill_attempts_count * 25  # +25 XP per drill attempt
+
+    # Calculate level from XP
+    # Level 1: 0-49, Level 2: 50-149, Level 3: 150-299, Level 4: 300-499, Level 5+: 500+
+    if xp < 50:
+        level = 1
+        xp_to_next_level = 50 - xp
+    elif xp < 150:
+        level = 2
+        xp_to_next_level = 150 - xp
+    elif xp < 300:
+        level = 3
+        xp_to_next_level = 300 - xp
+    elif xp < 500:
+        level = 4
+        xp_to_next_level = 500 - xp
+    else:
+        level = 5 + ((xp - 500) // 200)  # Each additional level requires 200 XP
+        xp_to_next_level = 200 - ((xp - 500) % 200)
+
+    # Calculate badges based on achievements
+    badges = []
+
+    # Check if user joined a team
+    try:
+        team_res = (
+            supabase.table("team_members")
+            .select("created_at")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        has_team = len(team_res.data) > 0
+        team_joined_at = team_res.data[0]["created_at"] if has_team else None
+    except Exception:
+        has_team = False
+        team_joined_at = None
+
+    if speech_count >= 1:
+        badges.append(Badge(
+            id="first_speech",
+            name="First Speech",
+            description="Created your first practice speech",
+            icon="🎤",
+            earned_at=speeches_res.data[0].get("created_at") if speeches_res.data else None
+        ))
+
+    if drills_assigned_count >= 1:
+        badges.append(Badge(
+            id="flow_builder",
+            name="Flow Builder",
+            description="Generated your first argument flow",
+            icon="🗺️",
+            earned_at=drills_res.data[0].get("created_at") if drills_res.data else None
+        ))
+
+    if feedback_ready_count >= 1:
+        badges.append(Badge(
+            id="judge_ready",
+            name="Judge Ready",
+            description="Received your first judge-style feedback",
+            icon="⚖️",
+            earned_at=None  # Would need to fetch feedback created_at
+        ))
+
+    if drill_attempts_count >= 1:
+        badges.append(Badge(
+            id="drill_starter",
+            name="Drill Starter",
+            description="Completed your first practice drill",
+            icon="🎯",
+            earned_at=None  # Would need to fetch attempt created_at
+        ))
+
+    if speech_count >= 3:
+        badges.append(Badge(
+            id="consistent_speaker",
+            name="Consistent Speaker",
+            description="Created 3 practice speeches",
+            icon="🔥",
+            earned_at=None
+        ))
+
+    if drill_attempts_count >= 3:
+        badges.append(Badge(
+            id="practice_streak",
+            name="Practice Streak",
+            description="Completed 3 drill attempts",
+            icon="⚡",
+            earned_at=None
+        ))
+
+    if has_team:
+        badges.append(Badge(
+            id="team_player",
+            name="Team Player",
+            description="Joined a debate team",
+            icon="👥",
+            earned_at=team_joined_at
+        ))
+
     return ProgressSummary(
         speech_count=speech_count,
         feedback_ready_count=feedback_ready_count,
@@ -175,4 +294,8 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
         drill_completion_rate=drill_completion_rate,
         incomplete_drills=incomplete_drills,
         skill_averages=skill_averages,
+        xp=xp,
+        level=level,
+        xp_to_next_level=xp_to_next_level,
+        badges=badges,
     )

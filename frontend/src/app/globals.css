@@ -76,9 +76,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   DARK-FIRST TOKEN ASSIGNMENT
-   Both :root and .dark carry identical Linear-dark values.
-   html always has class="dark" — this ensures dark: variants resolve.
+   DARK MODE (default)
 ───────────────────────────────────────────────────────────────────────────── */
 
 :root,
@@ -105,6 +103,47 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   LIGHT MODE
+───────────────────────────────────────────────────────────────────────────── */
+
+.light {
+  --background:            oklch(0.985 0.001 264);  /* off-white page bg */
+  --foreground:            oklch(0.095 0.002 264);  /* near-black text */
+  --card:                  oklch(1.0 0 0);          /* pure white cards */
+  --card-foreground:       oklch(0.095 0.002 264);
+  --popover:               oklch(1.0 0 0);
+  --popover-foreground:    oklch(0.095 0.002 264);
+  --primary:               oklch(0.510 0.156 278);  /* lavender stays */
+  --primary-foreground:    oklch(0.985 0.001 264);
+  --secondary:             oklch(0.945 0.002 264);  /* light gray */
+  --secondary-foreground:  oklch(0.095 0.002 264);
+  --muted:                 oklch(0.945 0.002 264);
+  --muted-foreground:      oklch(0.450 0.006 264);
+  --accent:                oklch(0.965 0.002 264);
+  --accent-foreground:     oklch(0.095 0.002 264);
+  --destructive:           oklch(0.640 0.215 25);
+  --border:                oklch(0.880 0.003 264);  /* light borders */
+  --input:                 oklch(0.880 0.003 264);
+  --ring:                  oklch(0.510 0.156 278);
+}
+
+/* Light mode color overrides for custom tokens */
+.light {
+  --color-canvas:     oklch(0.985 0.001 264);
+  --color-surface-1:  oklch(1.0 0 0);
+  --color-surface-2:  oklch(0.965 0.002 264);
+  --color-surface-3:  oklch(0.945 0.002 264);
+
+  --color-hairline:        oklch(0.880 0.003 264);
+  --color-hairline-strong: oklch(0.780 0.004 264);
+
+  --color-ink:        oklch(0.095 0.002 264);
+  --color-ink-muted:  oklch(0.250 0.006 264);
+  --color-ink-subtle: oklch(0.450 0.006 264);
+  --color-ink-faint:  oklch(0.600 0.005 264);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    BASE LAYER
 ───────────────────────────────────────────────────────────────────────────── */
 
@@ -116,8 +155,15 @@
   html {
     @apply font-sans;
     scroll-behavior: smooth;
-    /* Force dark: always — no color-scheme flash */
+    /* Default to dark mode, allow light mode via .light class */
+  }
+
+  html.dark {
     color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
   }
 
   /* Display tracking — Linear principle: aggressive negative on large type */

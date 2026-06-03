@@ -306,20 +306,130 @@ export default function TeamPage() {
       <AppNav />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-4xl flex-col gap-7 px-6 py-9"
+          className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-7"
           variants={staggerParent(0.07, 0.05)}
           initial="hidden"
           animate="show"
         >
-          {/* Header */}
-          <motion.div variants={staggerChild} className="flex flex-col gap-1">
-            <h1 className="text-title text-ink">{selectedTeam?.team_name}</h1>
-            <div className="flex items-center gap-2">
-              <Badge variant={selectedTeam?.role === "coach" ? "indigo" : "default"} className="capitalize">
-                {selectedTeam?.role}
-              </Badge>
-              <span className="text-sm text-ink-subtle">{teams.length} team{teams.length !== 1 ? "s" : ""}</span>
+          {/* Header with Team Switcher */}
+          <motion.div variants={staggerChild} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-title text-ink">Team</h1>
+              <p className="text-sm text-ink-subtle">
+                {selectedTeam?.role === "coach"
+                  ? "Manage your team and track student progress"
+                  : "Practice with your team and track your growth"}
+              </p>
             </div>
+
+            {/* Team Selector & Actions */}
+            <Card>
+              <CardContent className="px-5 py-4">
+                <div className="flex flex-col gap-4">
+                  {/* Current Team Display */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Users size={16} className="text-lav" />
+                        <p className="text-sm font-semibold text-ink">{selectedTeam?.team_name}</p>
+                        <Badge variant={selectedTeam?.role === "coach" ? "indigo" : "default"} className="capitalize">
+                          {selectedTeam?.role}
+                        </Badge>
+                      </div>
+                      {teams.length > 1 && (
+                        <p className="text-xs text-ink-subtle">You belong to {teams.length} teams</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Team Switcher (if multiple teams) */}
+                  {teams.length > 1 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs font-medium text-ink-subtle">Switch Team</p>
+                      <div className="flex flex-wrap gap-2">
+                        {teams.map((team) => (
+                          <button
+                            key={team.team_id}
+                            onClick={async () => {
+                              setSelectedTeam(team);
+                              if (team.role === "coach") {
+                                const dash = await apiFetch<TeamDashboard>(
+                                  `/teams/${team.team_id}/dashboard?user_id=${userId}`
+                                );
+                                setDashboard(dash);
+                              } else {
+                                setDashboard(null);
+                              }
+                            }}
+                            className={[
+                              "rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                              selectedTeam?.team_id === team.team_id
+                                ? "border-lav/30 bg-lav/10 text-ink"
+                                : "border-hairline bg-surface-2 text-ink-subtle hover:border-lav/20 hover:bg-lav/5",
+                            ].join(" ")}
+                          >
+                            <div className="font-medium">{team.team_name}</div>
+                            <div className="text-ink-faint capitalize">{team.role}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Actions */}
+                  <div className="flex flex-wrap gap-2 border-t border-hairline pt-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 w-full">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => {
+                            // Scroll to create section or show create modal
+                            const createCard = document.getElementById("create-team-section");
+                            createCard?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1.5"
+                        >
+                          <Plus size={12} />
+                          Create New Team
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const joinCard = document.getElementById("join-team-section");
+                            joinCard?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1.5"
+                        >
+                          <UserPlus size={12} />
+                          Join Another Team
+                        </Button>
+                      </div>
+                      {selectedTeam?.role === "coach" && (
+                        <Button
+                          onClick={copyInviteCode}
+                          size="sm"
+                          className="gap-1.5"
+                        >
+                          {copied ? (
+                            <>
+                              <Check size={12} />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              Copy Invite Code
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </motion.div>
 
           {/* Invite Code Card */}
@@ -545,6 +655,94 @@ export default function TeamPage() {
               </Card>
             </motion.div>
           )}
+
+          {/* Create/Join Additional Teams */}
+          <motion.div variants={staggerChild} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Create Another Team */}
+            <Card id="create-team-section">
+              <CardContent className="flex flex-col gap-4 px-5 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-lav/20 bg-lav/10">
+                    <Plus size={18} className="text-lav" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold text-ink">Create Another Team</p>
+                    <p className="text-xs text-ink-subtle">Coach multiple teams</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Input
+                    placeholder="Team name"
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCreateTeam();
+                    }}
+                    disabled={creating}
+                  />
+                  {createErr && <p className="text-xs text-danger">{createErr}</p>}
+                  <Button
+                    onClick={handleCreateTeam}
+                    disabled={creating || !newTeamName.trim()}
+                    size="sm"
+                    className="w-full"
+                  >
+                    {creating ? "Creating…" : "Create Team"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Join Another Team */}
+            <Card id="join-team-section">
+              <CardContent className="flex flex-col gap-4 px-5 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-indigo/20 bg-indigo/10">
+                    <UserPlus size={18} className="text-indigo" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold text-ink">Join Another Team</p>
+                    <p className="text-xs text-ink-subtle">Get another invite code</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Input
+                    placeholder="Invite code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleJoinTeam();
+                    }}
+                    disabled={joining}
+                    className="font-mono uppercase"
+                  />
+                  {joinErr && <p className="text-xs text-danger">{joinErr}</p>}
+                  <Button
+                    onClick={handleJoinTeam}
+                    disabled={joining || !joinCode.trim()}
+                    size="sm"
+                    className="w-full"
+                    variant="secondary"
+                  >
+                    {joining ? "Joining…" : "Join Team"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Team Management Note */}
+          <motion.div variants={staggerChild}>
+            <Card className="border-hairline/50">
+              <CardContent className="px-5 py-3">
+                <p className="text-xs text-ink-faint">
+                  <span className="font-medium text-ink-subtle">Need to leave a team?</span> Ask your coach for now. Advanced team management is coming soon.
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
         </motion.div>
       </main>
     </>

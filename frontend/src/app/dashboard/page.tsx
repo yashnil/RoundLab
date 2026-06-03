@@ -7,7 +7,7 @@ import { motion } from "motion/react";
 import {
   Mic, CheckCircle2, Target, TrendingUp, Headphones,
   MoreHorizontal, Trash2, ArrowUpRight, ArrowRight,
-  BookOpen, Zap, Users, Play,
+  BookOpen, Zap, Users, Play, Trophy, Star,
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import MetricCard from "@/components/MetricCard";
@@ -267,6 +267,66 @@ export default function DashboardPage() {
               ))}
             </motion.div>
           ) : null}
+
+          {/* Gamification: XP, Level, Badges */}
+          {!loading && !err && progress && (
+            <motion.div variants={staggerChild}>
+              <Card className="border-lav/10">
+                <CardContent className="px-5 py-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    {/* Level & XP */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-lav/30 bg-lav/10">
+                        <Trophy size={24} className="text-lav" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-bold text-ink">Level {progress.level}</span>
+                          <span className="text-xs text-ink-subtle">{progress.xp} XP</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-hairline">
+                              <div
+                                className="h-full rounded-full bg-lav transition-all"
+                                style={{
+                                  width: `${((progress.xp - (progress.level === 1 ? 0 : progress.level === 2 ? 50 : progress.level === 3 ? 150 : progress.level === 4 ? 300 : 500)) / progress.xp_to_next_level) * 100}%`
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-ink-faint">{progress.xp_to_next_level} to Lv{progress.level + 1}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Badges */}
+                    {progress.badges.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs font-medium text-ink-subtle">Badges Earned</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {progress.badges.slice(0, 5).map((badge) => (
+                            <div
+                              key={badge.id}
+                              title={`${badge.name}: ${badge.description}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-base transition-colors hover:border-lav/30 hover:bg-lav/5"
+                            >
+                              {badge.icon}
+                            </div>
+                          ))}
+                          {progress.badges.length > 5 && (
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-xs text-ink-faint">
+                              +{progress.badges.length - 5}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Onboarding Checklist - show only if user hasn't completed any drill attempts */}
           {!loading && !err && progress && progress.drill_attempts_count === 0 && (

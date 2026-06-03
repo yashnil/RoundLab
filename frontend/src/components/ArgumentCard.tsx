@@ -32,9 +32,36 @@ function Field({ label, text, italic }: { label: string; text: string; italic?: 
   );
 }
 
+function getCoachNote(issues: string[]): string | null {
+  if (issues.length === 0) return null;
+
+  // Check for specific issue patterns and provide student-friendly coaching
+  const hasWarrantIssue = issues.some(i => i.toLowerCase().includes("warrant"));
+  const hasEvidenceIssue = issues.some(i => i.toLowerCase().includes("evidence") || i.toLowerCase().includes("unsupported"));
+  const hasImpactIssue = issues.some(i => i.toLowerCase().includes("impact"));
+  const hasWeighingIssue = issues.some(i => i.toLowerCase().includes("weigh"));
+
+  if (hasWarrantIssue) {
+    return "Add a 'because' sentence explaining why this claim is true.";
+  }
+  if (hasEvidenceIssue) {
+    return "Explain exactly what your evidence proves, not just what the source says.";
+  }
+  if (hasImpactIssue) {
+    return "Tell the judge why this impact matters in the real world.";
+  }
+  if (hasWeighingIssue) {
+    return "Compare this impact to your opponent's using magnitude, probability, or timeframe.";
+  }
+
+  // Generic fallback
+  return "This argument needs stronger development. Make sure every part connects clearly.";
+}
+
 export default function ArgumentCard({ arg, index }: { arg: ArgumentItem; index: number }) {
   const config = TYPE_CONFIG[arg.argument_type] ?? TYPE_CONFIG.unclear;
   const conf   = confBadge(arg.confidence);
+  const coachNote = getCoachNote(arg.issues);
 
   return (
     <motion.div
@@ -66,12 +93,23 @@ export default function ArgumentCard({ arg, index }: { arg: ArgumentItem; index:
         <Field label="Impact"  text={arg.impact} />
       </div>
 
-      {/* Issue chips */}
-      {arg.issues.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-t border-hairline pt-2.5">
-          {arg.issues.map((issue, j) => (
-            <Badge key={j} variant="red">{issue}</Badge>
-          ))}
+      {/* Coach Note */}
+      {coachNote && (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber/20 bg-amber/5 px-3 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-amber">Coach Note</span>
+          </div>
+          <p className="text-xs leading-relaxed text-ink">{coachNote}</p>
+          {/* Show issue tags as secondary info */}
+          {arg.issues.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {arg.issues.map((issue, j) => (
+                <span key={j} className="rounded-full bg-amber/10 px-1.5 py-0.5 text-[10px] font-medium text-amber">
+                  {issue}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </motion.div>

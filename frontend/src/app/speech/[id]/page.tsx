@@ -167,16 +167,90 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant} className="shrink-0">{label}</Badge>;
 }
 
-function DiagList({ label, items, warn }: { label: string; items: string[]; warn?: boolean }) {
-  if (!items.length) return null;
+function CoachDiagnosis({ category, items, label }: { category: string; items: string[]; label: string }) {
+  if (!items || items.length === 0) return null;
+
+  // Determine status based on content
+  const rawText = items.join(" ").toLowerCase();
+  let status: "strong" | "needs-work" | "missing";
+  let statusColor: string;
+  let explanation: string;
+  let fix: string;
+
+  if (rawText.includes("none") || rawText.includes("absent") || rawText.includes("missing") || items.length === 0) {
+    status = "missing";
+    statusColor = "text-danger";
+  } else if (rawText.includes("thin") || rawText.includes("weak") || rawText.includes("unclear")) {
+    status = "needs-work";
+    statusColor = "text-warn";
+  } else {
+    status = "strong";
+    statusColor = "text-ok";
+  }
+
+  // Generate student-friendly explanations
+  if (category === "warranting") {
+    if (status === "missing") {
+      explanation = "You often state what happened, but do not explain why it proves your argument.";
+      fix = "Add one sentence after each claim that starts with 'This matters because…' or 'This is true because…'";
+    } else if (status === "needs-work") {
+      explanation = "Some warrants are present but could be stronger and more explicit.";
+      fix = "Make sure every claim has a clear 'because' sentence explaining the logical connection.";
+    } else {
+      explanation = "Your warranting is solid. You explain why your claims are true.";
+      fix = "";
+    }
+  } else if (category === "weighing") {
+    if (status === "missing") {
+      explanation = "RoundLab did not detect clear weighing or comparative analysis.";
+      fix = "Add comparisons using magnitude (how big), probability (how likely), or timeframe (how soon).";
+    } else if (status === "needs-work") {
+      explanation = "Some weighing is present but needs to be more explicit.";
+      fix = "Directly compare your impacts to your opponent's. Say 'Our impact outweighs because…'";
+    } else {
+      explanation = "You're weighing impacts against each other effectively.";
+      fix = "";
+    }
+  } else if (category === "evidence") {
+    if (status === "missing") {
+      explanation = "You mention sources but don't clearly explain what they prove.";
+      fix = "After citing evidence, explain exactly what the card proves in one sentence.";
+    } else if (status === "needs-work") {
+      explanation = "Your sources are mentioned, but some connections to claims are unclear.";
+      fix = "After each piece of evidence, add: 'This proves that [claim] because [explanation].'";
+    } else {
+      explanation = "Your evidence is well-connected to your arguments.";
+      fix = "";
+    }
+  } else {
+    // Generic fallback for other categories
+    if (status === "missing") {
+      explanation = `${label} is not clearly present in your speech.`;
+      fix = "Focus on developing this area in your next attempt.";
+    } else if (status === "needs-work") {
+      explanation = `${label} needs improvement.`;
+      fix = "Review the specific feedback items and strengthen this skill.";
+    } else {
+      explanation = `${label} is working well.`;
+      fix = "";
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-ink-faint">{label}</p>
-      <ul className="flex flex-col gap-1">
-        {items.map((item, i) => (
-          <li key={i} className={`text-sm ${warn ? "text-warn" : "text-ink-muted"}`}>· {item}</li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-ink">{label}</p>
+        <span className={`text-xs font-medium ${statusColor} capitalize`}>
+          {status === "needs-work" ? "Needs Work" : status === "missing" ? "Missing" : "Strong"}
+        </span>
+      </div>
+      <p className="text-sm leading-relaxed text-ink-muted">{explanation}</p>
+      {fix && (
+        <div className="flex items-start gap-2 rounded-md border border-lav/10 bg-lav/5 px-3 py-2">
+          <span className="text-xs font-semibold text-lav">Fix:</span>
+          <p className="text-xs leading-relaxed text-ink-subtle">{fix}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -721,19 +795,55 @@ export default function SpeechPage() {
                         {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
                       </Badge>
                     } />
+
+                    {/* Flow Explanation */}
+                    <div className="flex flex-col gap-3 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3">
+                      <p className="text-sm leading-relaxed text-ink">
+                        <span className="font-semibold">This is your flow:</span> Each card shows one argument RoundLab heard in your speech. Green arguments are usable offense. Coach notes show what a judge may find missing.
+                      </p>
+                      {/* Quick Legend */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                        <span className="text-ink-subtle"><span className="font-semibold text-ink">Claim</span> = what you argue</span>
+                        <span className="text-ink-subtle"><span className="font-semibold text-ink">Warrant</span> = why it's true</span>
+                        <span className="text-ink-subtle"><span className="font-semibold text-ink">Evidence</span> = support</span>
+                        <span className="text-ink-subtle"><span className="font-semibold text-ink">Impact</span> = why it matters</span>
+                      </div>
+                    </div>
+
                     {argMap.arguments.length === 0 ? (
                       <p className="text-sm text-ink-faint">No arguments extracted.</p>
                     ) : (
-                      <motion.div
-                        className="grid grid-cols-1 gap-3 md:grid-cols-2"
-                        variants={staggerParent(0.06)}
-                        initial="hidden"
-                        animate="show"
-                      >
-                        {argMap.arguments.map((a, i) => (
-                          <ArgumentCard key={i} arg={a} index={i} />
-                        ))}
-                      </motion.div>
+                      <>
+                        {/* Common Issues Summary */}
+                        {(() => {
+                          const allIssues = argMap.arguments.flatMap(a => a.issues);
+                          const warrantIssues = allIssues.filter(i => i.toLowerCase().includes("warrant")).length;
+                          const impactIssues = allIssues.filter(i => i.toLowerCase().includes("impact")).length;
+                          const hasCommonIssue = warrantIssues > argMap.arguments.length / 2 || impactIssues > argMap.arguments.length / 2;
+
+                          return hasCommonIssue ? (
+                            <div className="rounded-lg border border-amber/20 bg-amber/5 px-4 py-3">
+                              <p className="text-xs font-semibold text-amber">Common Pattern</p>
+                              <p className="text-sm text-ink">
+                                {warrantIssues > impactIssues
+                                  ? "Most of your arguments need stronger warranting. Add 'because' sentences explaining why your claims are true."
+                                  : "Most of your arguments need stronger impact explanation. Tell the judge why these impacts matter in the real world."}
+                              </p>
+                            </div>
+                          ) : null;
+                        })()}
+
+                        <motion.div
+                          className="grid grid-cols-1 gap-3 md:grid-cols-2"
+                          variants={staggerParent(0.06)}
+                          initial="hidden"
+                          animate="show"
+                        >
+                          {argMap.arguments.map((a, i) => (
+                            <ArgumentCard key={i} arg={a} index={i} />
+                          ))}
+                        </motion.div>
+                      </>
                     )}
 
                     {/* Next step CTA */}
@@ -850,12 +960,35 @@ export default function SpeechPage() {
                       feedback.raw_feedback?.warranting_diagnostics?.length ||
                       feedback.raw_feedback?.weighing_diagnostics?.length ||
                       feedback.raw_feedback?.evidence_diagnostics?.length) ? (
-                      <Collapsible label="Argument Diagnostics">
-                        <div className="flex flex-col gap-4">
-                          <DiagList label="Dropped / Undercovered" items={feedback.raw_feedback?.dropped_or_undercovered_arguments ?? []} warn />
-                          <DiagList label="Warranting" items={feedback.raw_feedback?.warranting_diagnostics ?? []} />
-                          <DiagList label="Weighing"   items={feedback.raw_feedback?.weighing_diagnostics ?? []} />
-                          <DiagList label="Evidence"   items={feedback.raw_feedback?.evidence_diagnostics ?? []} />
+                      <Collapsible label="Coach Diagnosis" open>
+                        <div className="flex flex-col gap-3">
+                          {/* Dropped arguments - show as warning */}
+                          {feedback.raw_feedback?.dropped_or_undercovered_arguments && feedback.raw_feedback.dropped_or_undercovered_arguments.length > 0 && (
+                            <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                              <p className="text-sm font-semibold text-danger">Dropped / Undercovered</p>
+                              <ul className="flex flex-col gap-1">
+                                {feedback.raw_feedback.dropped_or_undercovered_arguments.map((item, i) => (
+                                  <li key={i} className="text-sm text-ink-muted">· {item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          <CoachDiagnosis
+                            category="warranting"
+                            label="Warranting"
+                            items={feedback.raw_feedback?.warranting_diagnostics ?? []}
+                          />
+                          <CoachDiagnosis
+                            category="weighing"
+                            label="Impact Weighing"
+                            items={feedback.raw_feedback?.weighing_diagnostics ?? []}
+                          />
+                          <CoachDiagnosis
+                            category="evidence"
+                            label="Evidence Use"
+                            items={feedback.raw_feedback?.evidence_diagnostics ?? []}
+                          />
                         </div>
                       </Collapsible>
                     ) : null}

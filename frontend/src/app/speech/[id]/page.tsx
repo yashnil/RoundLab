@@ -38,7 +38,7 @@ const TYPE_LABEL: Record<string, string> = {
   summary: "Summary", final_focus: "Final Focus", crossfire: "Crossfire",
 };
 
-const MSG_TRANSCRIBE = ["Reading your speech", "Processing audio", "Converting to text", "Almost ready"];
+const MSG_TRANSCRIBE = ["Preparing your speech", "Reading your audio", "Processing speech content", "Almost ready"];
 const MSG_FLOW       = ["Finding claims and warrants", "Mapping evidence and impacts", "Building your flow", "Analyzing argument structure"];
 const MSG_FEEDBACK   = ["Reading your speech", "Mapping arguments", "Evaluating the case", "Building your coaching report"];
 const MSG_DRILLS     = ["Reviewing your feedback", "Identifying skill gaps", "Creating practice drills"];
@@ -714,11 +714,10 @@ export default function SpeechPage() {
   });
 
   const steps = [
-    { label: "Audio",      done: !!speech.audio_url        },
-    { label: "Transcript", done: !!transcript              },
-    { label: "Flow",       done: !!argMap                  },
-    { label: "Feedback",   done: !!feedback                },
-    { label: "Drills",     done: drills.length > 0        },
+    { label: "Input",           done: !!speech.audio_url || !!transcript },
+    { label: "Arguments",       done: !!argMap                           },
+    { label: "Coaching Report", done: !!feedback                         },
+    { label: "Practice",        done: drills.length > 0                  },
   ];
 
   const isComplete = speech.status === "done";
@@ -924,7 +923,7 @@ export default function SpeechPage() {
               </CardContent>
             </WorkspaceCard>
 
-            {/* ── For Complete Sessions: Feedback → Drills → Flow → Transcript ── */}
+            {/* ── For Complete Sessions: Coaching Report → Practice → Arguments → Input ── */}
             {isComplete ? (
               <>
                 {/* Feedback (Coaching Report) */}
@@ -1270,7 +1269,7 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
-                {/* Speech Text
+                {/* Input Details - Compact (completed session)
                     TODO: Future feature - Annotated Speech Text
                     - Highlight claims, warrants, evidence, impacts inline
                     - Underline weak warrants
@@ -1279,59 +1278,59 @@ export default function SpeechPage() {
                     - Useful for students who want to see exactly where their speech succeeded/failed
                 */}
                 {transcript && (
-                  <WorkspaceCard key="tx-done">
-                    <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={2} title="Speech Text" done />
-                      <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
+                  <WorkspaceCard key="input-details">
+                    <CardContent className="flex flex-col gap-3 px-5 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ok/10">
+                          <Check size={14} className="text-ok" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">Speech input</p>
+                          <p className="text-xs text-ink-faint">{transcript.word_count} words • {speech.speech_type.replace('_', ' ')}</p>
+                        </div>
+                      </div>
                     </CardContent>
                   </WorkspaceCard>
                 )}
               </>
             ) : (
               <>
-                {/* ── For Incomplete Sessions: Guided Order (Transcript → Flow → Feedback → Drills) ── */}
+                {/* ── For Incomplete Sessions: Input → Analysis → Coaching → Practice ── */}
 
-                {/* Step 2: Transcript */}
+                {/* Input Status - Compact */}
                 {speech.audio_url && (
                   transcribing ? (
                     <motion.div key="tx-loading" {...fadeUp(0)}>
                       <LoadingCard title="Analyzing your speech" messages={MSG_TRANSCRIBE} />
                     </motion.div>
                   ) : transcript ? (
-                    <WorkspaceCard key="tx-done">
-                      <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={2} title="Speech Text" done />
-                        <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
-
-                        {/* Next step CTA */}
-                        {!argMap && (
-                          <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
-                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lav text-xs font-bold text-white">
-                              3
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-ink">Ready to analyze</p>
-                              <p className="text-xs text-ink-subtle">Build your argument flow and get judge-style feedback on your speech.</p>
-                            </div>
+                    <WorkspaceCard key="input-ready">
+                      <CardContent className="flex flex-col gap-3 px-5 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ok/10">
+                            <Check size={14} className="text-ok" />
                           </div>
-                        )}
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-ink">Speech input ready</p>
+                            <p className="text-xs text-ink-faint">{transcript.word_count} words • {speech.speech_type.replace('_', ' ')}</p>
+                          </div>
+                        </div>
                       </CardContent>
                     </WorkspaceCard>
                   ) : (
-                    <WorkspaceCard key="tx-empty">
+                    <WorkspaceCard key="input-waiting">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={2} title="Speech Text" done={false} />
                         <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
                           <div className="flex-1">
-                            <p className="text-sm font-semibold text-ink">Process audio first</p>
+                            <p className="text-sm font-semibold text-ink">Preparing your speech</p>
                             <p className="text-xs text-ink-subtle">
-                              Convert your audio to text so RoundLab can analyze your arguments. Takes 10–30 seconds.
+                              Processing audio so RoundLab can analyze your arguments. Takes 10–30 seconds.
                             </p>
                           </div>
                         </div>
                         {txErr && <InlineAlert variant="danger">{txErr}</InlineAlert>}
                         <Button onClick={transcribe} disabled={transcribing} size="sm" className="w-full">
-                          {transcribing ? "Processing…" : "Process Audio"}
+                          {transcribing ? "Preparing…" : "Prepare Speech"}
                         </Button>
                       </CardContent>
                     </WorkspaceCard>

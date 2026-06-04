@@ -343,6 +343,7 @@ export default function SpeechPage() {
   const timer   = useRef<ReturnType<typeof setInterval> | null>(null);
   const extRef  = useRef("webm");
   const urlRef  = useRef<string | null>(null);
+  const autoAnalysisStartedRef = useRef(false);
 
   useEffect(() => () => {
     if (timer.current) clearInterval(timer.current);
@@ -428,6 +429,9 @@ export default function SpeechPage() {
       setSpeech(upd);
       if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; }
       setRecUrl(null); setRecBlob(null); setRecState("idle");
+
+      // Auto-start analysis after recording upload completes
+      await maybeStartAutoAnalysis();
     } catch (err: unknown) {
       setRecState("error");
       setRecErr(err instanceof Error ? err.message : "Upload failed.");
@@ -459,6 +463,9 @@ export default function SpeechPage() {
         body: JSON.stringify({ audio_url: path }),
       });
       setSpeech(upd); setSelFile(null);
+
+      // Auto-start analysis after file upload completes
+      await maybeStartAutoAnalysis();
     } catch (err: unknown) {
       setUpErr(err instanceof Error ? err.message : "Upload failed.");
     } finally { setUploading(false); }
@@ -495,6 +502,7 @@ export default function SpeechPage() {
       setSpeech(upd);
       setTranscript(null); setArgMap(null); setFeedback(null);
       setRecState("idle"); setRecUrl(null); setRecBlob(null); setRecErr("");
+      autoAnalysisStartedRef.current = false; // Reset auto-analysis flag for new upload
     } catch {}
     finally { setResetting(false); }
   }
@@ -654,6 +662,34 @@ export default function SpeechPage() {
       setAnalyzingUnified(false);
       setAnalysisStage(null);
     }
+  }
+
+  /** Auto-start analysis after audio upload (called once per audio upload event) */
+  async function maybeStartAutoAnalysis() {
+    // Guard against duplicate auto-analysis
+    if (autoAnalysisStartedRef.current) {
+      console.log("[AutoAnalyze] Already started, skipping");
+      return;
+    }
+
+    // Don't auto-analyze if already analyzing
+    if (analyzingUnified) {
+      console.log("[AutoAnalyze] Analysis already in progress, skipping");
+      return;
+    }
+
+    // Don't auto-analyze if feedback already exists
+    if (feedback) {
+      console.log("[AutoAnalyze] Feedback already exists, skipping");
+      return;
+    }
+
+    // Mark as started to prevent duplicates
+    autoAnalysisStartedRef.current = true;
+    console.log("[AutoAnalyze] Starting automatic analysis after audio upload");
+
+    // Start the analysis pipeline
+    await analyzeMySpeech();
   }
 
   async function deleteSession() {

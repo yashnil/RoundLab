@@ -20,9 +20,9 @@ const TYPE_CONFIG: Record<
 
 function confBadge(c: number | null) {
   if (c === null) return null;
-  if (c >= 0.8) return { label: "High", variant: "green"  as const };
-  if (c >= 0.5) return { label: "Med",  variant: "amber"  as const };
-  return            { label: "Low",  variant: "red"    as const };
+  if (c >= 0.8) return { label: "Strong", variant: "green"  as const };
+  if (c >= 0.5) return { label: "Developing",  variant: "amber"  as const };
+  return            { label: "Needs Work",  variant: "red"    as const };
 }
 
 function Field({ label, text, italic, highlight }: { label: string; text: string; italic?: boolean; highlight?: boolean }) {

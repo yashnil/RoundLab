@@ -38,10 +38,10 @@ const TYPE_LABEL: Record<string, string> = {
   summary: "Summary", final_focus: "Final Focus", crossfire: "Crossfire",
 };
 
-const MSG_TRANSCRIBE = ["Preparing audio…", "Running transcription…", "Processing signal…", "Saving transcript…"];
-const MSG_FLOW       = ["Mapping claims…", "Finding warrants…", "Checking evidence…", "Building flow…"];
-const MSG_FEEDBACK   = ["Reading the flow…", "Scoring clash…", "Checking judge adaptation…", "Writing judge ballot…"];
-const MSG_DRILLS     = ["Reading your ballot…", "Finding skill gaps…", "Building practice drills…"];
+const MSG_TRANSCRIBE = ["Reading your speech", "Processing audio", "Converting to text", "Almost ready"];
+const MSG_FLOW       = ["Finding claims and warrants", "Mapping evidence and impacts", "Building your flow", "Analyzing argument structure"];
+const MSG_FEEDBACK   = ["Reading your speech", "Mapping arguments", "Evaluating the case", "Building your coaching report"];
+const MSG_DRILLS     = ["Reviewing your feedback", "Identifying skill gaps", "Creating practice drills"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -168,18 +168,12 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function CoachDiagnosis({ category, items, label }: { category: string; items: string[]; label: string }) {
-  const [showExample, setShowExample] = useState(false);
-
   if (!items || items.length === 0) return null;
 
   // Determine status based on content
   const rawText = items.join(" ").toLowerCase();
   let status: "strong" | "needs-work" | "missing";
   let statusColor: string;
-  let explanation: string;
-  let fix: string;
-  let exampleBefore: string;
-  let exampleAfter: string;
 
   if (rawText.includes("none") || rawText.includes("absent") || rawText.includes("missing") || items.length === 0) {
     status = "missing";
@@ -192,74 +186,6 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
     statusColor = "text-ok";
   }
 
-  // Generate student-friendly explanations and examples
-  if (category === "warranting") {
-    if (status === "missing") {
-      explanation = "You often state what happened, but do not explain why it proves your argument.";
-      fix = "Add one sentence after each claim that starts with 'This matters because…' or 'This is true because…'";
-      exampleBefore = "Healthcare costs are rising rapidly.";
-      exampleAfter = "Healthcare costs are rising rapidly. This is true because the CDC reports a 15% increase in premiums over the last two years, and this happens because insurance companies face higher hospital fees.";
-    } else if (status === "needs-work") {
-      explanation = "Some warrants are present but could be stronger and more explicit.";
-      fix = "Make sure every claim has a clear 'because' sentence explaining the logical connection.";
-      exampleBefore = "Universal healthcare improves outcomes.";
-      exampleAfter = "Universal healthcare improves outcomes because when patients don't worry about costs, they seek preventive care earlier, which catches diseases before they become severe.";
-    } else {
-      explanation = "Your warranting is solid. You explain why your claims are true.";
-      fix = "";
-      exampleBefore = "";
-      exampleAfter = "";
-    }
-  } else if (category === "weighing") {
-    if (status === "missing") {
-      explanation = "RoundLab did not detect clear weighing or comparative analysis.";
-      fix = "Add comparisons using magnitude (how big), probability (how likely), or timeframe (how soon).";
-      exampleBefore = "Our policy helps the economy.";
-      exampleAfter = "Our impact outweighs on magnitude: while they prevent a 2% GDP loss, we save 500,000 lives annually. Even if their economic harm is true, human lives matter more than percentage points.";
-    } else if (status === "needs-work") {
-      explanation = "Some weighing is present but needs to be more explicit.";
-      fix = "Directly compare your impacts to your opponent's. Say 'Our impact outweighs because…'";
-      exampleBefore = "This causes more harm.";
-      exampleAfter = "Our impact outweighs on probability: their scenario requires three uncertain assumptions, but ours is already happening in 15 countries today.";
-    } else {
-      explanation = "You're weighing impacts against each other effectively.";
-      fix = "";
-      exampleBefore = "";
-      exampleAfter = "";
-    }
-  } else if (category === "evidence") {
-    if (status === "missing") {
-      explanation = "You mention sources but don't clearly explain what they prove.";
-      fix = "After citing evidence, explain exactly what the card proves in one sentence.";
-      exampleBefore = "According to the WHO, mortality rates declined.";
-      exampleAfter = "According to the WHO, mortality rates declined by 40%. This proves universal healthcare saves lives because the study tracked 2 million patients before and after policy implementation.";
-    } else if (status === "needs-work") {
-      explanation = "Your sources are mentioned, but some connections to claims are unclear.";
-      fix = "After each piece of evidence, add: 'This proves that [claim] because [explanation].'";
-      exampleBefore = "Studies show pollution increased.";
-      exampleAfter = "Jones 2023 finds air quality worsened in 80% of tested cities. This proves our regulation point because the baseline was measured before deregulation, isolating the policy as the cause.";
-    } else {
-      explanation = "Your evidence is well-connected to your arguments.";
-      fix = "";
-      exampleBefore = "";
-      exampleAfter = "";
-    }
-  } else {
-    // Generic fallback
-    if (status === "missing") {
-      explanation = `${label} is not clearly present in your speech.`;
-      fix = "Focus on developing this area in your next attempt.";
-    } else if (status === "needs-work") {
-      explanation = `${label} needs improvement.`;
-      fix = "Review the specific feedback items and strengthen this skill.";
-    } else {
-      explanation = `${label} is working well.`;
-      fix = "";
-    }
-    exampleBefore = "";
-    exampleAfter = "";
-  }
-
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
       <div className="flex items-center justify-between gap-2">
@@ -268,52 +194,18 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
           {status === "needs-work" ? "Needs Work" : status === "missing" ? "Missing" : "Strong"}
         </span>
       </div>
-      <p className="text-sm leading-relaxed text-ink-muted">{explanation}</p>
-      {fix && (
-        <div className="flex items-start gap-2 rounded-md border border-lav/10 bg-lav/5 px-3 py-2">
-          <span className="text-xs font-semibold text-lav">Fix:</span>
-          <p className="text-xs leading-relaxed text-ink-subtle">{fix}</p>
-        </div>
-      )}
-      {/* Show example toggle if we have examples */}
-      {exampleBefore && exampleAfter && (
-        <div className="flex flex-col gap-2 border-t border-hairline pt-2">
-          <button
-            type="button"
-            onClick={() => setShowExample(!showExample)}
-            className="flex items-center gap-1.5 text-xs font-medium text-lav transition-colors hover:text-lav-hi"
-          >
-            <ChevronDown
-              size={12}
-              className={`transition-transform ${showExample ? "rotate-180" : ""}`}
-            />
-            {showExample ? "Hide" : "See"} Example
-          </button>
-          <AnimatePresence>
-            {showExample && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="flex flex-col gap-2 rounded-md border border-amber/20 bg-amber/5 px-3 py-2">
-                  <p className="text-xs font-medium text-amber">⚠ Example Only — Not Your Argument</p>
-                  <div className="flex flex-col gap-2">
-                    <div>
-                      <p className="text-xs font-semibold text-ink-subtle">Before:</p>
-                      <p className="text-xs italic leading-relaxed text-ink-muted">{exampleBefore}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-ink-subtle">After:</p>
-                      <p className="text-xs italic leading-relaxed text-ink-muted">{exampleAfter}</p>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+
+      {/* Display actual diagnostics from LLM (includes topic-aware examples) */}
+      <div className="flex flex-col gap-2">
+        {items.map((item, i) => (
+          <p key={i} className="text-sm leading-relaxed text-ink-muted whitespace-pre-wrap">{item}</p>
+        ))}
+      </div>
+
+      {/* Disclaimer for examples */}
+      {items.some(item => item.toLowerCase().includes("before:") || item.toLowerCase().includes("after:")) && (
+        <div className="flex items-start gap-2 rounded-md border border-amber/20 bg-amber/5 px-3 py-2">
+          <p className="text-xs text-amber">⚠ Model example only — adapt to your arguments, don't copy word-for-word</p>
         </div>
       )}
     </div>
@@ -1306,11 +1198,18 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
-                {/* Transcript */}
+                {/* Speech Text
+                    TODO: Future feature - Annotated Speech Text
+                    - Highlight claims, warrants, evidence, impacts inline
+                    - Underline weak warrants
+                    - Flag unsupported evidence
+                    - Show strong/weak segments with color coding
+                    - Useful for students who want to see exactly where their speech succeeded/failed
+                */}
                 {transcript && (
                   <WorkspaceCard key="tx-done">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={2} title="Transcript" done />
+                      <StepHeader n={2} title="Speech Text" done />
                       <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
                     </CardContent>
                   </WorkspaceCard>
@@ -1324,12 +1223,12 @@ export default function SpeechPage() {
                 {speech.audio_url && (
                   transcribing ? (
                     <motion.div key="tx-loading" {...fadeUp(0)}>
-                      <LoadingCard title="Transcribing audio" messages={MSG_TRANSCRIBE} />
+                      <LoadingCard title="Analyzing your speech" messages={MSG_TRANSCRIBE} />
                     </motion.div>
                   ) : transcript ? (
                     <WorkspaceCard key="tx-done">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={2} title="Transcript" done />
+                        <StepHeader n={2} title="Speech Text" done />
                         <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
 
                         {/* Next step CTA */}
@@ -1339,8 +1238,8 @@ export default function SpeechPage() {
                               3
                             </div>
                             <div className="flex-1">
-                              <p className="text-sm font-semibold text-ink">Next: Build your flow</p>
-                              <p className="text-xs text-ink-subtle">Extract every claim, warrant, evidence, and impact from your speech.</p>
+                              <p className="text-sm font-semibold text-ink">Ready to analyze</p>
+                              <p className="text-xs text-ink-subtle">Build your argument flow and get judge-style feedback on your speech.</p>
                             </div>
                           </div>
                         )}
@@ -1349,18 +1248,18 @@ export default function SpeechPage() {
                   ) : (
                     <WorkspaceCard key="tx-empty">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={2} title="Transcript" done={false} />
+                        <StepHeader n={2} title="Speech Text" done={false} />
                         <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
                           <div className="flex-1">
-                            <p className="text-sm font-semibold text-ink">Transcribe first</p>
+                            <p className="text-sm font-semibold text-ink">Process audio first</p>
                             <p className="text-xs text-ink-subtle">
-                              RoundLab uses AI to transcribe your speech so it can understand what you said. Takes 10–30 seconds.
+                              Convert your audio to text so RoundLab can analyze your arguments. Takes 10–30 seconds.
                             </p>
                           </div>
                         </div>
                         {txErr && <InlineAlert variant="danger">{txErr}</InlineAlert>}
                         <Button onClick={transcribe} disabled={transcribing} size="sm" className="w-full">
-                          {transcribing ? "Transcribing…" : "Transcribe My Speech"}
+                          {transcribing ? "Processing…" : "Process Audio"}
                         </Button>
                       </CardContent>
                     </WorkspaceCard>
@@ -1371,7 +1270,7 @@ export default function SpeechPage() {
                 {transcript && (
                   genFlow ? (
                     <motion.div key="flow-loading" {...fadeUp(0)}>
-                      <LoadingCard title="Generating flow" messages={MSG_FLOW} />
+                      <LoadingCard title="Building your flow" messages={MSG_FLOW} />
                     </motion.div>
                   ) : argMap ? (
                     <WorkspaceCard key="flow-done">
@@ -1423,9 +1322,9 @@ export default function SpeechPage() {
                           {/* Badge Legend */}
                           <div className="flex flex-col gap-1.5 border-t border-lav/10 pt-2 text-xs">
                             <div className="flex flex-wrap gap-x-4 gap-y-1">
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">High</span> = strong argument</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Med</span> = developing</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Low</span> = needs work</span>
+                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Strong</span> = solid argument</span>
+                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Developing</span> = needs strengthening</span>
+                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Needs Work</span> = has issues</span>
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-1">
                               <span className="text-ink-subtle"><span className="font-semibold text-ink">Offense</span> = winning argument</span>
@@ -1501,7 +1400,7 @@ export default function SpeechPage() {
                 {argMap && (
                   genFb ? (
                     <motion.div key="fb-loading" {...fadeUp(0)}>
-                      <LoadingCard title="Generating feedback" messages={MSG_FEEDBACK} />
+                      <LoadingCard title="Analyzing your speech" messages={MSG_FEEDBACK} />
                     </motion.div>
                   ) : feedback ? (
                     <WorkspaceCard key="fb-done">
@@ -1741,7 +1640,7 @@ export default function SpeechPage() {
                 {feedback && (
                   genDrills ? (
                     <motion.div key="drills-loading" {...fadeUp(0)}>
-                      <LoadingCard title="Generating drills" messages={MSG_DRILLS} />
+                      <LoadingCard title="Creating practice drills" messages={MSG_DRILLS} />
                     </motion.div>
                   ) : drills.length > 0 ? (
                     <WorkspaceCard key="drills-done">

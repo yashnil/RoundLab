@@ -42,6 +42,7 @@ const MSG_TRANSCRIBE = ["Reading your speech", "Processing audio", "Converting t
 const MSG_FLOW       = ["Finding claims and warrants", "Mapping evidence and impacts", "Building your flow", "Analyzing argument structure"];
 const MSG_FEEDBACK   = ["Reading your speech", "Mapping arguments", "Evaluating the case", "Building your coaching report"];
 const MSG_DRILLS     = ["Reviewing your feedback", "Identifying skill gaps", "Creating practice drills"];
+const MSG_UNIFIED_ANALYSIS = ["Reading your speech", "Mapping arguments", "Building your flow", "Evaluating the case", "Creating your coaching report"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -317,6 +318,11 @@ export default function SpeechPage() {
   const [genFb,        setGenFb]        = useState(false);
   const [fbErr,        setFbErr]        = useState("");
 
+  // Unified analysis workflow state
+  const [analyzingUnified, setAnalyzingUnified] = useState(false);
+  const [unifiedAnalysisErr, setUnifiedAnalysisErr] = useState("");
+  const [analysisStage, setAnalysisStage] = useState<"transcript" | "flow" | "feedback" | null>(null);
+
   const [drills,        setDrills]        = useState<Drill[]>([]);
   const [genDrills,     setGenDrills]     = useState(false);
   const [drillErr,      setDrillErr]      = useState("");
@@ -517,6 +523,72 @@ export default function SpeechPage() {
     try { setFeedback(await apiFetch<FeedbackReport>(`/speeches/${speechId}/generate-feedback?user_id=${userId}`, { method: "POST" })); }
     catch (e: unknown) { setFbErr(e instanceof Error ? e.message : "Feedback generation failed."); }
     finally { setGenFb(false); }
+  }
+
+  // ── Unified Analysis Workflow ──────────────────────────────────────────────
+
+  async function analyzeMySpeech() {
+    if (!userId || !speech) return;
+
+    setUnifiedAnalysisErr("");
+    setAnalyzingUnified(true);
+
+    try {
+      // Step 1: Ensure transcript/text exists
+      if (!transcript) {
+        if (speech.audio_url) {
+          setAnalysisStage("transcript");
+          setTxErr("");
+          try {
+            const txResult = await apiFetch<Transcript>(`/speeches/${speechId}/transcribe?user_id=${userId}`, { method: "POST" });
+            setTranscript(txResult);
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Transcription failed.";
+            setTxErr(msg);
+            throw new Error(msg);
+          }
+        } else {
+          throw new Error("No speech text or audio available. Please provide your speech first.");
+        }
+      }
+
+      // Step 2: Generate flow if missing
+      if (!argMap) {
+        setAnalysisStage("flow");
+        setFlowErr("");
+        try {
+          const flowResult = await apiFetch<ArgumentMap>(`/speeches/${speechId}/extract-arguments?user_id=${userId}`, { method: "POST" });
+          setArgMap(flowResult);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Flow generation failed.";
+          setFlowErr(msg);
+          throw new Error(msg);
+        }
+      }
+
+      // Step 3: Generate feedback if missing
+      if (!feedback) {
+        setAnalysisStage("feedback");
+        setFbErr("");
+        try {
+          const fbResult = await apiFetch<FeedbackReport>(`/speeches/${speechId}/generate-feedback?user_id=${userId}`, { method: "POST" });
+          setFeedback(fbResult);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Feedback generation failed.";
+          setFbErr(msg);
+          throw new Error(msg);
+        }
+      }
+
+      // Success - all steps completed
+      setAnalysisStage(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Analysis failed. Please try again.";
+      setUnifiedAnalysisErr(msg);
+    } finally {
+      setAnalyzingUnified(false);
+      setAnalysisStage(null);
+    }
   }
 
   async function deleteSession() {
@@ -1266,8 +1338,43 @@ export default function SpeechPage() {
                   )
                 )}
 
+                {/* Unified Analysis Workflow */}
+                {transcript && !feedback && !analyzingUnified && (
+                  <WorkspaceCard key="unified-analysis">
+                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                      <StepHeader n={3} title="Analysis" done={false} />
+                      {!canAnalyze ? (
+                        <InlineAlert variant="danger">Speech text too short. Need at least 75 words for meaningful analysis.</InlineAlert>
+                      ) : (
+                        <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-ink">Get your coaching report</p>
+                            <p className="text-xs text-ink-subtle">
+                              RoundLab will build your flow, analyze your arguments, and generate judge-style feedback with personalized drills.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {unifiedAnalysisErr && <InlineAlert variant="danger">{unifiedAnalysisErr}</InlineAlert>}
+                      <Button disabled={!canAnalyze} onClick={analyzeMySpeech} size="sm" className="w-full">
+                        Analyze My Speech
+                      </Button>
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
+                {/* Unified Analysis Loading */}
+                {analyzingUnified && (
+                  <motion.div key="unified-loading" {...fadeUp(0)}>
+                    <LoadingCard
+                      title="Analyzing your speech"
+                      messages={MSG_UNIFIED_ANALYSIS}
+                    />
+                  </motion.div>
+                )}
+
                 {/* Step 3: Flow */}
-                {transcript && (
+                {transcript && !analyzingUnified && (
                   genFlow ? (
                     <motion.div key="flow-loading" {...fadeUp(0)}>
                       <LoadingCard title="Building your flow" messages={MSG_FLOW} />
@@ -1397,7 +1504,7 @@ export default function SpeechPage() {
                 )}
 
                 {/* Step 4: Feedback */}
-                {argMap && (
+                {argMap && !analyzingUnified && (
                   genFb ? (
                     <motion.div key="fb-loading" {...fadeUp(0)}>
                       <LoadingCard title="Analyzing your speech" messages={MSG_FEEDBACK} />

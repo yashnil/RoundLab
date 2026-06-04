@@ -51,7 +51,7 @@ export default function AppNav({ rightSlot }: AppNavProps) {
           href="/dashboard"
           className="hidden text-sm text-ink-subtle transition-colors hover:text-ink sm:block"
         >
-          Dashboard
+          Individual
         </Link>
         <Link
           href="/team"
@@ -73,7 +73,7 @@ export default function AppNav({ rightSlot }: AppNavProps) {
         <Button asChild size="sm" className="h-7 gap-1.5 px-3 text-xs">
           <Link href="/session">
             <Plus size={12} />
-            New Session
+            New Speech
           </Link>
         </Button>
         <LogoutButton />

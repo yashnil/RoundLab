@@ -549,10 +549,10 @@ export default function TeamPage() {
                   </div>
                   <div className="flex flex-col items-center gap-1 text-center">
                     <p className="text-sm font-semibold text-ink">You're a student in {selectedTeam.team_name}</p>
-                    <p className="text-xs text-ink-subtle">Continue practicing in your dashboard</p>
+                    <p className="text-xs text-ink-subtle">Continue practicing individually</p>
                   </div>
                   <Button asChild size="sm">
-                    <a href="/dashboard">Go to Dashboard</a>
+                    <a href="/dashboard">Continue Practicing</a>
                   </Button>
                 </CardContent>
               </Card>

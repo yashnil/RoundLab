@@ -147,6 +147,7 @@ function MarketingNav({ isLoggedIn, theme, onThemeToggle, onSignOut }: {
         <span className="text-sm font-semibold tracking-tight text-ink">RoundLab</span>
       </Link>
 
+      {/* Marketing nav for logged-out users */}
       {!isLoggedIn && (
         <div className="hidden items-center gap-5 sm:flex">
           <a href="#product"  className="text-sm text-ink-subtle transition-colors hover:text-ink">Product</a>
@@ -157,18 +158,19 @@ function MarketingNav({ isLoggedIn, theme, onThemeToggle, onSignOut }: {
         </div>
       )}
 
-      <div className="flex items-center gap-2">
-        {isLoggedIn && (
-          <>
-            <Link href="/dashboard" className="hidden text-sm text-ink-subtle transition-colors hover:text-ink sm:block">
-              Dashboard
-            </Link>
-            <Link href="/team" className="hidden text-sm text-ink-subtle transition-colors hover:text-ink sm:block">
-              Team
-            </Link>
-          </>
-        )}
+      {/* App nav for logged-in users */}
+      {isLoggedIn && (
+        <div className="hidden items-center gap-4 sm:flex">
+          <Link href="/dashboard" className="text-sm text-ink-subtle transition-colors hover:text-ink">
+            Individual
+          </Link>
+          <Link href="/team" className="text-sm text-ink-subtle transition-colors hover:text-ink">
+            Team
+          </Link>
+        </div>
+      )}
 
+      <div className="flex items-center gap-2">
         {/* Theme toggle */}
         <button
           onClick={onThemeToggle}
@@ -193,7 +195,7 @@ function MarketingNav({ isLoggedIn, theme, onThemeToggle, onSignOut }: {
           <>
             <Link href="/session"
               className="rounded-md bg-lav px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-lav-hi">
-              New Session
+              New Speech
             </Link>
             <button
               onClick={onSignOut}
@@ -302,27 +304,19 @@ export default function LandingPage() {
                   </motion.h1>
 
                   <motion.p {...fadeUp(0.14)} className="max-w-sm text-base leading-relaxed text-ink-subtle">
-                    {userName ? `Welcome back, ${userName.split('@')[0]}.` : "Welcome back."} Continue practicing with AI coaching, personalized drills, and judge-style feedback.
+                    {userName ? `Welcome back, ${userName.split('@')[0]}.` : "Welcome back."} Choose how you want to practice today.
                   </motion.p>
 
                   <motion.div {...fadeUp(0.2)} className="flex flex-wrap items-center gap-3">
                     <motion.a
-                      href="/session"
+                      href="/learn"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       transition={{ duration: 0.12 }}
                       className="flex items-center gap-2 rounded-md bg-lav px-4 py-2.5 text-sm font-medium text-white hover:bg-lav-hi"
                     >
-                      New Practice Session <ArrowRight size={14} />
+                      Start Learning <ArrowRight size={14} />
                     </motion.a>
-                    <a href="/dashboard"
-                      className="rounded-md border border-hairline px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:border-hairline-strong hover:text-ink">
-                      Dashboard
-                    </a>
-                    <a href="/team"
-                      className="rounded-md border border-hairline px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:border-hairline-strong hover:text-ink">
-                      Team
-                    </a>
                   </motion.div>
                 </>
               ) : (

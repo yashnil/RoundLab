@@ -231,9 +231,9 @@ export default function DashboardPage() {
         >
           {/* Page header */}
           <motion.div variants={staggerChild} className="flex flex-col gap-1">
-            <h1 className="text-title text-ink">Progress Dashboard</h1>
+            <h1 className="text-title text-ink">Individual Practice</h1>
             <p className="text-sm text-ink-subtle">
-              Track your practice, improve your skills, and prepare for rounds.
+              Track your speeches, feedback, drills, and progress over time.
             </p>
           </motion.div>
 

@@ -8,6 +8,12 @@ This makes scoring accurate to what each speech is supposed to accomplish.
 from typing import TypedDict
 
 
+class ScoreAnchor(TypedDict):
+    range: str
+    label: str
+    description: str
+
+
 class DimensionSpec(TypedDict):
     name: str
     max_score: int
@@ -15,6 +21,7 @@ class DimensionSpec(TypedDict):
     what_to_reward: str
     what_to_penalize: str
     student_friendly_label: str
+    score_anchors: list[ScoreAnchor]
 
 
 class RubricProfile(TypedDict):
@@ -36,6 +43,14 @@ CONSTRUCTIVE_RUBRIC: RubricProfile = {
             "what_to_reward": "Clear roadmap, organized contentions, logical flow, effective signposting",
             "what_to_penalize": "Disorganized structure, unclear advocacy, poor transitions, confusing order",
             "student_friendly_label": "Case Structure",
+            "score_anchors": [
+                {"range": "19-20", "label": "Excellent", "description": "Perfect roadmap, clean signposting, professional structure"},
+                {"range": "16-18", "label": "Strong", "description": "Clear contentions, good organization, minor flow issues only"},
+                {"range": "12-15", "label": "Functional", "description": "Identifiable contentions, some structure, needs better signposting"},
+                {"range": "8-11", "label": "Developing", "description": "Basic structure present but confusing, unclear order"},
+                {"range": "4-7", "label": "Very Weak", "description": "Minimal structure, hard to follow, no clear roadmap"},
+                {"range": "0-3", "label": "Missing/Unusable", "description": "No discernible structure, incoherent organization"},
+            ],
         },
         {
             "name": "warranting",
@@ -44,6 +59,14 @@ CONSTRUCTIVE_RUBRIC: RubricProfile = {
             "what_to_reward": "Complete claim→warrant→evidence→impact chains, explained causal links",
             "what_to_penalize": "Bare assertions, missing warrants, unexplained jumps in logic, weak internal links",
             "student_friendly_label": "Warranting & Internal Links",
+            "score_anchors": [
+                {"range": "22-25", "label": "Excellent", "description": "Every claim has clear warrant and evidence, causal chains explained"},
+                {"range": "18-21", "label": "Strong", "description": "Most claims warranted, some evidence links could be stronger"},
+                {"range": "13-17", "label": "Functional", "description": "Some warrants present, but many assertions lack explanation"},
+                {"range": "8-12", "label": "Developing", "description": "Minimal warranting, mostly bare claims, thin causal links"},
+                {"range": "4-7", "label": "Very Weak", "description": "Almost no warrants, pure assertion-based"},
+                {"range": "0-3", "label": "Missing/Unusable", "description": "No warrants at all, incoherent claims"},
+            ],
         },
         {
             "name": "evidence_use",
@@ -52,6 +75,14 @@ CONSTRUCTIVE_RUBRIC: RubricProfile = {
             "what_to_reward": "Clear citations, evidence interpretation, proper source attribution",
             "what_to_penalize": "Vague citations, unsupported claims, fabricated evidence, name-dropping without explanation",
             "student_friendly_label": "Evidence Use",
+            "score_anchors": [
+                {"range": "19-20", "label": "Excellent", "description": "Every claim backed by clear, well-cited evidence with interpretation"},
+                {"range": "16-18", "label": "Strong", "description": "Most claims have evidence, citations clear, good interpretation"},
+                {"range": "12-15", "label": "Functional", "description": "Some evidence cited but may be vague or poorly explained"},
+                {"range": "8-11", "label": "Developing", "description": "Minimal evidence, mostly name-dropping without explanation"},
+                {"range": "4-7", "label": "Very Weak", "description": "Almost no evidence, or fabricated/misattributed sources"},
+                {"range": "0-3", "label": "Missing/Unusable", "description": "No evidence cited at all, pure assertion"},
+            ],
         },
         {
             "name": "impact_development",
@@ -60,6 +91,14 @@ CONSTRUCTIVE_RUBRIC: RubricProfile = {
             "what_to_reward": "Clear impact story, explains magnitude/probability/timeframe, links to resolution",
             "what_to_penalize": "Vague impacts, no explanation of harm, unclear connection to resolution, missing timeframe",
             "student_friendly_label": "Impact Development",
+            "score_anchors": [
+                {"range": "19-20", "label": "Excellent", "description": "Clear impact story with magnitude, probability, timeframe, resolution link"},
+                {"range": "16-18", "label": "Strong", "description": "Impacts developed with some quantification, clear harm/benefit"},
+                {"range": "12-15", "label": "Functional", "description": "Impacts present but vague, missing some timeframe/magnitude detail"},
+                {"range": "8-11", "label": "Developing", "description": "Minimal impact development, unclear who is harmed or how"},
+                {"range": "4-7", "label": "Very Weak", "description": "Almost no impact explanation, just assertion of harm"},
+                {"range": "0-3", "label": "Missing/Unusable", "description": "No impacts developed, no connection to resolution"},
+            ],
         },
         {
             "name": "judge_clarity",
@@ -68,6 +107,14 @@ CONSTRUCTIVE_RUBRIC: RubricProfile = {
             "what_to_reward": "Accessible language, clear narrative, appropriate for judge type",
             "what_to_penalize": "Excessive jargon, unclear explanation, confusing presentation",
             "student_friendly_label": "Judge Accessibility & Clarity",
+            "score_anchors": [
+                {"range": "14-15", "label": "Excellent", "description": "Crystal clear, accessible language, perfect judge adaptation"},
+                {"range": "12-13", "label": "Strong", "description": "Clear and understandable, appropriate for judge type"},
+                {"range": "9-11", "label": "Functional", "description": "Mostly clear with some confusing moments or jargon"},
+                {"range": "6-8", "label": "Developing", "description": "Hard to follow, excessive jargon or unclear story"},
+                {"range": "3-5", "label": "Very Weak", "description": "Very confusing, poor judge adaptation, unclear narrative"},
+                {"range": "0-2", "label": "Missing/Unusable", "description": "Incoherent, unintelligible, impossible for judge to understand"},
+            ],
         },
     ],
     "do_not_penalize_heavily": [
@@ -332,3 +379,63 @@ def get_score_band(score: int) -> str:
         if band["min"] <= score <= band["max"]:
             return band["label"]
     return "Incomplete or Incoherent"
+
+
+def calibrate_scores(
+    raw_scores: dict[str, int],
+    speech_type: str,
+    transcript_text: str,
+    argument_map: list[dict],
+) -> tuple[dict[str, int], list[str]]:
+    """Calibrate scores to prevent impossible values and apply speech-type constraints.
+
+    Returns (calibrated_scores, warnings) where warnings contains human-readable
+    explanations of any adjustments made.
+    """
+    calibrated = {}
+    warnings = []
+
+    # Get rubric for validation
+    rubric = get_rubric(speech_type)
+
+    # Build dimension name to max_score mapping
+    dim_max = {dim["name"]: dim["max_score"] for dim in rubric["dimensions"]}
+
+    # Basic stats about the speech
+    word_count = len(transcript_text.split())
+    has_substantial_content = word_count >= 100
+    has_multiple_claims = len(argument_map) >= 2
+
+    # Clamp each dimension to its valid range
+    for dim_name, max_score in dim_max.items():
+        raw_val = raw_scores.get(dim_name, 0)
+        clamped = max(0, min(raw_val, max_score))
+
+        # Apply speech-type-specific constraints
+        if speech_type == "constructive":
+            # Constructive-specific rules
+            if dim_name == "judge_clarity":
+                # Clarity should not be 0-2 if the transcript is readable and has multiple claims
+                if clamped <= 2 and has_substantial_content and has_multiple_claims:
+                    old_val = clamped
+                    clamped = max(6, clamped)
+                    warnings.append(
+                        f"Adjusted {dim_name} from {old_val} to {clamped}: "
+                        f"Transcript is {word_count} words with {len(argument_map)} claims, "
+                        "so it cannot be unintelligible."
+                    )
+
+        if clamped != raw_val:
+            if not any(w.startswith(f"Adjusted {dim_name}") for w in warnings):
+                warnings.append(f"Clamped {dim_name} from {raw_val} to {clamped} (max: {max_score})")
+
+        calibrated[dim_name] = clamped
+
+    # Detect dimensions that don't belong to this speech type
+    for score_key in raw_scores.keys():
+        if score_key not in dim_max:
+            warnings.append(
+                f"Removed {score_key}: not a valid dimension for {speech_type} speeches"
+            )
+
+    return calibrated, warnings

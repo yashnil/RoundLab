@@ -254,10 +254,10 @@ export default function DashboardPage() {
             ) : progress ? (
               <>
                 {[
-                  { label: "Speeches",         value: progress.speech_count,          Icon: Mic,          iconBg: "bg-lav/10 border border-lav/20",    iconColor: "text-lav"        },
-                  { label: "Feedback Ready",   value: progress.feedback_ready_count,  Icon: CheckCircle2, iconBg: "bg-ok/10 border border-ok/20",     iconColor: "text-ok"         },
-                  { label: "Drills Assigned",  value: progress.drills_assigned_count, Icon: Target,       iconBg: "bg-indigo/10 border border-indigo/20", iconColor: "text-indigo" },
-                  { label: "Drill Attempts",   value: progress.drill_attempts_count,  Icon: Headphones,   iconBg: "bg-amber/10 border border-amber/20",   iconColor: "text-amber"  },
+                  { label: "Speeches",         value: progress.speech_count,          icon: Mic,          color: "lav" as const },
+                  { label: "Feedback Ready",   value: progress.feedback_ready_count,  icon: CheckCircle2, color: "ok" as const  },
+                  { label: "Drills Assigned",  value: progress.drills_assigned_count, icon: Target,       color: "lav" as const },
+                  { label: "Drill Attempts",   value: progress.drill_attempts_count,  icon: Headphones,   color: "warn" as const },
                 ].map((m) => (
                   <MetricCard key={m.label} {...m} />
                 ))}

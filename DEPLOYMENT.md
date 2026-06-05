@@ -10,7 +10,7 @@ For a first-time staging deployment:
 
 1. **Supabase Setup**
    - [ ] Create Supabase project
-   - [ ] Apply all 3 migrations in order (see [Supabase Setup](#supabase-setup))
+   - [ ] Apply all 5 migrations in order (see [Supabase Setup](#supabase-setup))
    - [ ] Create `audio` storage bucket
    - [ ] Configure auth providers and redirect URLs
 
@@ -82,6 +82,8 @@ RoundLab uses SQL migrations in `supabase/migrations/`. Apply them **in order** 
    - `20260524000000_initial_schema.sql`
    - `20260601000000_add_drill_fields.sql`
    - `20260602000000_add_teams.sql`
+   - `20260602100000_add_feedback_rating.sql`
+   - `20260604000000_add_xp_ledger.sql`
 
 3. Verify tables exist:
    ```sql
@@ -99,6 +101,7 @@ RoundLab uses SQL migrations in `supabase/migrations/`. Apply them **in order** 
    - `drill_attempts`
    - `teams`
    - `team_members`
+   - `user_xp_events`
 
 ### 3. Configure Storage
 

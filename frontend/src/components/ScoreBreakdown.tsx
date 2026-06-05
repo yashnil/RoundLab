@@ -1,5 +1,5 @@
 import { Progress } from "@/components/ui/progress";
-import type { FeedbackScores } from "@/types";
+import type { FeedbackScores, ScoreExplanation } from "@/types";
 
 // Speech-type-specific dimension configurations
 const SPEECH_TYPE_DIMS: Record<string, { key: keyof FeedbackScores; label: string; description: string; advice: string }[]> = {
@@ -66,7 +66,15 @@ function normalizeSpeechType(speechType?: string): string | undefined {
   return speechType.toLowerCase();
 }
 
-export default function ScoreBreakdown({ scores, speechType }: { scores: FeedbackScores; speechType?: string }) {
+export default function ScoreBreakdown({
+  scores,
+  speechType,
+  scoreExplanations
+}: {
+  scores: FeedbackScores;
+  speechType?: string;
+  scoreExplanations?: ScoreExplanation[];
+}) {
   // Get speech-type-specific dimensions
   const normalizedType = normalizeSpeechType(speechType);
   const dims = normalizedType ? (SPEECH_TYPE_DIMS[normalizedType] || DEFAULT_DIMS) : DEFAULT_DIMS;
@@ -76,6 +84,22 @@ export default function ScoreBreakdown({ scores, speechType }: { scores: Feedbac
   const lowestDim = dims.reduce((lowest, dim) =>
     scores[dim.key] < scores[lowest.key] ? dim : lowest
   , dims[0]);
+
+  // Helper to find explanation for a dimension
+  const getExplanation = (dimLabel: string): ScoreExplanation | undefined => {
+    if (!scoreExplanations) return undefined;
+    // Try to match by dimension name (case insensitive, ignoring spaces/underscores)
+    const normalized = dimLabel.toLowerCase().replace(/[_\s&]/g, '');
+    return scoreExplanations.find(exp =>
+      exp.dimension_name.toLowerCase().replace(/[_\s&]/g, '').includes(normalized) ||
+      normalized.includes(exp.dimension_name.toLowerCase().replace(/[_\s&]/g, ''))
+    );
+  };
+
+  // Clean score band label by removing numeric ranges (e.g., "Functional 12-15" → "Functional")
+  const cleanScoreBand = (band: string): string => {
+    return band.replace(/\s*\d+[-–]\d+\s*/g, '').trim();
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -102,6 +126,8 @@ export default function ScoreBreakdown({ scores, speechType }: { scores: Feedbac
       {dims.map(({ key, label, description, advice }, i) => {
         const value = scores[key];
         const pct   = (value / 20) * 100;
+        const explanation = getExplanation(label);
+
         return (
           <div key={key} className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
@@ -120,11 +146,25 @@ export default function ScoreBreakdown({ scores, speechType }: { scores: Feedbac
                 {value}/20
               </span>
             </div>
-            {/* Show context for lowest scoring dimension */}
-            {key === lowestDim.key && pct < 70 && (
-              <p className="ml-32 text-xs leading-relaxed text-amber">
-                ⚠ {advice}
-              </p>
+
+            {/* Show explanation if available, otherwise show generic advice for lowest dimension */}
+            {explanation ? (
+              <div className="ml-32 flex flex-col gap-1 text-xs">
+                <p className="text-ink-faint">
+                  <span className="font-medium text-ink-subtle">{cleanScoreBand(explanation.score_band)}:</span> {explanation.evidence_from_speech}
+                </p>
+                {pct < 70 && (
+                  <p className="text-amber">
+                    ⚠ To improve: {explanation.how_to_improve}
+                  </p>
+                )}
+              </div>
+            ) : (
+              key === lowestDim.key && pct < 70 && (
+                <p className="ml-32 text-xs leading-relaxed text-amber">
+                  ⚠ {advice}
+                </p>
+              )
             )}
           </div>
         );

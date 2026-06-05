@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import EmptyState from "@/components/EmptyState";
+import MetricCard from "@/components/MetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -436,56 +437,30 @@ export default function TeamPage() {
             <>
               {/* Stats */}
               <motion.div variants={staggerChild} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Card>
-                  <CardContent className="flex items-center gap-3 px-4 py-4">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-lav/20 bg-lav/10">
-                      <Users size={14} className="text-lav" />
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-xl font-bold text-ink">{dashboard.member_count}</p>
-                      <p className="text-xs text-ink-subtle">Members</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="flex items-center gap-3 px-4 py-4">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-ok/20 bg-ok/10">
-                      <TrendingUp size={14} className="text-ok" />
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-xl font-bold text-ink">
-                        {dashboard.students.reduce((sum, s) => sum + s.speech_count, 0)}
-                      </p>
-                      <p className="text-xs text-ink-subtle">Speeches</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="flex items-center gap-3 px-4 py-4">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo/20 bg-indigo/10">
-                      <Target size={14} className="text-indigo" />
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-xl font-bold text-ink">
-                        {dashboard.students.reduce((sum, s) => sum + s.drills_assigned_count, 0)}
-                      </p>
-                      <p className="text-xs text-ink-subtle">Drills</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="flex items-center gap-3 px-4 py-4">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber/20 bg-amber/10">
-                      <Headphones size={14} className="text-amber" />
-                    </div>
-                    <div className="flex flex-col">
-                      <p className="text-xl font-bold text-ink">
-                        {dashboard.students.reduce((sum, s) => sum + s.drill_attempts_count, 0)}
-                      </p>
-                      <p className="text-xs text-ink-subtle">Attempts</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <MetricCard
+                  label="Members"
+                  value={dashboard.member_count}
+                  icon={Users}
+                  color="lav"
+                />
+                <MetricCard
+                  label="Speeches"
+                  value={dashboard.students.reduce((sum, s) => sum + s.speech_count, 0)}
+                  icon={Mic}
+                  color="ok"
+                />
+                <MetricCard
+                  label="Drills"
+                  value={dashboard.students.reduce((sum, s) => sum + s.drills_assigned_count, 0)}
+                  icon={Target}
+                  color="lav"
+                />
+                <MetricCard
+                  label="Attempts"
+                  value={dashboard.students.reduce((sum, s) => sum + s.drill_attempts_count, 0)}
+                  icon={Headphones}
+                  color="warn"
+                />
               </motion.div>
 
               {/* Student Progress */}

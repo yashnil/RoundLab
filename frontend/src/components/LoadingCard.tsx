@@ -9,9 +9,10 @@ import { EASE } from "@/lib/motion";
 interface LoadingCardProps {
   messages: string[];
   title?: string;
+  subtitle?: string;
 }
 
-export default function LoadingCard({ messages, title }: LoadingCardProps) {
+export default function LoadingCard({ messages, title, subtitle }: LoadingCardProps) {
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {
@@ -36,6 +37,9 @@ export default function LoadingCard({ messages, title }: LoadingCardProps) {
 
         {/* Title */}
         {title && <p className="text-eyebrow text-ink-subtle">{title}</p>}
+
+        {/* Subtitle (e.g., time estimate) */}
+        {subtitle && <p className="text-xs text-ink-faint">{subtitle}</p>}
 
         {/* Cycling message */}
         <div className="h-5 flex items-center">

@@ -60,6 +60,15 @@ export interface FeedbackScores {
   judge_adaptation: number;
 }
 
+export interface ScoreExplanation {
+  dimension_name: string;
+  score: number;
+  score_band: string;
+  evidence_from_speech: string;
+  why_not_higher: string;
+  how_to_improve: string;
+}
+
 export interface FeedbackReport {
   id: string;
   speech_id: string;
@@ -77,6 +86,11 @@ export interface FeedbackReport {
     judge_adaptation_notes?: string;
     top_3_priorities?: string[];
     recommendations?: string[];
+    score_explanations?: ScoreExplanation[];
+    calibrated_scores?: Record<string, number>;
+    calibration_warnings?: string[];
+    scoring_version?: string;
+    report_input_hash?: string;
   } | null;
   helpful_rating?: string | null;
   helpful_comment?: string | null;

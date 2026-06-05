@@ -16,11 +16,23 @@ class FeedbackGenerationError(Exception):
     pass
 
 
+class ScoreExplanation(BaseModel):
+    """Explanation for a single dimension score."""
+
+    dimension_name: str
+    score: int
+    score_band: str
+    evidence_from_speech: str
+    why_not_higher: str
+    how_to_improve: str
+
+
 class _FeedbackOutput(BaseModel):
     """Full structured output from the LLM. Stored verbatim in raw_feedback."""
 
     overall_score: int
     scores: FeedbackScores
+    score_explanations: list[ScoreExplanation]
     summary: str
     strengths: list[str]
     weaknesses: list[str]
@@ -123,6 +135,22 @@ RUBRIC FOR THIS SPEECH TYPE ({speech_type}):
 SCORING CALIBRATION:
 {score_bands}
 
+SCORING INSTRUCTIONS:
+1. For each dimension, you MUST provide:
+   - The numeric score (within the dimension's 0-max range)
+   - The score band it falls into (e.g., "Excellent 19-20", "Functional 12-15")
+   - Evidence from the speech showing what was done well
+   - Why the score is not higher (what's missing or weak)
+   - How to improve to reach the next band
+
+2. Do NOT assign a 0-3 score unless the dimension is essentially absent or unusable. A readable,
+   understandable speech with identifiable arguments should almost never receive 0-3 for Clarity.
+
+3. Use the FULL 0-20 scale. Avoid defaulting to 10 or 12. Consult the score anchors and place the
+   performance in the appropriate band based on what is actually present.
+
+4. Score what is present, not what you wish were there. Be honest about weaknesses but recognize strengths.
+
 IMPORTANT: Score consistently using the rubric above. The same transcript should produce similar scores.
 
 LEGACY SCORE MAPPING (for backwards compatibility with 5-dimension schema):
@@ -134,6 +162,13 @@ DO NOT PENALIZE HEAVILY:
 {do_not_penalize}
 
 Output field instructions:
+- score_explanations: For EACH rubric dimension (not the legacy 5 fields), provide:
+  * dimension_name: exact name from rubric (e.g., "case_structure", "warranting")
+  * score: the numeric score you assigned
+  * score_band: which band it falls into (e.g., "Functional 12-15")
+  * evidence_from_speech: what in the transcript earned this score
+  * why_not_higher: what's missing or weak that prevented a higher score
+  * how_to_improve: concrete next steps to reach the next band
 - summary: 3–5 sentences. Post-round assessment as the judge. Honest, specific, educational.
 - strengths: 2–4 items. Specific things done well — quote or closely paraphrase from the transcript. No generic praise.
 - weaknesses: 3–5 items. Specific problems — explain WHY each is a problem and WHAT to do to fix it next time.
@@ -179,6 +214,10 @@ def generate_feedback(
         rubric_details += f"- {dim['student_friendly_label']} (0-{dim['max_score']}): {dim['description']}\n"
         rubric_details += f"  Reward: {dim['what_to_reward']}\n"
         rubric_details += f"  Penalize: {dim['what_to_penalize']}\n"
+        if "score_anchors" in dim and dim["score_anchors"]:
+            rubric_details += "  Score Anchors:\n"
+            for anchor in dim["score_anchors"]:
+                rubric_details += f"    {anchor['range']}: {anchor['label']} - {anchor['description']}\n"
 
     # Build score bands
     score_bands = ""

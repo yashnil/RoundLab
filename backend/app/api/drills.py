@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.models.drill import DrillAttemptCreate, DrillAttemptRow, DrillRow, DrillStatusUpdate
 from app.services.drill_generation import DrillGenerationError, generate_drills
 from app.services.supabase_client import get_supabase
+from app.services.xp_ledger import award_xp
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +259,14 @@ async def update_drill(drill_id: str, body: DrillStatusUpdate, user_id: str = Qu
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="Drill not found")
+
+        # Award XP for completing drill
+        if body.status == "completed":
+            try:
+                award_xp(user_id, "drill_completed", f"drill_completed:{drill_id}")
+            except Exception as xp_exc:
+                logger.warning("update_drill: XP award failed | %s", type(xp_exc).__name__)
+
         return result.data[0]
     except HTTPException:
         raise
@@ -339,8 +348,29 @@ async def create_drill_attempt(drill_id: str, body: DrillAttemptCreate, user_id:
 
     try:
         result = supabase.table("drill_attempts").insert(attempt_row).execute()
-        logger.info("create_drill_attempt: created | drill_id=%s", drill_id)
-        return result.data[0]
+        attempt = result.data[0]
+        logger.info("create_drill_attempt: created | drill_id=%s attempt_id=%s", drill_id, attempt["id"])
+
+        # Award XP for drill attempt (first attempt gets more XP)
+        # Check if this is first attempt for this drill
+        try:
+            previous_attempts = (
+                supabase.table("drill_attempts")
+                .select("id", count="exact")
+                .eq("drill_id", drill_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
+            is_first_attempt = (previous_attempts.count or 0) == 1  # Just created this one
+
+            if is_first_attempt:
+                award_xp(user_id, "drill_attempt_first", f"drill_attempt:{attempt['id']}")
+            else:
+                award_xp(user_id, "drill_attempt_repeat", f"drill_attempt:{attempt['id']}")
+        except Exception as xp_exc:
+            logger.warning("create_drill_attempt: XP award failed | %s", type(xp_exc).__name__)
+
+        return attempt
     except Exception as exc:
         logger.error("create_drill_attempt: insert failed | %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Failed to save drill attempt") from exc

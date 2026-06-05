@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Check, ChevronDown, ChevronUp, FileText,
-  Mic, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown,
+  Mic, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target,
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import WorkflowStepper from "@/components/WorkflowStepper";
@@ -17,6 +17,9 @@ import ScoreCard from "@/components/ScoreCard";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import LoadingCard from "@/components/LoadingCard";
 import DeleteDialog from "@/components/DeleteDialog";
+import ScoreRing from "@/components/ScoreRing";
+import SectionHeader from "@/components/SectionHeader";
+import EmptyStateCard from "@/components/EmptyStateCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +46,24 @@ const MSG_FLOW       = ["Finding claims and warrants", "Mapping evidence and imp
 const MSG_FEEDBACK   = ["Reading your speech", "Mapping arguments", "Evaluating the case", "Building your coaching report"];
 const MSG_DRILLS     = ["Reviewing your feedback", "Identifying skill gaps", "Creating practice drills"];
 const MSG_UNIFIED_ANALYSIS = ["Reading your speech", "Mapping arguments", "Building your flow", "Evaluating the case", "Creating your coaching report"];
+
+// Current scoring version - should match backend SCORING_VERSION
+const CURRENT_SCORING_VERSION = "pf_rubric_v3_recalibrated_2026_06_04";
+
+const STAGE_MESSAGES: Record<"transcript" | "flow" | "feedback", { title: string; messages: string[] }> = {
+  transcript: {
+    title: "Preparing your speech",
+    messages: ["Transcribing audio", "Processing speech text", "Analyzing word choice"],
+  },
+  flow: {
+    title: "Mapping arguments",
+    messages: ["Identifying claims", "Extracting warrants and evidence", "Building your flow table"],
+  },
+  feedback: {
+    title: "Applying rubric",
+    messages: ["Evaluating structure and warranting", "Scoring each dimension", "Building coaching report"],
+  },
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -281,6 +302,53 @@ function FlowSummary({ argMap }: { argMap: ArgumentMap }) {
   );
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Defensively recompute overall score from visible dimension scores.
+ * This ensures the displayed overall score always matches the sum of dimension bars.
+ */
+function getVerifiedOverallScore(feedback: FeedbackReport | null): number | null {
+  if (!feedback?.scores) return feedback?.overall_score ?? null;
+
+  const sum =
+    feedback.scores.clash +
+    feedback.scores.weighing +
+    feedback.scores.extensions +
+    feedback.scores.drops +
+    feedback.scores.judge_adaptation;
+
+  // If stored overall_score doesn't match, use recomputed sum
+  if (feedback.overall_score !== null && feedback.overall_score !== sum) {
+    console.warn(
+      `[Score Verification] Stored overall_score (${feedback.overall_score}) doesn't match dimension sum (${sum}). Using sum.`
+    );
+  }
+
+  return sum;
+}
+
+/**
+ * Check if a feedback report is stale and needs regeneration.
+ * Returns true if the report uses an older scoring version.
+ */
+function isReportStale(feedback: FeedbackReport | null): boolean {
+  if (!feedback) return false;
+
+  // If raw_feedback contains scoring_version, check if it matches current
+  const reportVersion = feedback.raw_feedback?.scoring_version;
+  if (reportVersion && reportVersion !== CURRENT_SCORING_VERSION) {
+    return true;
+  }
+
+  // If scoring_version is missing (old reports), consider stale
+  if (!reportVersion) {
+    return true;
+  }
+
+  return false;
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export default function SpeechPage() {
@@ -363,10 +431,17 @@ export default function SpeechPage() {
         if (!result) return;
         const { s, uid } = result;
         setSpeech(s);
-        try { setTranscript(await apiFetch<Transcript>(`/speeches/${speechId}/transcript?user_id=${uid}`)); }    catch {}
-        try { setArgMap(await apiFetch<ArgumentMap>(`/speeches/${speechId}/argument-map?user_id=${uid}`)); }     catch {}
-        try { setFeedback(await apiFetch<FeedbackReport>(`/speeches/${speechId}/feedback?user_id=${uid}`)); }    catch {}
-        try { setDrills(await apiFetch<Drill[]>(`/speeches/${speechId}/drills?user_id=${uid}`)); }               catch {}
+        // Load all related data in parallel for faster initial page load
+        const [txData, argData, fbData, drillData] = await Promise.allSettled([
+          apiFetch<Transcript>(`/speeches/${speechId}/transcript?user_id=${uid}`),
+          apiFetch<ArgumentMap>(`/speeches/${speechId}/argument-map?user_id=${uid}`),
+          apiFetch<FeedbackReport>(`/speeches/${speechId}/feedback?user_id=${uid}`),
+          apiFetch<Drill[]>(`/speeches/${speechId}/drills?user_id=${uid}`),
+        ]);
+        if (txData.status === "fulfilled") setTranscript(txData.value);
+        if (argData.status === "fulfilled") setArgMap(argData.value);
+        if (fbData.status === "fulfilled") setFeedback(fbData.value);
+        if (drillData.status === "fulfilled") setDrills(drillData.value);
       })
       .catch(() => setPageErr("Could not load your data. Please refresh and try again."))
       .finally(() => setPageLoad(false));
@@ -656,15 +731,6 @@ export default function SpeechPage() {
       // Success - all steps completed
       console.log("[Analyze] ✓ All steps completed successfully");
       setAnalysisStage(null);
-
-      // Refresh speech data to ensure UI is in sync
-      try {
-        const refreshedSpeech = await apiFetch<Speech>(`/speeches/${speechId}?user_id=${userId}`);
-        setSpeech(refreshedSpeech);
-      } catch {
-        // Non-critical, just log
-        console.warn("[Analyze] Could not refresh speech data");
-      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Analysis failed. Please try again.";
       console.error("[Analyze] Pipeline failed:", msg);
@@ -935,10 +1001,11 @@ export default function SpeechPage() {
           {/* Workspace cards — order changes based on completion status */}
           <AnimatePresence mode="popLayout">
 
-            {/* ── Always First: Audio ──────────────────────────────────── */}
-            <WorkspaceCard key="audio">
-              <CardContent className="flex flex-col gap-4 px-5 py-5">
-                <StepHeader n={1} title="Audio" done={!!speech.audio_url} />
+            {/* ── Audio Input (Only for Incomplete Sessions) ────────────── */}
+            {!isComplete && (
+              <WorkspaceCard key="audio">
+                <CardContent className="flex flex-col gap-4 px-5 py-5">
+                  <StepHeader n={1} title="Audio" done={!!speech.audio_url} />
 
                 {speech.audio_url ? (
                   <div className="flex flex-col gap-3">
@@ -1041,8 +1108,9 @@ export default function SpeechPage() {
                     </AnimatePresence>
                   </div>
                 )}
-              </CardContent>
-            </WorkspaceCard>
+                </CardContent>
+              </WorkspaceCard>
+            )}
 
             {/* ── For Complete Sessions: Coaching Report → Practice → Arguments → Input ── */}
             {isComplete ? (
@@ -1053,28 +1121,30 @@ export default function SpeechPage() {
                     <CardContent className="flex flex-col gap-5 px-5 py-5">
                       <StepHeader n={4} title="Coaching Report" done />
 
-                      {/* Regenerate Banner */}
-                      <div className="rounded-lg border border-lav/20 bg-lav/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex flex-col gap-1">
-                          <p className="text-sm font-medium text-lav">Update Available</p>
-                          <p className="text-xs text-ink-muted leading-relaxed">
-                            This report may use an older rubric. Regenerate to apply the latest speech-type scoring.
-                          </p>
+                      {/* Regenerate Banner - only show if report is stale */}
+                      {isReportStale(feedback) && (
+                        <div className="rounded-lg border border-lav/20 bg-lav/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-medium text-lav">Update Available</p>
+                            <p className="text-xs text-ink-muted leading-relaxed">
+                              This report uses an older rubric. Regenerate to apply the latest recalibrated scoring.
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={generateFeedback}
+                            disabled={genFb}
+                            className="shrink-0"
+                          >
+                            {genFb ? "Regenerating..." : "Regenerate Report"}
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={generateFeedback}
-                          disabled={genFb}
-                          className="shrink-0"
-                        >
-                          {genFb ? "Regenerating..." : "Regenerate Report"}
-                        </Button>
-                      </div>
+                      )}
 
                       {/* Summary Card */}
                       <div className="rounded-xl border border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10 p-5">
-                        <ScoreCard score={feedback.overall_score} summary={feedback.summary} />
+                        <ScoreCard score={getVerifiedOverallScore(feedback)} summary={feedback.summary} />
                       </div>
 
                       {/* Priority Cards - Top 3 Issues */}
@@ -1104,7 +1174,11 @@ export default function SpeechPage() {
                           <p className="text-eyebrow text-ink-subtle">Judge Ballot</p>
                         </div>
                         <div className="rounded-lg border border-hairline bg-surface-2 p-4">
-                          <ScoreBreakdown scores={feedback.scores} speechType={speech?.speech_type} />
+                          <ScoreBreakdown
+                            scores={feedback.scores}
+                            speechType={speech?.speech_type}
+                            scoreExplanations={feedback.raw_feedback?.score_explanations}
+                          />
                         </div>
                       </div>
 
@@ -1246,13 +1320,13 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
-                {/* Drills */}
-                {drills.length > 0 && (
+                {/* Recommended Practice / Drills */}
+                {drills.length > 0 ? (
                   <WorkspaceCard key="drills-done">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
                       <StepHeader
                         n={5}
-                        title="Practice Drills"
+                        title="Recommended Practice"
                         done
                         aside={
                           <Badge variant="indigo">
@@ -1262,9 +1336,9 @@ export default function SpeechPage() {
                       />
                       <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-ink">Practice these drills</p>
+                          <p className="text-sm font-semibold text-ink">Complete drills to turn feedback into improvement</p>
                           <p className="text-xs text-ink-subtle">
-                            Each drill targets a specific weakness from your feedback. Record yourself doing the exercise, then re-record your speech to see improvement.
+                            Each drill targets a specific weakness from your feedback. Practice the exercise, then re-record your speech to track progress.
                           </p>
                         </div>
                       </div>
@@ -1297,6 +1371,21 @@ export default function SpeechPage() {
                           New Attempt
                         </Button>
                       </div>
+                    </CardContent>
+                  </WorkspaceCard>
+                ) : feedback && (
+                  <WorkspaceCard key="drills-empty">
+                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                      <StepHeader n={5} title="Recommended Practice" done={false} />
+                      <EmptyStateCard
+                        icon={Target}
+                        title="No practice drills yet"
+                        description="Generate personalized drills based on your feedback to target your weaknesses and improve faster."
+                        actionLabel="Generate Practice Drills"
+                        onAction={generateDrills}
+                      />
+                      {genDrills && <p className="text-xs text-center text-ink-faint">Generating drills...</p>}
+                      {drillErr && <InlineAlert variant="danger">{drillErr}</InlineAlert>}
                     </CardContent>
                   </WorkspaceCard>
                 )}
@@ -1390,7 +1479,7 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
-                {/* Input Details - Compact (completed session)
+                {/* View Speech Text - Collapsed (completed session)
                     TODO: Future feature - Annotated Speech Text
                     - Highlight claims, warrants, evidence, impacts inline
                     - Underline weak warrants
@@ -1402,14 +1491,19 @@ export default function SpeechPage() {
                   <WorkspaceCard key="input-details">
                     <CardContent className="flex flex-col gap-3 px-5 py-5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ok/10">
-                          <Check size={14} className="text-ok" />
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2">
+                          <FileText size={14} className="text-ink-subtle" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-ink">Speech input</p>
-                          <p className="text-xs text-ink-faint">{transcript.word_count} words • {speech.speech_type.replace('_', ' ')}</p>
+                          <p className="text-sm font-semibold text-ink">View Speech Text</p>
+                          <p className="text-xs text-ink-faint">{transcript.word_count} words</p>
                         </div>
                       </div>
+                      <Collapsible label="Show full transcript">
+                        <div className="rounded-lg border border-hairline bg-surface-2 p-4">
+                          <p className="text-sm leading-relaxed text-ink whitespace-pre-wrap">{transcript.text}</p>
+                        </div>
+                      </Collapsible>
                     </CardContent>
                   </WorkspaceCard>
                 )}
@@ -1431,6 +1525,8 @@ export default function SpeechPage() {
                           <p className="text-xs text-ink-faint">{transcript.word_count} words • {speech.speech_type.replace('_', ' ')}</p>
                         </div>
                       </div>
+                      {/* Optional: View speech text - Future TODO: annotated speech text can highlight claims, warrants, evidence, impacts, weak links, and strong moments. */}
+                      <TranscriptPanel transcript={transcript} onReRecord={resetAudio} />
                     </CardContent>
                   </WorkspaceCard>
                 )}
@@ -1464,8 +1560,9 @@ export default function SpeechPage() {
                 {analyzingUnified && (
                   <motion.div key="unified-loading" {...fadeUp(0)}>
                     <LoadingCard
-                      title="Analyzing your speech"
-                      messages={MSG_UNIFIED_ANALYSIS}
+                      title={analysisStage ? STAGE_MESSAGES[analysisStage].title : "Analyzing your speech"}
+                      subtitle="This can take 30–90 seconds"
+                      messages={analysisStage ? STAGE_MESSAGES[analysisStage].messages : MSG_UNIFIED_ANALYSIS}
                     />
                   </motion.div>
                 )}
@@ -1561,6 +1658,14 @@ export default function SpeechPage() {
                           </motion.div>
                         )}
 
+                        {/* Optional: View speech text */}
+                        {transcript && (
+                          <div className="flex flex-col gap-2">
+                            <p className="text-xs text-ink-faint">Input details:</p>
+                            <TranscriptPanel transcript={transcript} />
+                          </div>
+                        )}
+
                         {/* Next step CTA */}
                         {!feedback && (
                           <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
@@ -1589,28 +1694,30 @@ export default function SpeechPage() {
                       <CardContent className="flex flex-col gap-5 px-5 py-5">
                         <StepHeader n={4} title="Coaching Report" done />
 
-                        {/* Regenerate Banner */}
-                        <div className="rounded-lg border border-lav/20 bg-lav/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div className="flex flex-col gap-1">
-                            <p className="text-sm font-medium text-lav">Update Available</p>
-                            <p className="text-xs text-ink-muted leading-relaxed">
-                              This report may use an older rubric. Regenerate to apply the latest speech-type scoring.
-                            </p>
+                        {/* Regenerate Banner - only show if report is stale */}
+                        {isReportStale(feedback) && (
+                          <div className="rounded-lg border border-lav/20 bg-lav/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm font-medium text-lav">Update Available</p>
+                              <p className="text-xs text-ink-muted leading-relaxed">
+                                This report uses an older rubric. Regenerate to apply the latest recalibrated scoring.
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={generateFeedback}
+                              disabled={genFb}
+                              className="shrink-0"
+                            >
+                              {genFb ? "Regenerating..." : "Regenerate Report"}
+                            </Button>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={generateFeedback}
-                            disabled={genFb}
-                            className="shrink-0"
-                          >
-                            {genFb ? "Regenerating..." : "Regenerate Report"}
-                          </Button>
-                        </div>
+                        )}
 
                         {/* Summary Card */}
                         <div className="rounded-xl border border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10 p-5">
-                          <ScoreCard score={feedback.overall_score} summary={feedback.summary} />
+                          <ScoreCard score={getVerifiedOverallScore(feedback)} summary={feedback.summary} />
                         </div>
 
                         {/* Priority Cards - Top 3 Issues */}
@@ -1640,7 +1747,11 @@ export default function SpeechPage() {
                             <p className="text-eyebrow text-ink-subtle">Judge Ballot</p>
                           </div>
                           <div className="rounded-lg border border-hairline bg-surface-2 p-4">
-                            <ScoreBreakdown scores={feedback.scores} speechType={speech?.speech_type} />
+                            <ScoreBreakdown
+                              scores={feedback.scores}
+                              speechType={speech?.speech_type}
+                              scoreExplanations={feedback.raw_feedback?.score_explanations}
+                            />
                           </div>
                         </div>
 

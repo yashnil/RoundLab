@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services.supabase_client import get_supabase
+from app.services.xp_ledger import get_user_total_xp, calculate_level
 
 logger = logging.getLogger(__name__)
 
@@ -179,105 +180,17 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
         logger.error("get_user_progress: feedback averages failed | %s", type(exc).__name__)
         skill_averages = None
 
-    # 6. Calculate gamification: XP, level, badges
-    # Granular XP system rewarding practice loops, not just uploads
-    xp = 0
-
-    # Count workflow steps for each speech
-    transcript_count = 0
-    flow_count = 0
-    feedback_generated_count = 0
-    feedback_rated_count = 0
-    full_loop_count = 0  # speeches with feedback + drills + attempts
-
+    # 6. Calculate gamification: XP, level, badges (from append-only ledger)
+    # XP represents earned learning progress, not current database rows.
+    # Deleting speeches/drills does not remove earned XP.
     try:
-        # Get transcripts
-        tx_res = supabase.table("transcripts").select("speech_id").eq("user_id", user_id).execute()
-        transcript_count = len(tx_res.data)
-
-        # Get argument maps (flows)
-        flow_res = supabase.table("argument_maps").select("speech_id").execute()
-        speech_ids_with_flow = {f["speech_id"] for f in flow_res.data}
-        flow_count = len(speech_ids_with_flow)
-
-        # Get feedback reports
-        fb_res = supabase.table("feedback_reports").select("speech_id, helpful_rating, speeches!inner(user_id)").eq("speeches.user_id", user_id).execute()
-        feedback_generated_count = len(fb_res.data)
-        feedback_rated_count = sum(1 for fb in fb_res.data if fb.get("helpful_rating"))
-
-        # Count full loops: speeches with feedback AND drills AND at least one attempt
-        speech_ids_with_feedback = {fb["speech_id"] for fb in fb_res.data}
-        drills_with_attempts_res = supabase.table("drill_attempts").select("drill_id, drills!inner(speech_id, user_id)").eq("drills.user_id", user_id).execute()
-        speech_ids_with_attempts = {att["drills"]["speech_id"] for att in drills_with_attempts_res.data if att.get("drills")}
-
-        drills_by_speech_res = supabase.table("drills").select("speech_id").eq("user_id", user_id).execute()
-        speech_ids_with_drills = {d["speech_id"] for d in drills_by_speech_res.data}
-
-        # Full loop = has feedback AND drills AND attempts
-        full_loop_speeches = speech_ids_with_feedback & speech_ids_with_drills & speech_ids_with_attempts
-        full_loop_count = len(full_loop_speeches)
+        xp = get_user_total_xp(user_id)
     except Exception as exc:
-        logger.error("get_user_progress: workflow step counting failed | %s", type(exc).__name__)
+        logger.error("get_user_progress: XP fetch failed | %s", type(exc).__name__)
+        xp = 0
 
-    # Calculate XP from workflow steps
-    # No XP for speech upload/creation - reward practice, not just recording
-    # speech_count * 0
-    # transcript_count * 0
-    xp += flow_count * 5                # +5 XP per flow generated
-    xp += feedback_generated_count * 10 # +10 XP per feedback
-    xp += drills_assigned_count * 15    # +15 XP per drill generated
-    xp += feedback_rated_count * 10     # +10 XP per feedback rating
-    xp += full_loop_count * 25          # +25 XP bonus per complete loop
-
-    # Calculate first-time vs repeat drill attempts
-    # First attempt on each drill = 50 XP, repeat attempts = 20 XP
-    try:
-        attempts_breakdown = (
-            supabase.table("drill_attempts")
-            .select("drill_id")
-            .eq("user_id", user_id)
-            .order("created_at")
-            .execute()
-        )
-
-        seen_drills = set()
-        first_attempts = 0
-        repeat_attempts = 0
-        for attempt in attempts_breakdown.data:
-            drill_id = attempt["drill_id"]
-            if drill_id not in seen_drills:
-                first_attempts += 1
-                seen_drills.add(drill_id)
-            else:
-                repeat_attempts += 1
-
-        xp += first_attempts * 50  # +50 XP per first drill attempt
-        xp += repeat_attempts * 20  # +20 XP per repeat attempt
-    except Exception as exc:
-        logger.error("get_user_progress: attempt breakdown failed | %s", type(exc).__name__)
-        # Fallback: treat all attempts as first attempts
-        xp += drill_attempts_count * 50
-
-    # Calculate level from XP
-    # New thresholds: Level 1: 0-99, Level 2: 100-249, Level 3: 250-499, Level 4: 500-899, Level 5: 900-1399, Level 6+: 1400+
-    if xp < 100:
-        level = 1
-        xp_to_next_level = 100 - xp
-    elif xp < 250:
-        level = 2
-        xp_to_next_level = 250 - xp
-    elif xp < 500:
-        level = 3
-        xp_to_next_level = 500 - xp
-    elif xp < 900:
-        level = 4
-        xp_to_next_level = 900 - xp
-    elif xp < 1400:
-        level = 5
-        xp_to_next_level = 1400 - xp
-    else:
-        level = 6 + ((xp - 1400) // 300)  # Each additional level requires 300 XP
-        xp_to_next_level = 300 - ((xp - 1400) % 300)
+    # Calculate level from XP using ledger function
+    level, xp_to_next_level = calculate_level(xp)
 
     # Calculate badges based on achievements
     badges = []
@@ -298,7 +211,7 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
         team_joined_at = None
 
     # Practice-focused badges: reward effort and improvement loops
-    if feedback_generated_count >= 1:
+    if feedback_ready_count >= 1:
         badges.append(Badge(
             id="first_feedback",
             name="First Feedback",
@@ -325,7 +238,8 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
             earned_at=None
         ))
 
-    if full_loop_count >= 1:
+    # Full practice loop: at least one drill attempt exists
+    if drill_attempts_count >= 1:
         badges.append(Badge(
             id="full_practice_loop",
             name="Full Practice Loop",
@@ -334,7 +248,7 @@ async def get_user_progress(user_id: str) -> ProgressSummary:
             earned_at=None
         ))
 
-    if feedback_generated_count >= 3:
+    if feedback_ready_count >= 3:
         badges.append(Badge(
             id="three_feedback_reports",
             name="Feedback Analyst",

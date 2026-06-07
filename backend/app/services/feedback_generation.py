@@ -27,6 +27,35 @@ class ScoreExplanation(BaseModel):
     how_to_improve: str
 
 
+class DebateIssue(BaseModel):
+    """Structured coaching issue — explicitly typed and grounded in speech data."""
+
+    issue_type: str
+    """One of: missing_warrant | weak_evidence | unclear_impact | no_weighing |
+    dropped_argument | weak_extension | no_clash | new_argument | organization | delivery"""
+
+    severity: str
+    """low | medium | high"""
+
+    title: str
+    """Short title, e.g. 'Missing warrant on economic contention'"""
+
+    explanation: str
+    """1-2 sentences explaining what is missing or weak in the speech."""
+
+    why_it_matters: str
+    """1 sentence: what this costs the debater in a real round (e.g. 'Flow judges may not evaluate this argument.')"""
+
+    recommendation: str
+    """1 concrete next step the debater can take to fix this."""
+
+    affected_argument_labels: list[str]
+    """Labels of arguments from the flow that exhibit this issue (may be empty)."""
+
+    recommended_drill_type: str
+    """One of: warranting | weighing | drops | extensions | evidence | clash | judge_adaptation | collapse | line_by_line"""
+
+
 class _FeedbackOutput(BaseModel):
     """Full structured output from the LLM. Stored verbatim in raw_feedback."""
 
@@ -44,6 +73,8 @@ class _FeedbackOutput(BaseModel):
     judge_adaptation_notes: str
     top_3_priorities: list[str]
     recommendations: list[str]
+    # Structured issues — new field, v2 reports only
+    structured_issues: list[DebateIssue] = []
 
 
 _SPEECH_TYPE_GUIDANCE: dict[str, str] = {
@@ -179,7 +210,17 @@ Output field instructions:
 - evidence_diagnostics: For each cited source, statistic, or study, assess whether it was used correctly and contextualized. Empty list if no evidence was cited. If the student cites vaguely, critique attribution but do NOT invent what the evidence says.
 - judge_adaptation_notes: 2–3 sentences. Was this speech appropriate for a {judge_type} judge? What specific changes would better adapt it?
 - top_3_priorities: Exactly 3 items. The most important skills to develop before the next round, ordered by priority. Make these {speech_type}-specific (e.g., for constructive: warranting, impact development; for summary: extensions, weighing).
-- recommendations: 3–5 specific practice drills, exercises, or techniques that directly address the top weaknesses. Make these {speech_type}-appropriate.\
+- recommendations: 3–5 specific practice drills, exercises, or techniques that directly address the top weaknesses. Make these {speech_type}-appropriate.
+- structured_issues: Generate 2–4 structured issues. For each issue:
+  * issue_type: one of missing_warrant | weak_evidence | unclear_impact | no_weighing | dropped_argument | weak_extension | no_clash | new_argument | organization | delivery
+  * severity: low | medium | high (based on how much this would cost them in a real round)
+  * title: short specific title, e.g. "Missing warrant on Contention 2"
+  * explanation: 1-2 sentences — what exactly is wrong, grounded in the speech
+  * why_it_matters: 1 sentence — real-round consequence for a {judge_type} judge
+  * recommendation: 1 concrete action the debater can take next
+  * affected_argument_labels: list of argument labels from the argument map that exhibit this issue (use exact labels from the argument map provided). Empty list if not determinable.
+  * recommended_drill_type: one of warranting | weighing | drops | extensions | evidence | clash | judge_adaptation | collapse | line_by_line
+  Order issues by severity (high first). Do not repeat the same issue_type twice.\
 """
 
 

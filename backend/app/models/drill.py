@@ -20,6 +20,8 @@ class DrillRow(BaseModel):
     source_weakness: Optional[str] = None
     difficulty: str = "beginner"
     status: str = "assigned"
+    # Time limit in seconds — LLM-generated, stored in DB
+    time_limit_seconds: Optional[int] = None
 
 
 class DrillStatusUpdate(BaseModel):

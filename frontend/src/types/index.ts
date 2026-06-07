@@ -27,6 +27,8 @@ export type ArgumentType =
   | "unclear";
 
 export interface ArgumentItem {
+  /** Stable index-based ID (e.g. "arg_1"), assigned on save. Null for older argument maps. */
+  id?: string | null;
   label: string;
   claim: string;
   warrant: string;
@@ -69,6 +71,31 @@ export interface ScoreExplanation {
   how_to_improve: string;
 }
 
+export type DebateIssueType =
+  | "missing_warrant"
+  | "weak_evidence"
+  | "unclear_impact"
+  | "no_weighing"
+  | "dropped_argument"
+  | "weak_extension"
+  | "no_clash"
+  | "new_argument"
+  | "organization"
+  | "delivery";
+
+export type IssueSeverity = "low" | "medium" | "high";
+
+export interface DebateIssue {
+  issue_type: DebateIssueType;
+  severity: IssueSeverity;
+  title: string;
+  explanation: string;
+  why_it_matters: string;
+  recommendation: string;
+  affected_argument_labels: string[];
+  recommended_drill_type: string;
+}
+
 export interface FeedbackReport {
   id: string;
   speech_id: string;
@@ -87,6 +114,8 @@ export interface FeedbackReport {
     top_3_priorities?: string[];
     recommendations?: string[];
     score_explanations?: ScoreExplanation[];
+    /** Structured debate issues — present in v2+ reports only */
+    structured_issues?: DebateIssue[];
     calibrated_scores?: Record<string, number>;
     calibration_warnings?: string[];
     scoring_version?: string;
@@ -132,6 +161,8 @@ export interface Drill {
   source_weakness: string | null;
   difficulty: DrillDifficulty;
   status: DrillStatus;
+  /** LLM-generated recommended practice time in seconds (30–300). Null for older drills. */
+  time_limit_seconds: number | null;
   created_at: string;
 }
 

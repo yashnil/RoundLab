@@ -51,24 +51,32 @@ export default function ScoreCard({ score, summary, className }: ScoreCardProps)
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      className={cn("flex items-start gap-5", className)}
+      className={cn("flex items-center gap-6", className)}
     >
-      {/* Score ring */}
-      <div
-        className={cn(
-          "relative flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border-[3px]",
-          ring,
-        )}
-      >
-        <span className="text-3xl font-bold leading-none tracking-tight text-ink">
-          {score !== null ? <AnimatedNumber target={score} /> : "—"}
-        </span>
-        <span className="mt-0.5 text-xs text-ink-faint">/100</span>
+      {/* Score ring — responsive size */}
+      <div className="relative shrink-0">
+        <div
+          className={cn(
+            "absolute inset-0 rounded-full opacity-25 blur-md",
+            ring.replace("border-", "bg-"),
+          )}
+        />
+        <div
+          className={cn(
+            "relative flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border-[3px] bg-canvas sm:h-24 sm:w-24",
+            ring,
+          )}
+        >
+          <span className="text-3xl font-bold leading-none tracking-tight text-ink sm:text-4xl">
+            {score !== null ? <AnimatedNumber target={score} /> : "—"}
+          </span>
+          <span className="mt-0.5 text-xs text-ink-faint">/100</span>
+        </div>
       </div>
 
       {/* Grade + summary */}
-      <div className="flex flex-col gap-1.5 pt-1">
-        <p className="text-heading text-ink">{grade}</p>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-heading text-ink sm:text-title">{grade}</p>
         {summary && (
           <p className="text-sm leading-relaxed text-ink-subtle">{summary}</p>
         )}

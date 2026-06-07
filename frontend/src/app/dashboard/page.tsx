@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
 import {
-  Mic, CheckCircle2, Target, TrendingUp, Headphones,
+  Mic, CheckCircle2, Target,
   MoreHorizontal, Trash2, ArrowUpRight, ArrowRight,
-  BookOpen, Zap, Users, Play, Trophy, Star,
+  BookOpen, Zap, Users, Play,
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
-import MetricCard from "@/components/MetricCard";
 import EmptyState from "@/components/EmptyState";
 import DeleteDialog from "@/components/DeleteDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +23,35 @@ import {
 import { createClient } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
 import { staggerParent, staggerChild, cardHover } from "@/lib/motion";
+import { getSpeechStatusConfig } from "@/lib/debateHelpers";
+import DashboardMissionPanel, { DashboardMissionPanelSkeleton } from "@/components/DashboardMissionPanel";
+import TrainingLoopMap, { DEFAULT_LOOP_NODES } from "@/components/TrainingLoopMap";
+import type { LoopNodeDef, LoopNodeStatus } from "@/components/TrainingLoopMap";
 import type { Speech, ProgressSummary } from "@/types";
+
+// ── Derive TrainingLoopMap nodes from real progress data ───────────────────────
+
+function deriveLoopNodes(progress: ProgressSummary): LoopNodeDef[] {
+  const speechDone   = progress.speech_count > 0;
+  const feedbackDone = progress.feedback_ready_count > 0;
+  const drillDone    = progress.drill_attempts_count > 0;
+  const rerecordDone = progress.speech_count > 1; // second speech implies re-record
+  const allComplete  = speechDone && feedbackDone && drillDone && rerecordDone;
+
+  const statuses: LoopNodeStatus[] = allComplete
+    ? ["complete", "complete", "complete", "complete", "complete"]
+    : !speechDone
+    ? ["current",  "waiting",  "waiting",  "waiting",  "waiting"]
+    : !feedbackDone
+    ? ["complete", "current",  "waiting",  "waiting",  "waiting"]
+    : !drillDone
+    ? ["complete", "complete", "current",  "waiting",  "waiting"]
+    : !rerecordDone
+    ? ["complete", "complete", "complete", "current",  "waiting"]
+    : ["complete", "complete", "complete", "complete", "current"];
+
+  return DEFAULT_LOOP_NODES.map((node, i) => ({ ...node, status: statuses[i] }));
+}
 
 const TYPE_LABEL: Record<string, string> = {
   constructive: "Constructive", rebuttal: "Rebuttal", summary: "Summary",
@@ -49,12 +76,15 @@ const SKILL_LABELS: Record<string, { label: string; variant: "indigo" | "green" 
 type BV = "default" | "indigo" | "green" | "amber" | "red";
 
 function speechStatus(s: Speech): { label: string; variant: BV } {
-  if (s.status === "error")        return { label: "Error",          variant: "red"    };
-  if (s.status === "done")         return { label: "Feedback ready", variant: "green"  };
-  if (s.status === "analyzing")    return { label: "Analyzing…",     variant: "amber"  };
-  if (s.status === "transcribing") return { label: "Transcribing…",  variant: "indigo" };
-  if (s.audio_url)                 return { label: "Audio uploaded",  variant: "default"};
-  return                                  { label: "Pending",         variant: "default"};
+  const cfg = getSpeechStatusConfig(s.status);
+  // Special case: audio uploaded but not yet transcribing
+  if (s.status === "pending" && s.audio_url) {
+    return { label: "Audio uploaded", variant: "default" };
+  }
+  return {
+    label: cfg.isProcessing ? `${cfg.label}…` : cfg.label,
+    variant: cfg.badge as BV,
+  };
 }
 
 function fmtDate(iso: string) {
@@ -71,54 +101,62 @@ function fmtPercent(val: number | null) {
 function SpeechCard({ s, onDelete }: { s: Speech; onDelete: (s: Speech) => void }) {
   const status = speechStatus(s);
 
+  // Colored left-border accent based on status
+  const accentBorder =
+    s.status === "done"         ? "border-l-ok/60"
+    : s.status === "error"      ? "border-l-danger/60"
+    : s.status === "analyzing"  ? "border-l-warn/60"
+    : s.status === "transcribing" ? "border-l-lav/40"
+    : "border-l-hairline";
+
+  const PIPELINE: Array<{ key: string; label: string; done: boolean; possible?: boolean }> = [
+    { key: "audio",  label: "Audio",      done: !!s.audio_url },
+    { key: "tx",     label: "Transcript", done: s.status !== "pending" },
+    { key: "flow",   label: "Flow",       done: s.status === "analyzing" || s.status === "done" },
+    { key: "ballot", label: "Ballot",     done: s.status === "done" },
+    { key: "drills", label: "Drills",     done: false, possible: s.status === "done" },
+  ];
+
   return (
     <motion.div
       variants={staggerChild}
       {...cardHover}
     >
-      <Card className="transition-colors duration-150 hover:border-hairline-strong">
+      <Card className={`border-l-2 transition-colors duration-150 hover:border-hairline-strong ${accentBorder}`}>
         <CardContent className="flex items-center gap-4 px-5 py-4">
-          <Link href={`/speech/${s.id}`} className="group flex min-w-0 flex-1 items-center gap-3.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 transition-colors group-hover:border-lav/30 group-hover:bg-lav/5">
+          <Link href={`/speech/${s.id}`} className="group flex min-w-0 flex-1 items-start gap-3.5">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 transition-colors group-hover:border-lav/30 group-hover:bg-lav/5">
               <Mic size={13} className="text-ink-faint transition-colors group-hover:text-lav" />
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
               <p className="truncate text-sm font-semibold text-ink transition-colors group-hover:text-lav-hi">
                 {s.title}
               </p>
-              {s.topic && <p className="truncate text-xs text-ink-faint">{s.topic}</p>}
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2">
-                <span className="text-xs text-ink-subtle">
-                  {TYPE_LABEL[s.speech_type] ?? s.speech_type}
-                </span>
-                {s.side       && <span className="text-xs capitalize text-ink-faint">{s.side}</span>}
-                {s.judge_type && <span className="text-xs text-ink-faint">{JUDGE_LABEL[s.judge_type]} judge</span>}
-                <span className="text-xs text-ink-faint">{fmtDate(s.created_at)}</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0">
+                <span className="text-xs text-ink-subtle">{TYPE_LABEL[s.speech_type] ?? s.speech_type}</span>
+                {s.side       && <span className="text-xs capitalize text-ink-faint">· {s.side}</span>}
+                {s.judge_type && <span className="text-xs text-ink-faint">· {JUDGE_LABEL[s.judge_type]} judge</span>}
+                {s.topic      && <span className="hidden truncate text-xs text-ink-faint sm:inline">· {s.topic}</span>}
               </div>
-              {/* Compact 5-step workflow progress dots */}
-              <div className="mt-1.5 flex items-center gap-1">
-                {[
-                  { key: "audio",  done: !!s.audio_url,                                     label: "Audio"      },
-                  { key: "tx",     done: s.status !== "pending",                             label: "Transcript" },
-                  { key: "flow",   done: s.status === "analyzing" || s.status === "done",    label: "Flow"       },
-                  { key: "fb",     done: s.status === "done",                                label: "Feedback"   },
-                  { key: "drills", done: false /* fetched separately */,                     label: "Drills", possible: s.status === "done" },
-                ].map((step, i, arr) => (
-                  <div key={step.key} className="flex items-center">
+              {/* Pipeline dots with labels */}
+              <div className="mt-1.5 flex items-center gap-0.5">
+                {PIPELINE.map((step, i, arr) => (
+                  <div key={step.key} className="flex items-center gap-0.5">
                     <div
                       title={step.label}
                       className={[
-                        "h-1 w-4 rounded-full transition-colors",
+                        "h-1.5 rounded-full transition-colors",
                         step.done
-                          ? "bg-lav"
-                          : (step as { possible?: boolean }).possible
-                          ? "bg-lav/25"
-                          : "bg-hairline",
+                          ? "w-5 bg-lav"
+                          : step.possible
+                          ? "w-4 bg-lav/25"
+                          : "w-3 bg-hairline",
                       ].join(" ")}
                     />
-                    {i < arr.length - 1 && <div className="mx-0.5 h-px w-1 bg-hairline" />}
+                    {i < arr.length - 1 && <div className="h-px w-0.5 bg-hairline" />}
                   </div>
                 ))}
+                <span className="ml-1.5 text-xs text-ink-faint">{fmtDate(s.created_at)}</span>
               </div>
             </div>
           </Link>
@@ -139,13 +177,13 @@ function SpeechCard({ s, onDelete }: { s: Speech; onDelete: (s: Speech) => void 
                 <DropdownMenuItem asChild>
                   <Link href={`/speech/${s.id}`} className="flex items-center gap-2">
                     <ArrowUpRight size={12} />
-                    View session
+                    View flow report
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem destructive onSelect={() => onDelete(s)}>
                   <Trash2 size={12} />
-                  Delete
+                  Delete session
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenuRoot>
@@ -224,153 +262,48 @@ export default function DashboardPage() {
       <AppNav />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-7"
+          className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-7"
           variants={staggerParent(0.07, 0.05)}
           initial="hidden"
           animate="show"
         >
-          {/* Page header */}
-          <motion.div variants={staggerChild} className="flex flex-col gap-1">
-            <h1 className="text-title text-ink">Individual Practice</h1>
-            <p className="text-sm text-ink-subtle">
-              Track your speeches, feedback, drills, and progress over time.
-            </p>
-          </motion.div>
-
-          {/* Metrics - Always visible after loading */}
-          <motion.div variants={staggerChild} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {loading ? (
-              <>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 rounded-xl border border-hairline bg-surface-1 px-4 py-4">
-                    <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
-                    <div className="flex flex-col gap-1.5">
-                      <Skeleton className="h-4 w-8" />
-                      <Skeleton className="h-2.5 w-16" />
-                    </div>
-                  </div>
-                ))}
-              </>
-            ) : progress ? (
-              <>
-                {[
-                  { label: "Speeches",         value: progress.speech_count,          icon: Mic,          color: "lav" as const },
-                  { label: "Feedback Ready",   value: progress.feedback_ready_count,  icon: CheckCircle2, color: "ok" as const  },
-                  { label: "Drills Assigned",  value: progress.drills_assigned_count, icon: Target,       color: "lav" as const },
-                  { label: "Drill Attempts",   value: progress.drill_attempts_count,  icon: Headphones,   color: "warn" as const },
-                ].map((m) => (
-                  <MetricCard key={m.label} {...m} />
-                ))}
-              </>
-            ) : null}
-          </motion.div>
-
-          {/* Next Action Card - What to do next */}
+          {/* ── Training loop map ─────────────────────────────────── */}
           {!loading && progress && (
             <motion.div variants={staggerChild}>
-              <Card className="border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10">
-                <CardContent className="px-5 py-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-lav">
-                      <Zap size={18} className="text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-ink">
-                        {progress.drill_attempts_count === 0 ? "Complete your first drill attempt (+50 XP)" :
-                         progress.incomplete_drills.length > 0 ? "Practice your next drill (+20 XP)" :
-                         progress.feedback_ready_count === 0 ? "Generate feedback from a speech (+10 XP)" :
-                         "Start a new practice session"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-ink-subtle">
-                        {progress.drill_attempts_count === 0 ? "Drill attempts are worth 50 XP each — the fastest way to level up." :
-                         progress.incomplete_drills.length > 0 ? "You have unfinished drills waiting. Each attempt earns XP." :
-                         "Record a new speech to get personalized coaching and drills."}
-                      </p>
-                    </div>
-                    {progress.incomplete_drills.length > 0 ? (
-                      <Button asChild size="sm" className="shrink-0">
-                        <Link href={`/speech/${progress.incomplete_drills[0].speech_id}`}>
-                          Practice Now
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button asChild size="sm" className="shrink-0">
-                        <Link href="/session">
-                          New Session
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="rounded-2xl border border-hairline bg-surface-1 px-5 py-4">
+                <p className="mb-3 text-eyebrow text-ink-faint">Your practice loop</p>
+                <TrainingLoopMap nodes={deriveLoopNodes(progress)} />
+              </div>
             </motion.div>
           )}
 
-          {/* Gamification: XP, Level, Badges */}
-          {!loading && progress && (
-            <motion.div variants={staggerChild}>
-              <Card className="border-hairline">
-                <CardContent className="px-5 py-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    {/* Level & XP */}
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-lav/30 bg-lav/10">
-                        <Trophy size={24} className="text-lav" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-lg font-bold text-ink">Level {progress.level}</span>
-                          <span className="text-xs text-ink-subtle">{progress.xp} XP</span>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-hairline">
-                              <div
-                                className="h-full rounded-full bg-lav transition-all"
-                                style={{
-                                  width: `${Math.min(((
-                                    progress.level === 1 ? progress.xp :
-                                    progress.level === 2 ? progress.xp - 100 :
-                                    progress.level === 3 ? progress.xp - 250 :
-                                    progress.level === 4 ? progress.xp - 500 :
-                                    progress.level === 5 ? progress.xp - 900 :
-                                    progress.xp - 1400 - (Math.floor((progress.xp - 1400) / 300) * 300)
-                                  ) / progress.xp_to_next_level) * 100, 100)}%`
-                                }}
-                              />
-                            </div>
-                            <span className="text-xs text-ink-faint">{progress.xp_to_next_level} to Lv{progress.level + 1}</span>
-                          </div>
-                          <p className="text-xs text-amber">Level up by completing drills and practice attempts</p>
-                        </div>
-                      </div>
-                    </div>
+          {/* ── Mission Panel — cockpit top section ────────────────── */}
+          <motion.div variants={staggerChild}>
+            {loading
+              ? <DashboardMissionPanelSkeleton />
+              : progress
+              ? <DashboardMissionPanel progress={progress} />
+              : null}
+          </motion.div>
 
-                    {/* Badges */}
-                    {progress.badges.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs font-medium text-ink-subtle">Badges Earned</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {progress.badges.slice(0, 5).map((badge) => (
-                            <div
-                              key={badge.id}
-                              title={`${badge.name}: ${badge.description}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-base transition-colors hover:border-lav/30 hover:bg-lav/5"
-                            >
-                              {badge.icon}
-                            </div>
-                          ))}
-                          {progress.badges.length > 5 && (
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-xs text-ink-faint">
-                              +{progress.badges.length - 5}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+          {/* Badges — shown separately below the mission panel */}
+          {!loading && progress && progress.badges.length > 0 && (
+            <motion.div variants={staggerChild}>
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                <p className="text-eyebrow text-ink-faint">Badges:</p>
+                {progress.badges.slice(0, 6).map((badge) => (
+                  <div
+                    key={badge.id}
+                    title={`${badge.name}: ${badge.description}`}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-sm transition-colors hover:border-lav/30 hover:bg-lav/5"
+                  >
+                    {badge.icon}
                   </div>
-                </CardContent>
-              </Card>
+                ))}
+                {progress.badges.length > 6 && (
+                  <span className="text-xs text-ink-faint">+{progress.badges.length - 6} more</span>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -381,10 +314,10 @@ export default function DashboardPage() {
                 <CardContent className="px-6 py-6">
                   <div className="mb-3 flex items-center gap-2">
                     <Play size={15} className="text-lav" />
-                    <p className="text-sm font-semibold text-lav">Start Your First Practice</p>
+                    <p className="text-sm font-semibold text-lav">Complete your first practice rep</p>
                   </div>
                   <p className="mb-5 text-sm leading-relaxed text-ink">
-                    RoundLab works like a personal debate coach. Record a speech, get judge-style feedback, and practice with personalized drills. Completing drills earns the most XP.
+                    Record a PF speech → get your flow and judge ballot → practice targeted drills. Each drill attempt earns the most XP and drives real improvement.
                   </p>
                   <div className="mb-5 flex flex-col gap-2.5">
                     {[
@@ -443,9 +376,10 @@ export default function DashboardPage() {
             <motion.div variants={staggerChild}>
               <EmptyState
                 Icon={Mic}
-                title="Ready to start practicing?"
-                description="Record a new Public Forum speech and track your progress. You'll get judge-style feedback and personalized drills to improve."
-                action={{ label: "New Practice Session", href: "/session" }}
+                title="Your first practice speech starts the loop."
+                description="Record or upload a PF speech. RoundLab will build a flow, generate a judge-style ballot, and create 3 targeted drills."
+                action={{ label: "Start Practice Session", href: "/session" }}
+                hint="Works with constructive, rebuttal, summary, or final focus."
               />
             </motion.div>
           )}
@@ -494,30 +428,38 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <p className="text-eyebrow text-ink-subtle">Skill Breakdown</p>
                 <span className="rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink-faint">
-                  Average across {progress.feedback_ready_count} speech{progress.feedback_ready_count !== 1 ? "es" : ""}
+                  avg across {progress.feedback_ready_count} speech{progress.feedback_ready_count !== 1 ? "es" : ""}
                 </span>
               </div>
               <Card>
                 <CardContent className="grid grid-cols-1 gap-4 px-5 py-5 sm:grid-cols-2">
                   {[
-                    { key: "clash", label: "Clash", max: 20 },
-                    { key: "weighing", label: "Impact Weighing", max: 20 },
-                    { key: "extensions", label: "Extensions", max: 20 },
-                    { key: "drops", label: "Drop Prevention", max: 20 },
-                    { key: "judge_adaptation", label: "Judge Adaptation", max: 20 },
+                    { key: "clash",            label: "Clash",            max: 20, icon: "⚔" },
+                    { key: "weighing",         label: "Impact Weighing",  max: 20, icon: "⚖" },
+                    { key: "extensions",       label: "Extensions",       max: 20, icon: "↗" },
+                    { key: "drops",            label: "Drop Prevention",  max: 20, icon: "🛡" },
+                    { key: "judge_adaptation", label: "Judge Adaptation", max: 20, icon: "👁" },
                   ].map((skill) => {
                     const value = progress.skill_averages![skill.key as keyof typeof progress.skill_averages];
                     const pct = (value / skill.max) * 100;
+                    const barColor = pct >= 70 ? "bg-lav" : pct >= 50 ? "bg-warn" : "bg-danger";
                     return (
                       <div key={skill.key} className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-ink-subtle">{skill.label}</span>
-                          <span className="text-xs font-bold text-ink">{value.toFixed(1)}<span className="text-ink-faint">/{skill.max}</span></span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-ink-subtle">
+                            <span className="text-[11px]" aria-hidden>{skill.icon}</span>
+                            {skill.label}
+                          </span>
+                          <span className="text-xs font-bold tabular-nums text-ink">
+                            {value.toFixed(1)}<span className="font-normal text-ink-faint">/{skill.max}</span>
+                          </span>
                         </div>
                         <div className="h-1.5 overflow-hidden rounded-full bg-hairline">
-                          <div
-                            className="h-full rounded-full bg-lav transition-all"
-                            style={{ width: `${pct}%` }}
+                          <motion.div
+                            className={`h-full rounded-full ${barColor}`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
                           />
                         </div>
                       </div>
@@ -530,9 +472,11 @@ export default function DashboardPage() {
                         <span className="text-xs font-bold text-ink">{fmtPercent(progress.drill_completion_rate)}</span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-hairline">
-                        <div
-                          className="h-full rounded-full bg-ok transition-all"
-                          style={{ width: `${(progress.drill_completion_rate || 0) * 100}%` }}
+                        <motion.div
+                          className="h-full rounded-full bg-ok"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(progress.drill_completion_rate || 0) * 100}%` }}
+                          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
                         />
                       </div>
                     </div>
@@ -569,11 +513,17 @@ export default function DashboardPage() {
           {/* Speech list */}
           {!loading && speeches.length > 0 && (
             <motion.section variants={staggerChild} className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <p className="text-eyebrow text-ink-subtle">Recent Sessions</p>
-                <span className="rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink-faint">
-                  {speeches.length}
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-eyebrow text-ink-subtle">Flow Reports</p>
+                  <span className="rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink-faint">
+                    {speeches.length}
+                  </span>
+                </div>
+                <Link href="/session" className="flex items-center gap-1 text-xs font-medium text-lav transition-colors hover:text-lav-hi">
+                  <Play size={10} />
+                  New session
+                </Link>
               </div>
               <motion.div
                 className="flex flex-col gap-1.5"

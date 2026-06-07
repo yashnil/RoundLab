@@ -13,6 +13,8 @@ class ArgumentItem(BaseModel):
     argument_type: Literal["offense", "defense", "weighing", "response", "unclear"]
     issues: list[str] = []
     confidence: Optional[float] = None
+    # Stable index-based ID, assigned when saving (not from LLM)
+    id: Optional[str] = None
 
 
 class ArgumentMapRow(BaseModel):

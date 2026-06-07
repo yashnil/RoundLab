@@ -86,7 +86,7 @@ export default function AppNav({ rightSlot }: AppNavProps) {
   const showPublicContent = mounted && !isLoggedIn;
 
   return (
-    <nav className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-hairline bg-canvas/95 backdrop-blur-sm px-5">
+    <nav className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-hairline bg-canvas/95 backdrop-blur-md px-5" style={{ boxShadow: "0 1px 0 0 oklch(0.510 0.156 278 / 0.08)" }}>
       {/* Brand */}
       <div className="flex items-center gap-6">
         <Link href="/" className="flex items-center gap-2 group">

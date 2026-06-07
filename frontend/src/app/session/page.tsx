@@ -3,30 +3,57 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { Settings2, Mic, GitBranch, FileText, ArrowRight } from "lucide-react";
+import {
+  Mic, GitBranch, FileText, ArrowRight, Target, Zap,
+} from "lucide-react";
 import AppNav from "@/components/AppNav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
 import { slideInLeft, slideInRight, staggerParent, staggerChild, EASE } from "@/lib/motion";
 import type { Speech } from "@/types";
 
+// ── Styles ─────────────────────────────────────────────────────────────────────
+
 const selectCls =
-  "h-8 w-full rounded-md border border-hairline bg-surface-2 px-3 py-1.5 " +
+  "h-9 w-full rounded-md border border-hairline bg-surface-2 px-3 py-2 " +
   "text-sm text-ink outline-none transition-colors " +
   "focus-visible:border-lav/50 focus-visible:ring-2 focus-visible:ring-lav/20 " +
   "disabled:opacity-40";
 
-const HOW_STEPS = [
-  { icon: Settings2, n: "01", title: "Configure",     body: "Set speech type, side, and judge to calibrate feedback." },
-  { icon: Mic,       n: "02", title: "Record",        body: "Speak for 30+ seconds via mic or audio file." },
-  { icon: GitBranch, n: "03", title: "Get your flow", body: "Every argument mapped: claim, warrant, evidence, impact." },
-  { icon: FileText,  n: "04", title: "Read feedback", body: "Ballot-style critique on clash, weighing, drops, judge adapt." },
+// ── Practice loop timeline data ────────────────────────────────────────────────
+
+const LOOP_STEPS = [
+  {
+    icon: Mic,
+    label: "Record speech",
+    hint: "30+ seconds · any PF speech type",
+    color: "lav" as const,
+  },
+  {
+    icon: GitBranch,
+    label: "Argument flow",
+    hint: "Claim → Warrant → Evidence → Impact",
+    color: "lav" as const,
+  },
+  {
+    icon: FileText,
+    label: "Judge ballot",
+    hint: "Clash · Weighing · Drops · Extensions",
+    color: "lav" as const,
+  },
+  {
+    icon: Target,
+    label: "Targeted drills",
+    hint: "3 drills · one per weakness",
+    color: "ok" as const,
+  },
 ];
+
+// ── Field label ────────────────────────────────────────────────────────────────
 
 function FieldLabel({ label, hint, required }: { label: string; hint?: string; required?: boolean }) {
   return (
@@ -39,17 +66,30 @@ function FieldLabel({ label, hint, required }: { label: string; hint?: string; r
   );
 }
 
+// ── Section divider ────────────────────────────────────────────────────────────
+
+function FormSection({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <p className="shrink-0 text-eyebrow text-ink-faint">{label}</p>
+      <div className="h-px flex-1 bg-hairline" />
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
 export default function SessionPage() {
   const router = useRouter();
-  const [userId,     setUserId]     = useState<string | null>(null);
-  const [userLoading,setUserLoading]= useState(true);
-  const [title,      setTitle]      = useState("");
-  const [speechType, setSpeechType] = useState("constructive");
-  const [side,       setSide]       = useState("");
-  const [judgeType,  setJudgeType]  = useState("");
-  const [topic,      setTopic]      = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState("");
+  const [userId,      setUserId]      = useState<string | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
+  const [title,       setTitle]       = useState("");
+  const [speechType,  setSpeechType]  = useState("constructive");
+  const [side,        setSide]        = useState("");
+  const [judgeType,   setJudgeType]   = useState("");
+  const [topic,       setTopic]       = useState("");
+  const [submitting,  setSubmitting]  = useState(false);
+  const [error,       setError]       = useState("");
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data }) => {
@@ -67,11 +107,12 @@ export default function SessionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId, title,
+          user_id:     userId,
+          title:       title || `${speechType.replace("_", " ")} — Practice Rep`,
           speech_type: speechType,
-          side: side || null,
-          judge_type: judgeType || null,
-          topic: topic || null,
+          side:        side || null,
+          judge_type:  judgeType || null,
+          topic:       topic || null,
         }),
       });
       router.push(`/speech/${s.id}`);
@@ -85,85 +126,121 @@ export default function SessionPage() {
     <>
       <AppNav />
       <main className="min-h-screen bg-canvas">
-        <div className="mx-auto max-w-5xl px-6 py-10">
+        <div className="mx-auto max-w-5xl px-5 py-10 sm:px-6">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-[2fr_3fr] lg:gap-14">
 
-            {/* Left: context */}
-            <motion.div {...slideInLeft(0)} className="flex flex-col gap-6">
+            {/* ── Left: Practice briefing panel ──────────────────────── */}
+            <motion.div {...slideInLeft(0)} className="flex flex-col gap-7">
+
+              {/* Header */}
               <div className="flex flex-col gap-3">
-                <Badge variant="indigo" className="w-fit">New Session</Badge>
-                <h1 className="text-title text-ink">Create your coaching session</h1>
+                <span className="inline-block w-fit rounded-full border border-lav/30 bg-lav/10 px-3 py-1 text-eyebrow text-lav">
+                  Practice Room
+                </span>
+                <h1 className="text-title text-ink">Set up your practice rep</h1>
                 <p className="text-sm leading-relaxed text-ink-subtle">
-                  Tell RoundLab about your speech. More context means more precise judge-style feedback.
+                  RoundLab uses your round context to calibrate the judge lens and generate precise ballot-style feedback.
                 </p>
               </div>
 
-              {/* Step callouts */}
+              {/* Practice loop timeline */}
               <motion.div
-                className="flex flex-col gap-3"
-                variants={staggerParent(0.07, 0.1)}
+                className="flex flex-col"
+                variants={staggerParent(0.08, 0.15)}
                 initial="hidden"
                 animate={userLoading ? "hidden" : "show"}
               >
-                {userLoading
-                  ? Array.from({ length: 4 }).map((_, i) => (
+                <p className="mb-4 text-eyebrow text-ink-faint">Your practice loop</p>
+
+                {userLoading ? (
+                  <div className="flex flex-col gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
                       <div key={i} className="flex gap-3">
-                        <Skeleton className="h-7 w-7 shrink-0 rounded-lg" />
-                        <div className="flex flex-1 flex-col gap-1.5 pt-0.5">
-                          <Skeleton className="h-3.5 w-24" />
-                          <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                        <div className="flex flex-1 flex-col gap-1.5 pt-1">
+                          <Skeleton className="h-3.5 w-28" />
+                          <Skeleton className="h-3 w-40" />
                         </div>
                       </div>
-                    ))
-                  : HOW_STEPS.map((s) => (
-                      <motion.div key={s.n} variants={staggerChild} className="flex gap-3">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2">
-                          <s.icon size={12} className="text-ink-subtle" />
+                    ))}
+                  </div>
+                ) : (
+                  LOOP_STEPS.map((step, i) => {
+                    const Icon = step.icon;
+                    const isLast = i === LOOP_STEPS.length - 1;
+                    const dotColor  = step.color === "ok" ? "bg-ok"  : "bg-lav";
+                    const iconColor = step.color === "ok" ? "text-ok" : "text-lav";
+                    const ringColor = step.color === "ok" ? "border-ok/20 bg-ok/8" : "border-lav/20 bg-lav/8";
+
+                    return (
+                      <motion.div key={step.label} variants={staggerChild} className="flex gap-3">
+                        {/* Vertical spine */}
+                        <div className="flex flex-col items-center">
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${ringColor}`}>
+                            <Icon size={14} className={iconColor} />
+                          </div>
+                          {!isLast && (
+                            <div className="mt-1 flex flex-1 flex-col items-center gap-1 pb-3">
+                              <div className="h-full w-px bg-hairline" style={{ minHeight: 20 }} />
+                              <span className={`text-[8px] font-bold ${dotColor === "bg-ok" ? "text-ok/50" : "text-lav/40"}`}>↓</span>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex flex-col gap-0.5">
-                          <p className="text-sm font-semibold text-ink">
-                            <span className="mr-1.5 font-mono text-xs text-lav">{s.n}</span>
-                            {s.title}
-                          </p>
-                          <p className="text-xs leading-relaxed text-ink-subtle">{s.body}</p>
+                        {/* Label */}
+                        <div className="flex flex-col gap-0.5 pb-4">
+                          <p className="text-sm font-semibold text-ink">{step.label}</p>
+                          <p className="text-xs text-ink-faint">{step.hint}</p>
                         </div>
                       </motion.div>
-                    ))}
+                    );
+                  })
+                )}
               </motion.div>
 
-              <p className="hidden text-xs text-ink-faint lg:block">
-                You&apos;ll record or upload audio after creating the session.
-              </p>
+              {/* Bottom note */}
+              {!userLoading && (
+                <div className="hidden items-start gap-2 rounded-lg border border-hairline bg-surface-1 px-3 py-2.5 lg:flex">
+                  <Zap size={12} className="mt-0.5 shrink-0 text-lav" />
+                  <p className="text-xs leading-relaxed text-ink-faint">
+                    Drill attempts earn <span className="font-semibold text-lav">50 XP</span> — the fastest way to level up. After recording, RoundLab handles the rest.
+                  </p>
+                </div>
+              )}
             </motion.div>
 
-            {/* Right: form */}
+            {/* ── Right: Speech setup form ────────────────────────────── */}
             <motion.div {...slideInRight(0.05)}>
               {userLoading ? (
                 <Card>
                   <CardContent className="flex flex-col gap-4 px-5 py-5">
-                    {Array.from({ length: 5 }).map((_, i) => (
+                    {Array.from({ length: 6 }).map((_, i) => (
                       <div key={i} className="flex flex-col gap-1.5">
                         <Skeleton className="h-3 w-20" />
-                        <Skeleton className="h-8 w-full rounded-md" />
+                        <Skeleton className="h-9 w-full rounded-md" />
                       </div>
                     ))}
-                    <Skeleton className="mt-1 h-8 w-full rounded-md" />
+                    <Skeleton className="mt-1 h-9 w-full rounded-md" />
                   </CardContent>
                 </Card>
               ) : (
-                <Card>
+                <Card className="beam-top" style={{ boxShadow: "0 0 48px -16px oklch(0.510 0.156 278 / 0.18)" }}>
                   <CardContent className="px-5 py-5">
-                    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-                      <div className="flex flex-col gap-1.5">
-                        <FieldLabel label="Session name" hint='e.g. "1AC — State Championship"' required />
-                        <Input
-                          required placeholder="e.g. 1AC Round 1 — State"
-                          value={title} onChange={(e) => setTitle(e.target.value)}
-                          disabled={submitting}
-                        />
-                      </div>
+                    {/* Card header */}
+                    <div className="mb-5 border-b border-hairline pb-4">
+                      <p className="text-eyebrow text-lav">Speech Setup</p>
+                      <p className="mt-0.5 text-sm font-semibold text-ink">Configure your round</p>
+                      <p className="mt-0.5 text-xs text-ink-faint">
+                        More context → more precise judge feedback
+                      </p>
+                    </div>
 
+                    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+
+                      {/* ── Round context ── */}
+                      <FormSection label="Round context" />
+
+                      {/* Speech type */}
                       <div className="flex flex-col gap-1.5">
                         <FieldLabel label="Speech type" hint="What part of the round?" required />
                         <select className={selectCls} value={speechType}
@@ -176,6 +253,7 @@ export default function SessionPage() {
                         </select>
                       </div>
 
+                      {/* Side + Judge */}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1.5">
                           <FieldLabel label="Side" hint="Affects framing" />
@@ -199,8 +277,22 @@ export default function SessionPage() {
                         </div>
                       </div>
 
+                      {/* ── Session info ── */}
+                      <FormSection label="Session info" />
+
+                      {/* Rep name — optional, auto-fills from type if blank */}
                       <div className="flex flex-col gap-1.5">
-                        <FieldLabel label="Resolution" hint='The PF topic, e.g. "Resolved: The USFG should…"' />
+                        <FieldLabel label="Rep name" hint='Optional — e.g. "1AC · State Championship R4"' />
+                        <Input
+                          placeholder={`${speechType.replace("_", " ").replace(/^\w/, c => c.toUpperCase())} — Practice Rep`}
+                          value={title} onChange={(e) => setTitle(e.target.value)}
+                          disabled={submitting}
+                        />
+                      </div>
+
+                      {/* Resolution */}
+                      <div className="flex flex-col gap-1.5">
+                        <FieldLabel label="Resolution" hint='The PF topic — e.g. "Resolved: The USFG should…"' />
                         <Input
                           placeholder="Resolved: …"
                           value={topic} onChange={(e) => setTopic(e.target.value)}
@@ -208,6 +300,7 @@ export default function SessionPage() {
                         />
                       </div>
 
+                      {/* Error */}
                       {error && (
                         <motion.p
                           initial={{ opacity: 0, y: 4 }}
@@ -219,23 +312,34 @@ export default function SessionPage() {
                         </motion.p>
                       )}
 
-                      <motion.div
-                        className="mt-1"
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                        transition={{ duration: 0.12 }}
-                      >
-                        <Button type="submit" disabled={submitting} className="w-full gap-2">
-                          {submitting ? "Creating session…" : (
-                            <><span>Create Session</span><ArrowRight size={13} /></>
-                          )}
-                        </Button>
-                      </motion.div>
+                      {/* CTA */}
+                      <div className="flex flex-col gap-2 pt-1">
+                        <motion.div
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          transition={{ duration: 0.12 }}
+                        >
+                          <Button type="submit" disabled={submitting} className="w-full gap-2">
+                            {submitting ? "Opening practice room…" : (
+                              <><span>Enter Practice Room</span><ArrowRight size={13} /></>
+                            )}
+                          </Button>
+                        </motion.div>
+
+                        {/* Keyboard hint below CTA */}
+                        <p className="hidden text-center text-[10px] text-ink-faint sm:block">
+                          After setup, press{" "}
+                          <kbd className="rounded bg-surface-2 px-1 py-0.5 font-mono text-[9px] border border-hairline">Space</kbd>
+                          {" "}to start recording
+                        </p>
+                      </div>
+
                     </form>
                   </CardContent>
                 </Card>
               )}
             </motion.div>
+
           </div>
         </div>
       </main>

@@ -34,10 +34,22 @@ const DIFFICULTY_BADGE: Record<string, { label: string; variant: "green" | "ambe
 };
 
 const STATUS_CONFIG: Record<DrillStatus, { label: string; dot: string }> = {
-  assigned:  { label: "Assigned",  dot: "bg-ink-faint" },
-  attempted: { label: "Attempted", dot: "bg-warn"      },
-  completed: { label: "Completed", dot: "bg-ok"        },
+  assigned:  { label: "Not started", dot: "bg-ink-faint" },
+  attempted: { label: "Attempted",   dot: "bg-warn"      },
+  completed: { label: "Completed",   dot: "bg-ok"        },
 };
+
+// Derive a recommended time limit from skill_target + difficulty
+function drillTimeLimit(skillTarget: string, difficulty: string): string {
+  const base: Record<string, number> = {
+    weighing: 90, warranting: 60, drops: 120, extensions: 90,
+    evidence: 60, clash: 90, judge_adaptation: 60,
+    collapse: 90, line_by_line: 90,
+  };
+  const multiplier = difficulty === "advanced" ? 1.5 : difficulty === "beginner" ? 0.75 : 1;
+  const secs = Math.round((base[skillTarget] ?? 90) * multiplier);
+  return secs < 60 ? `${secs}s` : `${Math.round(secs / 60)} min`;
+}
 
 // ── Drill number indicator ────────────────────────────────────────────────────
 
@@ -109,7 +121,14 @@ export default function DrillCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.07, ...T.base }}
-      className="rounded-xl border border-hairline bg-surface-1"
+      className={[
+        "rounded-xl border transition-colors",
+        drill.status === "completed"
+          ? "border-ok/20 bg-ok/3"
+          : drill.status === "attempted"
+          ? "border-warn/20 bg-surface-1"
+          : "border-hairline bg-surface-1",
+      ].join(" ")}
     >
       {/* Header row */}
       <button
@@ -133,7 +152,7 @@ export default function DrillCard({
           </div>
           {drill.source_weakness && (
             <p className="text-xs text-ink-faint">
-              <span className="text-ink-subtle">Targeting: </span>
+              <span className="text-ink-subtle">Targets: </span>
               {drill.source_weakness}
             </p>
           )}
@@ -157,18 +176,38 @@ export default function DrillCard({
       {expanded && (
         <div className="overflow-hidden">
             <div className="flex flex-col gap-4 border-t border-hairline px-5 py-4">
-              {/* Description */}
-              {drill.description && (
-                <p className="text-sm leading-relaxed text-ink-muted">{drill.description}</p>
+              {/* Completion banner */}
+              {drill.status === "completed" && (
+                <div className="flex items-center gap-2 rounded-lg border border-ok/20 bg-ok/5 px-3 py-2">
+                  <CheckSquare size={13} className="shrink-0 text-ok" />
+                  <p className="text-xs font-medium text-ok">Drill completed — good work. Re-record to see if it shows in your next speech.</p>
+                </div>
               )}
+
+              {/* Time limit + description row */}
+              <div className="flex items-start justify-between gap-3">
+                {drill.description && (
+                  <p className="text-sm leading-relaxed text-ink-muted">{drill.description}</p>
+                )}
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="text-eyebrow text-ink-faint">Time limit</span>
+                  <span className="font-mono text-xs font-semibold text-ink">
+                    {drill.time_limit_seconds != null
+                      ? drill.time_limit_seconds < 60
+                        ? `${drill.time_limit_seconds}s`
+                        : `${Math.floor(drill.time_limit_seconds / 60)}m${drill.time_limit_seconds % 60 > 0 ? ` ${drill.time_limit_seconds % 60}s` : ""}`
+                      : drillTimeLimit(drill.skill_target, drill.difficulty)}
+                  </span>
+                </div>
+              </div>
 
               {/* Prompt — the actual exercise */}
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-1.5">
                   <Target size={12} className="text-lav" />
-                  <span className="text-eyebrow text-ink-subtle">Exercise</span>
+                  <span className="text-eyebrow text-ink-subtle">Exercise prompt</span>
                 </div>
-                <p className="rounded-lg border border-hairline bg-surface-2 px-4 py-3 text-sm leading-relaxed text-ink">
+                <p className="rounded-xl border border-lav/15 bg-lav/5 px-4 py-3 text-sm leading-relaxed text-ink">
                   {drill.prompt}
                 </p>
               </div>
@@ -218,27 +257,22 @@ export default function DrillCard({
 
               {/* Status Control - reversible */}
               {onStatusChange && (
-                <div className="flex flex-col gap-2 pt-1">
-                  <div className="flex items-center gap-2">
-                    <label htmlFor={`status-${drill.id}`} className="text-xs font-medium text-ink-subtle">
-                      Status:
-                    </label>
-                    <select
-                      id={`status-${drill.id}`}
-                      value={drill.status}
-                      onChange={(e) => onStatusChange(drill.id, e.target.value as DrillStatus)}
-                      disabled={isUpdating}
-                      className="rounded-md border border-hairline bg-surface-2 px-2 py-1 text-sm text-ink transition-colors hover:border-hairline-strong focus:border-lav focus:outline-none disabled:opacity-50"
-                    >
-                      <option value="assigned">Not Started</option>
-                      <option value="attempted">Attempted</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                    {isUpdating && <span className="text-xs text-ink-faint">Saving…</span>}
-                  </div>
-                  {drill.status === "completed" && (
-                    <p className="text-xs text-ok">✓ Drill completed - great work!</p>
-                  )}
+                <div className="flex items-center gap-3 pt-1">
+                  <label htmlFor={`status-${drill.id}`} className="text-xs font-medium text-ink-subtle">
+                    Mark as:
+                  </label>
+                  <select
+                    id={`status-${drill.id}`}
+                    value={drill.status}
+                    onChange={(e) => onStatusChange(drill.id, e.target.value as DrillStatus)}
+                    disabled={isUpdating}
+                    className="rounded-md border border-hairline bg-surface-2 px-2 py-1 text-xs text-ink transition-colors hover:border-hairline-strong focus:border-lav focus:outline-none disabled:opacity-50"
+                  >
+                    <option value="assigned">Not started</option>
+                    <option value="attempted">Attempted</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                  {isUpdating && <span className="text-xs text-ink-faint">Saving…</span>}
                 </div>
               )}
 

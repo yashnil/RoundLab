@@ -137,6 +137,10 @@ async def generate_drills_for_speech(speech_id: str, user_id: str = Query(...)) 
 
     rows = []
     for i, drill in enumerate(drill_items, start=1):
+        # Clamp time_limit_seconds to sane range (30–300s) in case LLM goes out of range
+        tls = getattr(drill, "time_limit_seconds", None)
+        if tls is not None:
+            tls = max(30, min(300, int(tls)))
         row = {
             "speech_id": speech_id,
             "user_id": speech["user_id"],
@@ -150,6 +154,7 @@ async def generate_drills_for_speech(speech_id: str, user_id: str = Query(...)) 
             "source_weakness": drill.source_weakness,
             "difficulty": drill.difficulty,
             "status": "assigned",
+            "time_limit_seconds": tls,
         }
         rows.append(row)
 

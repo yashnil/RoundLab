@@ -172,12 +172,32 @@ Opens at `http://localhost:3000`
 
 ### 4. Database Setup
 
-Run Supabase migrations (see `backend/supabase/` for schema):
+Apply all migrations in order via the **Supabase Dashboard → SQL Editor**, or via CLI:
 
-```sql
--- Tables: speeches, transcripts, argument_maps, feedback_reports, drills, drill_attempts, teams, team_members
--- Storage bucket: audio (for speech recordings)
+```bash
+# If using Supabase CLI (after supabase link)
+supabase db push
 ```
+
+**Manual migration order:**
+```
+supabase/migrations/20260524000000_initial_schema.sql      # Core tables
+supabase/migrations/20260601000000_add_drill_fields.sql    # Drill metadata
+supabase/migrations/20260602000000_add_teams.sql           # Team features
+supabase/migrations/20260602100000_add_feedback_rating.sql # Feedback ratings
+supabase/migrations/20260604000000_add_xp_ledger.sql       # XP + scoring version
+supabase/migrations/20260606000000_add_drill_time_limit.sql # Drill time_limit_seconds
+```
+
+**Storage bucket:** Create a bucket named `audio` with public read access for audio files.
+
+**New columns added in Pass 4/5 (already in migrations):**
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| `speeches` | `duration_seconds` | `integer` | Set from recording timer or HTMLAudioElement |
+| `drills` | `time_limit_seconds` | `integer CHECK(30–300)` | LLM-generated, NULL for older drills |
+| `argument_maps` | `arguments.id` | (JSONB field) | e.g. `"arg_1"`, assigned in app layer |
+| `feedback_reports` | `raw_feedback.structured_issues` | (JSONB field) | Present in v2+ reports only |
 
 ---
 
@@ -213,21 +233,35 @@ Run Supabase migrations (see `backend/supabase/` for schema):
 
 ---
 
-## Running Tests
+## Running Tests and Checks
 
-Backend tests (pytest):
-
+### Backend (pytest)
 ```bash
 cd backend
 source .venv/bin/activate
-pytest
+pytest                       # all tests
+pytest tests/ -q             # quiet output
+pytest tests/test_schema_validation.py -v    # schema tests
+pytest tests/test_persistence_payloads.py -v # persistence tests
 ```
 
-Frontend build check:
-
+### Frontend (TypeScript + build)
 ```bash
 cd frontend
-npm run build
+npm run build                # production build + typecheck
+npx tsc --noEmit             # typecheck only  (use ./node_modules/.bin/tsc if npx resolves wrong)
+```
+
+### Frontend unit tests (Jest)
+```bash
+cd frontend
+npm test                     # runs src/__tests__/**/*.test.ts
+```
+
+### Lint
+```bash
+cd frontend
+npm run lint
 ```
 
 ---

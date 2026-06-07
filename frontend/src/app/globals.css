@@ -81,6 +81,11 @@
   --color-lav-hi: oklch(0.660 0.130 278);   /* #828fff */
   --color-lav-lo: oklch(0.310 0.090 278);   /* deep lavender for rings */
 
+  /* ── Secondary accent — cyan (consistent across themes) ─────────────────── */
+  --color-cyan:    oklch(0.780 0.140 200);  /* bright cyan */
+  --color-cyan-hi: oklch(0.860 0.110 200);  /* brighter cyan */
+  --color-cyan-lo: oklch(0.430 0.100 200);  /* deep cyan */
+
   /* ── Semantic colors (consistent across themes) ─────────────────────────── */
   --color-ok:     oklch(0.620 0.170 145);   /* #27a644 success */
   --color-warn:   oklch(0.750 0.155 74);    /* amber   warning */
@@ -283,6 +288,32 @@
     box-shadow: 0 0 32px -6px oklch(0.510 0.156 278 / 0.4);
   }
 
+  /* ── Cyan glow — secondary accent highlights ─────────────────────────────── */
+  .glow-cyan {
+    box-shadow: 0 0 32px -6px oklch(0.780 0.140 200 / 0.35);
+  }
+
+  /* ── Mission card — elevated lav gradient card ──────────────────────────── */
+  .mission-card {
+    background: linear-gradient(
+      135deg,
+      oklch(0.510 0.156 278 / 0.08) 0%,
+      oklch(0.510 0.156 278 / 0.04) 50%,
+      oklch(0.780 0.140 200 / 0.03) 100%
+    );
+    border-color: oklch(0.510 0.156 278 / 0.25);
+  }
+
+  /* ── Analysis step — inline pipeline step indicator ─────────────────────── */
+  .analysis-step-active {
+    animation: analysis-step-blink 1.4s ease-in-out infinite;
+  }
+
+  @keyframes analysis-step-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+  }
+
   /* ── Shimmer skeleton keyframe (theme-aware) ────────────────────────────── */
   .shimmer {
     background: linear-gradient(
@@ -359,12 +390,19 @@
   }
 }
 
+/* ── Scrollbar (webkit) — thin, theme-aware ──────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(0.270 0.006 264); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(0.370 0.006 264); }
+
 /* ── Prefers-reduced-motion — kill all decorative animations ────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .shimmer,
   .beam-top::after,
   .step-pulse,
-  .rec-pulse {
+  .rec-pulse,
+  .analysis-step-active {
     animation: none !important;
   }
   * {

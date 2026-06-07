@@ -73,11 +73,15 @@ async def get_speech(speech_id: str, user_id: str = Query(...)) -> SpeechRow:
 
 @router.patch("/{speech_id}", response_model=SpeechRow)
 async def update_speech_audio(speech_id: str, body: SpeechUpdateRequest, user_id: str = Query(...)) -> SpeechRow:
+    update_fields: dict = {"audio_url": body.audio_url}
+    if body.duration_seconds is not None:
+        # Clamp to sane range: 5s–3600s
+        update_fields["duration_seconds"] = max(5, min(3600, body.duration_seconds))
     try:
         result = (
             get_supabase()
             .table("speeches")
-            .update({"audio_url": body.audio_url})
+            .update(update_fields)
             .eq("id", speech_id)
             .eq("user_id", user_id)
             .execute()

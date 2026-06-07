@@ -47,6 +47,9 @@ class _DrillItem(BaseModel):
     difficulty: str
     """beginner | intermediate | advanced"""
 
+    time_limit_seconds: int = 90
+    """Recommended practice time in seconds. Typical values: 60 (beginner), 90 (intermediate), 120-180 (advanced). Must be between 30 and 300. Defaults to 90 if not specified."""
+
 
 class _DrillsOutput(BaseModel):
     drills: list[_DrillItem]
@@ -65,6 +68,7 @@ Rules:
 6. Use debate-native terminology: warrants, weighing, extensions, drops, voting issues, impact calculus, cross-ex.
 7. Order drills by priority: most critical weakness first.
 8. difficulty values: 'beginner' for foundational skills, 'intermediate' for tactical improvements, 'advanced' for strategic refinements.
+9. time_limit_seconds: Set a realistic practice time. Beginner drills: 45-90s. Intermediate: 90-150s. Advanced: 120-180s. Must be between 30 and 300.
 
 Available skill_target values:
 - weighing: comparing impacts by magnitude, probability, timeframe, reversibility

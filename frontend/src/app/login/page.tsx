@@ -114,17 +114,18 @@ function LoginContent() {
 
         {/* Brand */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lav">
-            <Mic size={16} className="text-white" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lav"
+            style={{ boxShadow: "0 0 24px -4px oklch(0.510 0.156 278 / 0.50)" }}>
+            <Mic size={18} className="text-white" />
           </div>
           <div className="flex flex-col gap-1">
             <h1 className="text-title text-ink">RoundLab</h1>
-            <p className="text-sm text-ink-subtle">AI flow coach for Public Forum debaters</p>
+            <p className="text-sm text-ink-subtle">AI flow coach for Public Forum</p>
           </div>
         </div>
 
         {/* Form card */}
-        <Card>
+        <Card className="beam-top" style={{ boxShadow: "0 0 40px -12px oklch(0.510 0.156 278 / 0.18)" }}>
           <CardContent className="px-5 py-5">
             <p className="mb-5 text-sm font-medium text-ink-muted">
               {mode === "signin" ? "Sign in to your account" : "Create an account"}

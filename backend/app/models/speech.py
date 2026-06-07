@@ -15,6 +15,7 @@ class SpeechCreateRequest(BaseModel):
 
 class SpeechUpdateRequest(BaseModel):
     audio_url: str
+    duration_seconds: Optional[int] = None
 
 
 class SpeechRow(BaseModel):

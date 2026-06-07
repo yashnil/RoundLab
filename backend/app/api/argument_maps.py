@@ -110,6 +110,9 @@ async def extract(speech_id: str, user_id: str = Query(...)) -> ArgumentMapRow:
 
     # 5. Persist and mark done
     try:
+        # Assign stable index-based IDs so issues can reference specific arguments
+        for idx, item in enumerate(items):
+            item.id = f"arg_{idx + 1}"
         arguments_json = [item.model_dump() for item in items]
         map_result = (
             supabase.table("argument_maps")

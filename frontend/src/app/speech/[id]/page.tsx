@@ -5,20 +5,21 @@ import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Check, ChevronDown, ChevronUp, FileText,
-  Mic, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target,
+  Mic, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target, Copy,
 } from "lucide-react";
+import { useCopy } from "@/lib/useCopy";
 import AppNav from "@/components/AppNav";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import RecordingStudio from "@/components/RecordingStudio";
 import UploadDropzone from "@/components/UploadDropzone";
 import TranscriptPanel from "@/components/TranscriptPanel";
 import ArgumentCard from "@/components/ArgumentCard";
+import JudgeModeSelector, { type JudgeViewMode } from "@/components/JudgeModeSelector";
+import ReportVerdictPanel from "@/components/ReportVerdictPanel";
 import ScoreCard from "@/components/ScoreCard";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import LoadingCard from "@/components/LoadingCard";
 import DeleteDialog from "@/components/DeleteDialog";
-import ScoreRing from "@/components/ScoreRing";
-import SectionHeader from "@/components/SectionHeader";
 import EmptyStateCard from "@/components/EmptyStateCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +29,12 @@ import { createClient } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
 import { fadeUp, staggerParent, staggerChild, T, EASE } from "@/lib/motion";
 import DrillCard from "@/components/DrillCard";
+import FlowTable from "@/components/FlowTable";
+import PracticeLoopCTA from "@/components/PracticeLoopCTA";
+import CoachMarginNote from "@/components/CoachMarginNote";
+import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue } from "@/lib/debateHelpers";
 import type { ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
+import type { DebateIssue } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -235,14 +241,179 @@ function CoachDiagnosis({ category, items, label }: { category: string; items: s
 }
 
 /** Wraps a workspace section card — animates in when it first appears */
-function WorkspaceCard({ children }: { children: React.ReactNode }) {
+function WorkspaceCard({ children, glow }: { children: React.ReactNode; glow?: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: EASE }}
     >
-      <Card>{children}</Card>
+      <Card
+        className={glow ? "beam-top" : undefined}
+        style={glow ? { boxShadow: "0 0 40px -12px oklch(0.510 0.156 278 / 0.18)" } : undefined}
+      >
+        {children}
+      </Card>
+    </motion.div>
+  );
+}
+
+// ── Biggest Issue Helper ────────────────────────────────────────────────────────
+
+const ISSUE_WHY: Record<string, { why: string; next: string }> = {
+  warrant:   { why: "Without a warrant, a judge can't evaluate WHY your claim is true. The argument can be conceded without ever being answered.", next: "Add a 'because' sentence after every claim linking it to the impact." },
+  evidence:  { why: "Unsupported claims are vulnerable to evidence comparison turns. A flow judge may not evaluate them.", next: "Cite your source, then explain what it proves and why it matters." },
+  impact:    { why: "Without a clear impact, you give the judge nothing to weigh. Even strong claims can be lost if they don't cash out a real harm.", next: "State who is affected, how severely, and on what timeframe." },
+  weighing:  { why: "Judges need explicit impact comparison to vote for your side — they won't weigh for you.", next: "Directly compare magnitude, probability, or timeframe against their impact." },
+  drop:      { why: "A conceded argument is a conceded ballot story. Judges are often told 'drop = true.'", next: "Extend dropped arguments in every subsequent speech with full warrant and impact." },
+  extension: { why: "Bare extensions don't carry weight. You need to extend the claim, warrant, AND impact.", next: "Always extend: 'Extend [argument] — [warrant] means [impact].'"},
+  clash:     { why: "Without clash, you let the opponent's offense stand. You're debating past each other rather than winning the round.", next: "Directly address opponent claims before presenting your offense." },
+};
+
+function getBiggestIssueContext(priorities: string[]): { why: string; next: string } | null {
+  if (!priorities || priorities.length === 0) return null;
+  const text = priorities[0].toLowerCase();
+  for (const [key, val] of Object.entries(ISSUE_WHY)) {
+    if (text.includes(key)) return val;
+  }
+  return null;
+}
+
+function BiggestIssueCard({
+  priorities,
+  argMap,
+  structuredIssues,
+}: {
+  priorities: string[];
+  argMap?: ArgumentMap | null;
+  structuredIssues?: import("@/types").DebateIssue[];
+}) {
+  // Prefer structured issues (v2+ reports)
+  const topStructuredIssue = structuredIssues?.find((i) => i.severity === "high")
+    ?? structuredIssues?.[0];
+
+  if (!topStructuredIssue && (!priorities || priorities.length === 0)) return null;
+
+  // If we have a structured issue, use it directly
+  if (topStructuredIssue) {
+    const affectedFromStructured = topStructuredIssue.affected_argument_labels.slice(0, 3);
+    const severityColor = topStructuredIssue.severity === "high" ? "danger" : "warn";
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: EASE }}
+        className={`rounded-xl border bg-${severityColor}/5 border-${severityColor}/30`}
+        style={{ boxShadow: topStructuredIssue.severity === "high"
+          ? "0 0 32px -10px oklch(0.640 0.215 25 / 0.15)"
+          : "0 0 28px -10px oklch(0.750 0.155 74 / 0.12)"
+        }}
+      >
+        <div className={`flex items-center justify-between gap-2 border-b border-${severityColor}/15 px-4 py-2.5`}>
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 rounded-full bg-${severityColor} analysis-step-active`} />
+            <p className={`text-eyebrow text-${severityColor}`}>Biggest Round-Losing Issue</p>
+          </div>
+          <span className={`rounded-full border border-${severityColor}/20 bg-${severityColor}/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-${severityColor}`}>
+            {topStructuredIssue.severity} severity
+          </span>
+        </div>
+        <div className="flex flex-col gap-3 px-4 py-4">
+          <p className="text-sm font-semibold leading-snug text-ink">{topStructuredIssue.title}</p>
+
+          {affectedFromStructured.length > 0 && (
+            <div className={`flex flex-col gap-1.5 rounded-lg border border-${severityColor}/15 bg-${severityColor}/4 px-3 py-2.5`}>
+              <p className={`text-eyebrow text-${severityColor}/70`}>Found in your flow</p>
+              {affectedFromStructured.map((label, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className={`h-1 w-1 shrink-0 rounded-full bg-${severityColor}/50`} />
+                  <p className="text-xs text-ink-muted">{label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <p className="text-eyebrow text-ink-faint">Why it costs you rounds</p>
+            <p className="text-sm leading-relaxed text-ink-muted">{topStructuredIssue.why_it_matters}</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-eyebrow text-ink-faint">What to do next</p>
+            <p className="text-sm leading-relaxed text-ink-muted">{topStructuredIssue.recommendation}</p>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Fallback: heuristic from top_3_priorities strings
+  const ctx = getBiggestIssueContext(priorities);
+
+  // Derive flow evidence — find which arguments have matching issues
+  const issueKeyword = (() => {
+    const text = priorities[0].toLowerCase();
+    if (text.includes("warrant")) return "warrant";
+    if (text.includes("evidence") || text.includes("unsupported")) return "evidence";
+    if (text.includes("impact")) return "impact";
+    if (text.includes("weigh")) return "weigh";
+    if (text.includes("drop")) return "drop";
+    if (text.includes("extension") || text.includes("extend")) return "extension";
+    if (text.includes("clash")) return "clash";
+    return null;
+  })();
+
+  const affectedArgs = argMap?.arguments?.filter((a) => {
+    if (issueKeyword === "warrant")   return !a.warrant || a.issues.some((i) => i.toLowerCase().includes("warrant"));
+    if (issueKeyword === "evidence")  return !a.evidence || a.issues.some((i) => i.toLowerCase().includes("evidence") || i.toLowerCase().includes("unsupported"));
+    if (issueKeyword === "impact")    return !a.impact || a.issues.some((i) => i.toLowerCase().includes("impact"));
+    if (issueKeyword === "weigh")     return a.issues.some((i) => i.toLowerCase().includes("weigh"));
+    if (issueKeyword === "drop")      return a.issues.some((i) => i.toLowerCase().includes("drop"));
+    return a.issues.length > 0;
+  }).slice(0, 3) ?? [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: EASE }}
+      className="rounded-xl border border-danger/30 bg-danger/5"
+      style={{ boxShadow: "0 0 32px -10px oklch(0.640 0.215 25 / 0.15)" }}
+    >
+      <div className="flex items-center gap-2 border-b border-danger/15 px-4 py-2.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-danger analysis-step-active" />
+        <p className="text-eyebrow text-danger">Biggest Round-Losing Issue</p>
+      </div>
+      <div className="flex flex-col gap-3 px-4 py-4">
+        <p className="text-sm font-semibold leading-snug text-ink">{priorities[0]}</p>
+
+        {/* Flow evidence — which arguments have this issue */}
+        {affectedArgs.length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-danger/15 bg-danger/4 px-3 py-2.5">
+            <p className="text-eyebrow text-danger/70">Found in your flow</p>
+            {affectedArgs.map((a, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="h-1 w-1 shrink-0 rounded-full bg-danger/50" />
+                <p className="text-xs text-ink-muted">{a.label}</p>
+                <span className="ml-auto capitalize text-[10px] text-danger/70">{a.argument_type}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {ctx && (
+          <>
+            <div className="flex flex-col gap-1">
+              <p className="text-eyebrow text-ink-faint">Why it costs you rounds</p>
+              <p className="text-sm leading-relaxed text-ink-muted">{ctx.why}</p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-eyebrow text-ink-faint">What to do next</p>
+              <p className="text-sm leading-relaxed text-ink-muted">{ctx.next}</p>
+            </div>
+          </>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -300,6 +471,33 @@ function FlowSummary({ argMap }: { argMap: ArgumentMap }) {
       )}
     </div>
   );
+}
+
+// ── Coach annotation sub-components ───────────────────────────────────────────
+
+/**
+ * Renders a CoachMarginNote for the highest-severity structured issue.
+ * Shows nothing if no structured issues exist.
+ */
+function TopIssueCoachNote({ issues }: { issues?: DebateIssue[] }) {
+  const top = getPrimaryIssue(issues);
+  if (!top) return null;
+  const cfg = getCoachNote(top.issue_type);
+  if (!cfg) return null;
+  return <CoachMarginNote type={cfg.type} note={cfg.note} />;
+}
+
+/**
+ * Renders a CoachMarginNote derived from the argument map's most common issue.
+ * Only appears when at least one argument has a flagged issue.
+ * Provides a flow-level annotation above the FlowTable.
+ */
+function FlowCoachNote({ args }: { args: Array<{ issues: string[] }> }) {
+  const issueType = deriveFlowCoachNoteType(args);
+  if (!issueType) return null;
+  const cfg = getCoachNote(issueType);
+  if (!cfg) return null;
+  return <CoachMarginNote type={cfg.type} note={cfg.note} label="Flow note" />;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -398,8 +596,10 @@ export default function SpeechPage() {
 
   const [ratingFeedback, setRatingFeedback] = useState(false);
   const [feedbackRated, setFeedbackRated] = useState(false);
+  const [copyRFD, rfdCopied] = useCopy();
 
-  const [flowViewMode, setFlowViewMode] = useState<"coach" | "technical">("coach");
+  const [flowViewMode, setFlowViewMode] = useState<"coach" | "technical" | "table">("coach");
+  const [judgeViewMode, setJudgeViewMode] = useState<JudgeViewMode>("coach");
 
   const [delOpen,  setDelOpen]  = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -497,9 +697,10 @@ export default function SpeechPage() {
         upsert: true, contentType: recBlob.type || "audio/webm",
       });
       if (se) { setRecState("error"); setRecErr(`Upload failed: ${se.message}`); return; }
+      // Use recSecs (the live timer) as duration_seconds for recordings
       const upd = await apiFetch<Speech>(`/speeches/${speechId}?user_id=${userId}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: path }),
+        body: JSON.stringify({ audio_url: path, duration_seconds: recSecs > 0 ? recSecs : undefined }),
       });
       setSpeech(upd);
       if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; }
@@ -525,18 +726,39 @@ export default function SpeechPage() {
     else setSelFile(f);
   }
 
+  /** Resolve audio duration in seconds from a File by loading it into an HTMLAudioElement. */
+  async function getFileDuration(file: File): Promise<number | null> {
+    return new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(file);
+        const audio = new Audio(url);
+        audio.onloadedmetadata = () => {
+          URL.revokeObjectURL(url);
+          const dur = audio.duration;
+          resolve(Number.isFinite(dur) && dur > 0 ? Math.round(dur) : null);
+        };
+        audio.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        // Safety timeout — don't block upload on slow metadata load
+        setTimeout(() => { URL.revokeObjectURL(url); resolve(null); }, 3000);
+      } catch { resolve(null); }
+    });
+  }
+
   async function uploadFile() {
     if (!selFile || !userId) return;
     setUpErr(""); setUploading(true);
     const ext  = selFile.name.split(".").pop()!.toLowerCase();
     const path = `${userId}/${speechId}/audio.${ext}`;
     try {
+      // Resolve duration before uploading (non-blocking — uses 3s timeout)
+      const durationSeconds = await getFileDuration(selFile);
+
       const sb = createClient();
       const { error: se } = await sb.storage.from("audio").upload(path, selFile, { upsert: true });
       if (se) { setUpErr(`Upload failed: ${se.message}`); return; }
       const upd = await apiFetch<Speech>(`/speeches/${speechId}?user_id=${userId}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: path }),
+        body: JSON.stringify({ audio_url: path, duration_seconds: durationSeconds ?? undefined }),
       });
       setSpeech(upd); setSelFile(null);
 
@@ -927,74 +1149,65 @@ export default function SpeechPage() {
       <AppNav rightSlot={deleteBtn} />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-9"
+          className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-9"
           variants={staggerParent(0.08, 0.05)}
           initial="hidden"
           animate="show"
         >
-          {/* Header */}
-          <motion.div variants={staggerChild} className="flex flex-col gap-2">
+          {/* Header — metadata strip */}
+          <motion.div variants={staggerChild} className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
               <h1 className="text-title text-ink">{speech.title}</h1>
               <StatusBadge status={speech.status} />
             </div>
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0 text-xs text-ink-subtle">
-              <span>{TYPE_LABEL[speech.speech_type] ?? speech.speech_type}</span>
-              {speech.side       && <span className="capitalize">{speech.side}</span>}
-              {speech.judge_type && <span className="capitalize">{speech.judge_type} judge</span>}
-              <span className="text-ink-faint">{date}</span>
+            {/* Metadata chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-subtle">
+                {TYPE_LABEL[speech.speech_type] ?? speech.speech_type}
+              </span>
+              {speech.side && (
+                <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium capitalize text-ink-subtle">
+                  {speech.side}
+                </span>
+              )}
+              {speech.judge_type && (
+                <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium capitalize text-ink-subtle">
+                  {speech.judge_type} judge
+                </span>
+              )}
+              {speech.duration_seconds && speech.duration_seconds > 0 && (
+                <span className="rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-faint">
+                  {Math.floor(speech.duration_seconds / 60)}:{String(speech.duration_seconds % 60).padStart(2, "0")}
+                </span>
+              )}
+              <span className="text-xs text-ink-faint">{date}</span>
             </div>
-            {speech.topic && <p className="text-xs text-ink-faint">{speech.topic}</p>}
+            {speech.topic && (
+              <p className="text-xs leading-relaxed text-ink-faint">
+                <span className="font-medium text-ink-subtle">Resolution:</span> {speech.topic}
+              </p>
+            )}
           </motion.div>
 
-          {/* Stepper */}
-          <motion.div variants={staggerChild}>
-            <WorkflowStepper steps={steps} />
-          </motion.div>
-
-          {/* What to do next — only show when complete */}
-          {isComplete && (
+          {/* Stepper — only show for incomplete sessions */}
+          {!isComplete && (
             <motion.div variants={staggerChild}>
-              <Card className="border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10">
-                <CardContent className="flex flex-col gap-3 px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <span className="h-1 w-1 rounded-full bg-lav" />
-                    <p className="text-eyebrow text-lav">What to do next</p>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {drills.filter((d) => d.status === "assigned").length > 0 ? (
-                      <>
-                        <p className="text-sm font-semibold text-ink">Practice your drills</p>
-                        <p className="text-xs leading-relaxed text-ink-subtle">
-                          You have {drills.filter((d) => d.status === "assigned").length} drill{drills.filter((d) => d.status === "assigned").length > 1 ? "s" : ""} waiting. Complete them to target your weaknesses, then re-record to track improvement.
-                        </p>
-                      </>
-                    ) : drills.length > 0 && drills.every((d) => d.status !== "assigned") ? (
-                      <>
-                        <p className="text-sm font-semibold text-ink">Ready to re-record</p>
-                        <p className="text-xs leading-relaxed text-ink-subtle">
-                          You've practiced all your drills. Start a new attempt to apply what you learned.
-                        </p>
-                        <Button
-                          onClick={startNewAttempt}
-                          size="sm"
-                          className="mt-1 w-fit gap-1.5"
-                        >
-                          <RefreshCw size={11} />
-                          New Attempt
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm font-semibold text-ink">Review your feedback</p>
-                        <p className="text-xs leading-relaxed text-ink-subtle">
-                          Look through your coaching report and flow. When you're ready, start a new attempt.
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <WorkflowStepper steps={steps} />
+            </motion.div>
+          )}
+
+          {/* Verdict Panel — replaces stepper + "What to do next" for complete sessions */}
+          {isComplete && feedback && (
+            <motion.div variants={staggerChild}>
+              <ReportVerdictPanel
+                speech={speech}
+                feedback={feedback}
+                drills={drills}
+                judgeViewMode={judgeViewMode}
+                onJudgeModeChange={setJudgeViewMode}
+                onStartNewAttempt={startNewAttempt}
+                overallScore={getVerifiedOverallScore(feedback)}
+              />
             </motion.div>
           )}
 
@@ -1117,7 +1330,7 @@ export default function SpeechPage() {
               <>
                 {/* Feedback (Coaching Report) */}
                 {feedback && (
-                  <WorkspaceCard key="fb-done">
+                  <WorkspaceCard key="fb-done" glow>
                     <CardContent className="flex flex-col gap-5 px-5 py-5">
                       <StepHeader n={4} title="Coaching Report" done />
 
@@ -1147,17 +1360,29 @@ export default function SpeechPage() {
                         <ScoreCard score={getVerifiedOverallScore(feedback)} summary={feedback.summary} />
                       </div>
 
+                      {/* Biggest Round-Losing Issue */}
+                      {(feedback.raw_feedback?.structured_issues?.length || feedback.raw_feedback?.top_3_priorities?.length) ? (
+                        <BiggestIssueCard
+                          priorities={feedback.raw_feedback?.top_3_priorities ?? []}
+                          argMap={argMap}
+                          structuredIssues={feedback.raw_feedback?.structured_issues}
+                        />
+                      ) : null}
+
+                      {/* Coach annotation — below the top structured issue */}
+                      <TopIssueCoachNote issues={feedback.raw_feedback?.structured_issues} />
+
                       {/* Priority Cards - Top 3 Issues */}
                       {feedback.raw_feedback?.top_3_priorities?.length ? (
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center gap-2">
-                            <span className="h-1 w-1 rounded-full bg-danger" />
-                            <p className="text-eyebrow text-ink-subtle">Fix These First</p>
+                            <span className="h-1.5 w-1.5 rounded-full bg-danger" />
+                            <p className="text-eyebrow text-ink-subtle">Round-Losing Issues</p>
                           </div>
-                          <div className="grid grid-cols-1 gap-3">
+                          <div className="grid grid-cols-1 gap-2">
                             {feedback.raw_feedback.top_3_priorities.map((p, i) => (
-                              <div key={i} className="flex items-start gap-3 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger text-xs font-bold text-white">
+                              <div key={i} className="flex items-start gap-3 rounded-xl border border-danger/25 bg-danger/6 px-4 py-3">
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger text-[10px] font-bold text-white mt-0.5">
                                   {i + 1}
                                 </span>
                                 <p className="text-sm leading-relaxed text-ink">{p}</p>
@@ -1167,13 +1392,45 @@ export default function SpeechPage() {
                         </div>
                       ) : null}
 
+                      {/* Strengths & Weaknesses as Cards */}
+                      {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {feedback.strengths.length > 0 && (
+                            <div className="flex flex-col gap-2 rounded-xl border border-ok/20 bg-ok/5 p-4">
+                              <p className="text-sm font-semibold text-ok">✓ What Landed</p>
+                              <ul className="flex flex-col gap-1.5">
+                                {feedback.strengths.map((s, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ok" />
+                                    {s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {feedback.weaknesses.length > 0 && (
+                            <div className="flex flex-col gap-2 rounded-xl border border-warn/25 bg-warn/5 p-4">
+                              <p className="text-sm font-semibold text-warn">⚠ Fix Before Next Round</p>
+                              <ul className="flex flex-col gap-1.5">
+                                {feedback.weaknesses.map((w, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warn" />
+                                    {w}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Judge Ballot */}
                       <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
-                          <span className="h-1 w-1 rounded-full bg-lav" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-lav" />
                           <p className="text-eyebrow text-ink-subtle">Judge Ballot</p>
                         </div>
-                        <div className="rounded-lg border border-hairline bg-surface-2 p-4">
+                        <div className="rounded-xl border border-hairline bg-surface-2 p-4">
                           <ScoreBreakdown
                             scores={feedback.scores}
                             speechType={speech?.speech_type}
@@ -1182,32 +1439,6 @@ export default function SpeechPage() {
                         </div>
                       </div>
 
-                      {/* Strengths & Weaknesses as Cards */}
-                      {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          {feedback.strengths.length > 0 && (
-                            <div className="flex flex-col gap-2 rounded-lg border border-ok/20 bg-ok/5 p-4">
-                              <p className="text-sm font-semibold text-ok">✓ What Worked</p>
-                              <ul className="flex flex-col gap-1.5">
-                                {feedback.strengths.map((s, i) => (
-                                  <li key={i} className="text-sm leading-relaxed text-ink-muted">· {s}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {feedback.weaknesses.length > 0 && (
-                            <div className="flex flex-col gap-2 rounded-lg border border-amber/20 bg-amber/5 p-4">
-                              <p className="text-sm font-semibold text-amber">⚠ Needs Improvement</p>
-                              <ul className="flex flex-col gap-1.5">
-                                {feedback.weaknesses.map((w, i) => (
-                                  <li key={i} className="text-sm leading-relaxed text-ink-muted">· {w}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
                       {/* Coach Diagnosis Cards */}
                       {(feedback.raw_feedback?.dropped_or_undercovered_arguments?.length ||
                         feedback.raw_feedback?.warranting_diagnostics?.length ||
@@ -1215,17 +1446,20 @@ export default function SpeechPage() {
                         feedback.raw_feedback?.evidence_diagnostics?.length) ? (
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center gap-2">
-                            <span className="h-1 w-1 rounded-full bg-ink-subtle" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-ink-subtle" />
                             <p className="text-eyebrow text-ink-subtle">Coach Diagnosis</p>
                           </div>
 
                           {/* Dropped arguments */}
                           {feedback.raw_feedback?.dropped_or_undercovered_arguments && feedback.raw_feedback.dropped_or_undercovered_arguments.length > 0 && (
-                            <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
-                              <p className="text-sm font-semibold text-danger">Dropped / Undercovered</p>
-                              <ul className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-2 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3">
+                              <p className="text-sm font-semibold text-danger">Drops / Undercovered</p>
+                              <ul className="flex flex-col gap-1.5">
                                 {feedback.raw_feedback.dropped_or_undercovered_arguments.map((item, i) => (
-                                  <li key={i} className="text-sm leading-relaxed text-ink-muted">· {item}</li>
+                                  <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-danger/60" />
+                                    {item}
+                                  </li>
                                 ))}
                               </ul>
                             </div>
@@ -1249,9 +1483,22 @@ export default function SpeechPage() {
                         </div>
                       ) : null}
 
+                      {/* Decision Logic (RFD) */}
+                      {feedback.raw_feedback?.decision_logic && (
+                        <div className="flex flex-col gap-2 rounded-xl border border-lav/20 bg-lav/5 px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-lav" />
+                            <p className="text-eyebrow text-lav">Reason For Decision (RFD)</p>
+                          </div>
+                          <p className="text-sm leading-relaxed text-ink-muted">
+                            {feedback.raw_feedback.decision_logic}
+                          </p>
+                        </div>
+                      )}
+
                       {/* Judge Adaptation Notes */}
                       {feedback.raw_feedback?.judge_adaptation_notes && (
-                        <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                        <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-2 px-4 py-3">
                           <p className="text-sm font-semibold text-ink">Judge Adaptation</p>
                           <p className="text-sm leading-relaxed text-ink-muted">
                             {feedback.raw_feedback.judge_adaptation_notes}
@@ -1259,24 +1506,16 @@ export default function SpeechPage() {
                         </div>
                       )}
 
-                      {/* Decision Logic (RFD) */}
-                      {feedback.raw_feedback?.decision_logic && (
-                        <div className="flex flex-col gap-2 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3">
-                          <p className="text-sm font-semibold text-lav">Reason For Decision (RFD)</p>
-                          <p className="text-sm leading-relaxed text-ink-muted">
-                            {feedback.raw_feedback.decision_logic}
-                          </p>
-                        </div>
-                      )}
-
                       {/* Action Checklist */}
                       {feedback.raw_feedback?.recommendations?.length ? (
-                        <div className="flex flex-col gap-3 rounded-lg border border-lav/20 bg-lav/5 p-4">
+                        <div className="flex flex-col gap-3 rounded-xl border border-lav/20 bg-lav/5 p-4">
                           <p className="text-sm font-semibold text-lav">Before You Re-Record</p>
                           <ul className="flex flex-col gap-2">
                             {feedback.raw_feedback.recommendations.map((r, i) => (
                               <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink">
-                                <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-lav/30 bg-surface-1" />
+                                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-lav/30 bg-surface-1 text-[8px] font-bold text-lav/50">
+                                  {i + 1}
+                                </span>
                                 {r}
                               </li>
                             ))}
@@ -1286,7 +1525,7 @@ export default function SpeechPage() {
 
                       {/* Feedback Rating */}
                       {!feedback.helpful_rating && !feedbackRated ? (
-                        <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                        <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-2 px-4 py-3">
                           <p className="text-xs font-medium text-ink-subtle">Was this feedback useful?</p>
                           <div className="flex items-center gap-2">
                             <button
@@ -1308,10 +1547,10 @@ export default function SpeechPage() {
                               Not helpful
                             </button>
                           </div>
-                          <p className="text-xs text-ink-faint">Your rating helps improve RoundLab for students.</p>
+                          <p className="text-xs text-ink-faint">Your rating helps improve RoundLab.</p>
                         </div>
                       ) : (feedback.helpful_rating || feedbackRated) && (
-                        <div className="flex items-center gap-2 rounded-lg border border-ok/20 bg-ok/5 px-4 py-2">
+                        <div className="flex items-center gap-2 rounded-xl border border-ok/20 bg-ok/5 px-4 py-2">
                           <Check size={12} className="text-ok" />
                           <p className="text-xs text-ok">Thanks for the feedback!</p>
                         </div>
@@ -1323,7 +1562,8 @@ export default function SpeechPage() {
                 {/* Recommended Practice / Drills */}
                 {drills.length > 0 ? (
                   <WorkspaceCard key="drills-done">
-                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    {/* id="drills" is the anchor target for ReportVerdictPanel and PracticeLoopCTA #drills hrefs */}
+                    <CardContent id="drills" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
                       <StepHeader
                         n={5}
                         title="Recommended Practice"
@@ -1400,6 +1640,7 @@ export default function SpeechPage() {
                             {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
                           </Badge>
                         } />
+                        <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
 
                         {/* View Mode Toggle */}
                         <div className="flex gap-0.5 rounded-lg border border-hairline bg-surface-2 p-0.5">
@@ -1471,7 +1712,7 @@ export default function SpeechPage() {
                           animate="show"
                         >
                           {argMap.arguments.map((a, i) => (
-                            <ArgumentCard key={i} arg={a} index={i} viewMode={flowViewMode} />
+                            <ArgumentCard key={i} arg={a} index={i} viewMode={flowViewMode as "coach" | "technical"} />
                           ))}
                         </motion.div>
                       )}
@@ -1585,26 +1826,19 @@ export default function SpeechPage() {
 
                           {/* View Mode Toggle */}
                           <div className="flex gap-0.5 rounded-lg border border-hairline bg-surface-2 p-0.5">
-                            <button
-                              onClick={() => setFlowViewMode("coach")}
-                              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                                flowViewMode === "coach"
-                                  ? "bg-lav text-white"
-                                  : "text-ink-subtle hover:text-ink"
-                              }`}
-                            >
-                              Coach View
-                            </button>
-                            <button
-                              onClick={() => setFlowViewMode("technical")}
-                              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                                flowViewMode === "technical"
-                                  ? "bg-lav text-white"
-                                  : "text-ink-subtle hover:text-ink"
-                              }`}
-                            >
-                              Technical
-                            </button>
+                            {(["coach", "technical", "table"] as const).map((m) => (
+                              <button
+                                key={m}
+                                onClick={() => setFlowViewMode(m)}
+                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                  flowViewMode === m
+                                    ? "bg-lav text-white"
+                                    : "text-ink-subtle hover:text-ink"
+                                }`}
+                              >
+                                {m === "coach" ? "Coach" : m === "technical" ? "Technical" : "Table"}
+                              </button>
+                            ))}
                           </div>
                         </div>
 
@@ -1644,7 +1878,12 @@ export default function SpeechPage() {
                         </div>
 
                         {argMap.arguments.length === 0 ? (
-                          <p className="text-sm text-ink-faint">No arguments extracted.</p>
+                          <p className="py-4 text-center text-sm text-ink-faint">No arguments extracted.</p>
+                        ) : flowViewMode === "table" ? (
+                          <>
+                            <FlowCoachNote args={argMap.arguments} />
+                            <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
+                          </>
                         ) : (
                           <motion.div
                             className="grid grid-cols-1 gap-3 md:grid-cols-2"
@@ -1653,7 +1892,7 @@ export default function SpeechPage() {
                             animate="show"
                           >
                             {argMap.arguments.map((a, i) => (
-                              <ArgumentCard key={i} arg={a} index={i} viewMode={flowViewMode} />
+                              <ArgumentCard key={i} arg={a} index={i} viewMode={flowViewMode as "coach" | "technical"} />
                             ))}
                           </motion.div>
                         )}
@@ -1690,7 +1929,7 @@ export default function SpeechPage() {
                       <LoadingCard title="Analyzing your speech" messages={MSG_FEEDBACK} />
                     </motion.div>
                   ) : (
-                    <WorkspaceCard key="fb-done">
+                    <WorkspaceCard key="fb-done" glow>
                       <CardContent className="flex flex-col gap-5 px-5 py-5">
                         <StepHeader n={4} title="Coaching Report" done />
 
@@ -1724,13 +1963,13 @@ export default function SpeechPage() {
                         {feedback.raw_feedback?.top_3_priorities?.length ? (
                           <div className="flex flex-col gap-3">
                             <div className="flex items-center gap-2">
-                              <span className="h-1 w-1 rounded-full bg-danger" />
-                              <p className="text-eyebrow text-ink-subtle">Fix These First</p>
+                              <span className="h-1.5 w-1.5 rounded-full bg-danger" />
+                              <p className="text-eyebrow text-ink-subtle">Round-Losing Issues</p>
                             </div>
-                            <div className="grid grid-cols-1 gap-3">
+                            <div className="grid grid-cols-1 gap-2">
                               {feedback.raw_feedback.top_3_priorities.map((p, i) => (
-                                <div key={i} className="flex items-start gap-3 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
-                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger text-xs font-bold text-white">
+                                <div key={i} className="flex items-start gap-3 rounded-xl border border-danger/25 bg-danger/6 px-4 py-3">
+                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger text-[10px] font-bold text-white mt-0.5">
                                     {i + 1}
                                   </span>
                                   <p className="text-sm leading-relaxed text-ink">{p}</p>
@@ -1740,13 +1979,48 @@ export default function SpeechPage() {
                           </div>
                         ) : null}
 
+                        {/* Coach annotation — below the top structured issue */}
+                        <TopIssueCoachNote issues={feedback.raw_feedback?.structured_issues} />
+
+                        {/* Strengths & Weaknesses as Cards */}
+                        {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {feedback.strengths.length > 0 && (
+                              <div className="flex flex-col gap-2 rounded-xl border border-ok/20 bg-ok/5 p-4">
+                                <p className="text-sm font-semibold text-ok">✓ What Landed</p>
+                                <ul className="flex flex-col gap-1.5">
+                                  {feedback.strengths.map((s, i) => (
+                                    <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-ok" />
+                                      {s}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {feedback.weaknesses.length > 0 && (
+                              <div className="flex flex-col gap-2 rounded-xl border border-warn/25 bg-warn/5 p-4">
+                                <p className="text-sm font-semibold text-warn">⚠ Fix Before Next Round</p>
+                                <ul className="flex flex-col gap-1.5">
+                                  {feedback.weaknesses.map((w, i) => (
+                                    <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warn" />
+                                      {w}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Judge Ballot */}
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center gap-2">
-                            <span className="h-1 w-1 rounded-full bg-lav" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-lav" />
                             <p className="text-eyebrow text-ink-subtle">Judge Ballot</p>
                           </div>
-                          <div className="rounded-lg border border-hairline bg-surface-2 p-4">
+                          <div className="rounded-xl border border-hairline bg-surface-2 p-4">
                             <ScoreBreakdown
                               scores={feedback.scores}
                               speechType={speech?.speech_type}
@@ -1755,32 +2029,6 @@ export default function SpeechPage() {
                           </div>
                         </div>
 
-                        {/* Strengths & Weaknesses as Cards */}
-                        {(feedback.strengths.length > 0 || feedback.weaknesses.length > 0) && (
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            {feedback.strengths.length > 0 && (
-                              <div className="flex flex-col gap-2 rounded-lg border border-ok/20 bg-ok/5 p-4">
-                                <p className="text-sm font-semibold text-ok">✓ What Worked</p>
-                                <ul className="flex flex-col gap-1.5">
-                                  {feedback.strengths.map((s, i) => (
-                                    <li key={i} className="text-sm leading-relaxed text-ink-muted">· {s}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {feedback.weaknesses.length > 0 && (
-                              <div className="flex flex-col gap-2 rounded-lg border border-amber/20 bg-amber/5 p-4">
-                                <p className="text-sm font-semibold text-amber">⚠ Needs Improvement</p>
-                                <ul className="flex flex-col gap-1.5">
-                                  {feedback.weaknesses.map((w, i) => (
-                                    <li key={i} className="text-sm leading-relaxed text-ink-muted">· {w}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
                         {/* Coach Diagnosis Cards */}
                         {(feedback.raw_feedback?.dropped_or_undercovered_arguments?.length ||
                           feedback.raw_feedback?.warranting_diagnostics?.length ||
@@ -1788,17 +2036,19 @@ export default function SpeechPage() {
                           feedback.raw_feedback?.evidence_diagnostics?.length) ? (
                           <div className="flex flex-col gap-3">
                             <div className="flex items-center gap-2">
-                              <span className="h-1 w-1 rounded-full bg-ink-subtle" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-ink-subtle" />
                               <p className="text-eyebrow text-ink-subtle">Coach Diagnosis</p>
                             </div>
 
-                            {/* Dropped arguments */}
                             {feedback.raw_feedback?.dropped_or_undercovered_arguments && feedback.raw_feedback.dropped_or_undercovered_arguments.length > 0 && (
-                              <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
-                                <p className="text-sm font-semibold text-danger">Dropped / Undercovered</p>
-                                <ul className="flex flex-col gap-1">
+                              <div className="flex flex-col gap-2 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3">
+                                <p className="text-sm font-semibold text-danger">Drops / Undercovered</p>
+                                <ul className="flex flex-col gap-1.5">
                                   {feedback.raw_feedback.dropped_or_undercovered_arguments.map((item, i) => (
-                                    <li key={i} className="text-sm leading-relaxed text-ink-muted">· {item}</li>
+                                    <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-danger/60" />
+                                      {item}
+                                    </li>
                                   ))}
                                 </ul>
                               </div>
@@ -1822,9 +2072,33 @@ export default function SpeechPage() {
                           </div>
                         ) : null}
 
+                        {/* Decision Logic (RFD) */}
+                        {feedback.raw_feedback?.decision_logic && (
+                          <div className="flex flex-col gap-2 rounded-xl border border-lav/20 bg-lav/5 px-4 py-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="h-1.5 w-1.5 rounded-full bg-lav" />
+                                <p className="text-eyebrow text-lav">Reason For Decision (RFD)</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyRFD(feedback.raw_feedback?.decision_logic ?? "")}
+                                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-lav/10 hover:text-lav"
+                                title="Copy RFD"
+                              >
+                                {rfdCopied ? <Check size={10} className="text-ok" /> : <Copy size={10} />}
+                                {rfdCopied ? "Copied" : "Copy"}
+                              </button>
+                            </div>
+                            <p className="text-sm leading-relaxed text-ink-muted">
+                              {feedback.raw_feedback.decision_logic}
+                            </p>
+                          </div>
+                        )}
+
                         {/* Judge Adaptation Notes */}
                         {feedback.raw_feedback?.judge_adaptation_notes && (
-                          <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                          <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-2 px-4 py-3">
                             <p className="text-sm font-semibold text-ink">Judge Adaptation</p>
                             <p className="text-sm leading-relaxed text-ink-muted">
                               {feedback.raw_feedback.judge_adaptation_notes}
@@ -1832,24 +2106,16 @@ export default function SpeechPage() {
                           </div>
                         )}
 
-                        {/* Decision Logic (RFD) */}
-                        {feedback.raw_feedback?.decision_logic && (
-                          <div className="flex flex-col gap-2 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3">
-                            <p className="text-sm font-semibold text-lav">Reason For Decision (RFD)</p>
-                            <p className="text-sm leading-relaxed text-ink-muted">
-                              {feedback.raw_feedback.decision_logic}
-                            </p>
-                          </div>
-                        )}
-
                         {/* Action Checklist */}
                         {feedback.raw_feedback?.recommendations?.length ? (
-                          <div className="flex flex-col gap-3 rounded-lg border border-lav/20 bg-lav/5 p-4">
+                          <div className="flex flex-col gap-3 rounded-xl border border-lav/20 bg-lav/5 p-4">
                             <p className="text-sm font-semibold text-lav">Before You Re-Record</p>
                             <ul className="flex flex-col gap-2">
                               {feedback.raw_feedback.recommendations.map((r, i) => (
                                 <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-ink">
-                                  <span className="mt-0.5 h-4 w-4 shrink-0 rounded border border-lav/30 bg-surface-1" />
+                                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-lav/30 bg-surface-1 text-[8px] font-bold text-lav/50">
+                                    {i + 1}
+                                  </span>
                                   {r}
                                 </li>
                               ))}
@@ -1859,7 +2125,7 @@ export default function SpeechPage() {
 
                         {/* Feedback Rating */}
                         {!feedback.helpful_rating && !feedbackRated ? (
-                          <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-4 py-3">
+                          <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-2 px-4 py-3">
                             <p className="text-xs font-medium text-ink-subtle">Was this feedback useful?</p>
                             <div className="flex items-center gap-2">
                               <button
@@ -1881,10 +2147,10 @@ export default function SpeechPage() {
                                 Not helpful
                               </button>
                             </div>
-                            <p className="text-xs text-ink-faint">Your rating helps improve RoundLab for students.</p>
+                            <p className="text-xs text-ink-faint">Your rating helps improve RoundLab.</p>
                           </div>
                         ) : (feedback.helpful_rating || feedbackRated) && (
-                          <div className="flex items-center gap-2 rounded-lg border border-ok/20 bg-ok/5 px-4 py-2">
+                          <div className="flex items-center gap-2 rounded-xl border border-ok/20 bg-ok/5 px-4 py-2">
                             <Check size={12} className="text-ok" />
                             <p className="text-xs text-ok">Thanks for the feedback!</p>
                           </div>
@@ -1989,6 +2255,18 @@ export default function SpeechPage() {
             )}
 
           </AnimatePresence>
+
+          {/* Practice Loop CTA — always visible after report is complete */}
+          <PracticeLoopCTA
+            drills={drills}
+            speechId={speechId}
+            isComplete={isComplete}
+            hasFeedback={!!feedback}
+            onGenerateDrills={generateDrills}
+            generatingDrills={genDrills}
+            onStartNewAttempt={startNewAttempt}
+          />
+
         </motion.div>
       </main>
 

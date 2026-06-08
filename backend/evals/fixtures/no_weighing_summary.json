@@ -1,0 +1,44 @@
+{
+  "id": "no_weighing_summary",
+  "title": "Summary That Extends Without Weighing",
+  "event_type": "Public Forum",
+  "speech_type": "summary",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "In this summary speech, we collapse the round to two clear voting issues for the affirmative.\n\nVoting Issue One: Fiscal burden. Extend our Contention One. The RAND Corporation evidence from our 1AC demonstrating 45 billion dollars in annual basing costs was never meaningfully contested by the negative. My opponents offered a general defense of deterrence value but never answered the opportunity cost mechanism — the argument that this money cannot simultaneously be invested in domestic defense modernization. This argument stands as dropped offense. The impact is erosion of American deterrence capacity over the next generation. Extend this through.\n\nVoting Issue Two: Escalation risk. Extend our Contention Two. The Carnegie Endowment data showing a 34 percent spike in provocations after joint exercises was not touched by our opponents. The deterrence instability warrant explaining the mechanism of first-mover rationality under threat remains standing. The impact — elevated risk of miscalculation leading to conventional conflict — flows entirely to the affirmative.\n\nFor these reasons, we urge an affirmative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "no_weighing",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "weighing"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Fiscal burden argument extended",
+      "example_warrant": "Opportunity cost mechanism — dropped by opponents",
+      "example_evidence": "RAND Corporation",
+      "example_impact": "Erosion of deterrence capacity"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Escalation risk extended",
+      "example_warrant": "Deterrence instability — first-mover rationality",
+      "example_evidence": "Carnegie Endowment, 34% spike",
+      "example_impact": "Risk of conventional miscalculation"
+    }
+  ],
+  "expected_drill_types": ["weighing", "collapse"],
+  "notes": "Both contentions are cleanly extended with warrants and evidence. But there is zero impact comparison between the two affirmative voting issues, and no comparison against whatever the negative ran. No magnitude, probability, or timeframe analysis. A flow judge would grant both args but have no framework for choosing between them if the negative contested even one."
+}

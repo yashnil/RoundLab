@@ -1,0 +1,306 @@
+{
+  "run_id": "20260608_071418_d99195",
+  "timestamp": "2026-06-08T07:14:18.410821+00:00",
+  "mock_mode": true,
+  "total_fixtures": 12,
+  "passed": 12,
+  "failed": 0,
+  "avg_issue_precision": 1.0,
+  "avg_issue_recall": 1.0,
+  "avg_issue_f1": 1.0,
+  "avg_argument_coverage": 1.0,
+  "avg_drill_relevance": 1.0,
+  "total_hallucinated_evidence": 0,
+  "samples": [
+    {
+      "fixture_id": "dropped_argument_rebuttal",
+      "fixture_title": "Rebuttal That Drops Opponent Contention 2",
+      "speech_type": "rebuttal",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "dropped_argument"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410556+00:00"
+    },
+    {
+      "fixture_id": "evidence_vague_attribution",
+      "fixture_title": "Constructive With Vague Card Attribution",
+      "speech_type": "constructive",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "weak_evidence"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410609+00:00"
+    },
+    {
+      "fixture_id": "extension_without_warrant",
+      "fixture_title": "Summary That Extends Without Re-Establishing Warrants",
+      "speech_type": "summary",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 2,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "weak_extension",
+        "no_weighing"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410639+00:00"
+    },
+    {
+      "fixture_id": "good_constructive",
+      "fixture_title": "Strong 1AC \u2014 Economic Burden & Escalation Case",
+      "speech_type": "constructive",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410663+00:00"
+    },
+    {
+      "fixture_id": "missing_warrant_constructive",
+      "fixture_title": "Weak 1AC \u2014 Claims Without Mechanisms",
+      "speech_type": "constructive",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 3,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "missing_warrant",
+        "weak_evidence",
+        "unclear_impact"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410678+00:00"
+    },
+    {
+      "fixture_id": "new_argument_final_focus",
+      "fixture_title": "Final Focus With New Evidence",
+      "speech_type": "final_focus",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "new_argument"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410699+00:00"
+    },
+    {
+      "fixture_id": "no_clash_rebuttal",
+      "fixture_title": "Rebuttal That Only Restates Own Case",
+      "speech_type": "rebuttal",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 2,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "no_clash",
+        "dropped_argument"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410717+00:00"
+    },
+    {
+      "fixture_id": "no_weighing_final_focus",
+      "fixture_title": "Final Focus That Extends Impacts Without Comparing Them",
+      "speech_type": "final_focus",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "no_weighing"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410735+00:00"
+    },
+    {
+      "fixture_id": "no_weighing_summary",
+      "fixture_title": "Summary That Extends Without Weighing",
+      "speech_type": "summary",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "no_weighing"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410751+00:00"
+    },
+    {
+      "fixture_id": "strong_delivery_weak_logic",
+      "fixture_title": "Confident Delivery With Circular Arguments",
+      "speech_type": "constructive",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 3,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "missing_warrant",
+        "weak_evidence",
+        "unclear_impact"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410767+00:00"
+    },
+    {
+      "fixture_id": "strong_weighing_good_summary",
+      "fixture_title": "Strong Summary With Explicit Impact Weighing",
+      "speech_type": "summary",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410788+00:00"
+    },
+    {
+      "fixture_id": "weak_evidence_constructive",
+      "fixture_title": "1AC With Vague Evidence Citations",
+      "speech_type": "constructive",
+      "mock_mode": true,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "weak_evidence"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:14:18.410801+00:00"
+    }
+  ]
+}

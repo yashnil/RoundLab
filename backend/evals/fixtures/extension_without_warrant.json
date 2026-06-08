@@ -1,0 +1,50 @@
+{
+  "id": "extension_without_warrant",
+  "title": "Summary That Extends Without Re-Establishing Warrants",
+  "event_type": "Public Forum",
+  "speech_type": "summary",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "The affirmative is winning this round clearly. We collapse to two voting issues.\n\nFirst, extend our Contention One on fiscal burden. This argument was never answered by the negative. Extend it through. The impact is erosion of American deterrence capacity. Vote affirmative on this.\n\nSecond, extend our Contention Two on escalation risk. The negative never refuted the Carnegie Endowment evidence. This argument also stands. The impact is elevated risk of conventional miscalculation. This is a war impact.\n\nBoth of our contentions are standing, both of our impacts are clean, and the negative has given you no reason to vote for them. We urge an affirmative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "weak_extension",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "extensions"
+    },
+    {
+      "issue_type": "no_weighing",
+      "severity": "high",
+      "required": false,
+      "expected_drill_type": "weighing"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Fiscal burden argument extends through",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Erosion of American deterrence capacity"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Escalation risk argument extends through",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Elevated risk of conventional miscalculation"
+    }
+  ],
+  "expected_drill_types": ["extensions", "weighing"],
+  "notes": "Speaker claims both contentions are uncontested and extends them, but never re-establishes why the arguments are true (no warrant re-explanation), never explains what the negative said, and never weighs the two impacts against each other. Classic novice summary: 'extend C1, extend C2, vote aff' with zero depth."
+}

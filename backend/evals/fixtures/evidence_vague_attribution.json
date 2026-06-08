@@ -1,0 +1,44 @@
+{
+  "id": "evidence_vague_attribution",
+  "title": "Constructive With Vague Card Attribution",
+  "event_type": "Public Forum",
+  "speech_type": "constructive",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "We affirm: the United States should substantially reduce its military presence in East Asia. We present two contentions.\n\nContention One: Economic inefficiency. A 2021 report from a Washington-based think tank found that forward basing costs exceed the strategic value delivered by a margin of roughly three to one. The same report noted that allied cost-sharing arrangements, while substantial, do not close this efficiency gap. The warrant is resource misallocation: defense dollars spent on basing infrastructure cannot simultaneously modernize the weapons systems that underpin deterrence. The impact is long-run erosion of American hard power.\n\nContention Two: Provocation risk. A recent study from an Asia-Pacific security institute documented a statistically significant correlation between US-ROK joint exercises and elevated Chinese naval provocations in adjacent waters. The mechanism is security dilemma dynamics: when any state perceives its core interests threatened by proximate foreign forces, it recalculates the risk-reward calculus for first-mover actions. The impact is elevated probability of unintended conventional escalation in a densely armed region.\n\nFor these reasons, we urge an affirmative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "weak_evidence",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "evidence"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Basing costs exceed strategic value by 3:1 ratio",
+      "example_warrant": "Resource misallocation — dollars spent on basing cannot modernize weapons systems",
+      "example_evidence": "2021 Washington think tank report (unnamed)",
+      "example_impact": "Long-run erosion of American hard power"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Joint exercises correlate with elevated Chinese provocations",
+      "example_warrant": "Security dilemma dynamics — proximate forces trigger first-mover recalculation",
+      "example_evidence": "Recent study from Asia-Pacific security institute (unnamed)",
+      "example_impact": "Elevated probability of conventional escalation"
+    }
+  ],
+  "expected_drill_types": ["evidence"],
+  "notes": "Speech has clear claim/warrant/impact chains but critically weak evidence: 'a Washington-based think tank' (no name), 'a recent study from an Asia-Pacific security institute' (no name, no date). This is a flow-judge red flag — the evidence cannot be cross-examined or verified. Tests whether the model detects weak_evidence from partial attribution (org type mentioned but not named, year mentioned as 'recent' or '2021' without organization)."
+}

@@ -1,0 +1,37 @@
+{
+  "run_id": "20260608_062139_7815bc",
+  "timestamp": "2026-06-08T06:22:16.040350+00:00",
+  "mock_mode": false,
+  "total_fixtures": 1,
+  "passed": 1,
+  "failed": 0,
+  "avg_issue_precision": 1.0,
+  "avg_issue_recall": 1.0,
+  "avg_issue_f1": 1.0,
+  "avg_argument_coverage": 1.0,
+  "avg_drill_relevance": 1.0,
+  "total_hallucinated_evidence": 0,
+  "samples": [
+    {
+      "fixture_id": "evidence_vague_attribution",
+      "fixture_title": "Constructive With Vague Card Attribution",
+      "speech_type": "constructive",
+      "mock_mode": false,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 1.0,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "error": null,
+      "timestamp": "2026-06-08T06:21:39.265247+00:00"
+    }
+  ]
+}

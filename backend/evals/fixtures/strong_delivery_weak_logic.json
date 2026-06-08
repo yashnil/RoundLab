@@ -1,0 +1,56 @@
+{
+  "id": "strong_delivery_weak_logic",
+  "title": "Confident Delivery With Circular Arguments",
+  "event_type": "Public Forum",
+  "speech_type": "constructive",
+  "side": "pro",
+  "judge_type": "lay",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "Good afternoon, judges and opponents. The resolution before us today asks a fundamental question about American foreign policy. We passionately affirm: reducing military presence is the right policy for the right reasons at the right time.\n\nContention One: Cost and resources. It costs money to have troops overseas. A lot of money. Billions of dollars every single year. This is money we are spending abroad. That means it is money we are not spending at home. When we spend money abroad instead of at home, we have less money at home. The impact is obvious: fewer resources means less ability to address domestic needs. We all agree that spending wisely is better than spending unwisely. Reducing this spending is therefore the wise choice.\n\nContention Two: Stability and risk. Military presence creates military situations. Military situations create risk. Risk leads to instability. Instability is bad. Therefore, reducing military presence reduces military situations, which reduces risk, which improves stability. The impact is a safer world. A safer world is better than a dangerous one. We should prefer policies that make the world safer.\n\nThese impacts clearly outweigh any benefit the negative might claim, because they are about fundamental values: fiscal responsibility and global peace. Vote affirmative.",
+  "expected_issues": [
+    {
+      "issue_type": "missing_warrant",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "warranting"
+    },
+    {
+      "issue_type": "weak_evidence",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "evidence"
+    },
+    {
+      "issue_type": "unclear_impact",
+      "severity": "medium",
+      "required": false,
+      "expected_drill_type": "warranting"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Overseas spending means less money at home",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Fewer domestic resources"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Military presence creates risk",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Safer world"
+    }
+  ],
+  "expected_drill_types": ["warranting", "evidence"],
+  "notes": "Classic novice debate pattern: confident tone, correct debate vocabulary, but arguments are circular syllogisms (A causes B causes C causes D) with no empirical support. C1 is purely tautological — 'money spent abroad is not spent at home'. C2 is a chain of assertions with no causal mechanism. No evidence whatsoever. A lay judge might not notice; a flow or coach judge flags this immediately."
+}

@@ -1,0 +1,44 @@
+{
+  "id": "no_weighing_final_focus",
+  "title": "Final Focus That Extends Impacts Without Comparing Them",
+  "event_type": "Public Forum",
+  "speech_type": "final_focus",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "In this final focus, the affirmative is winning on two clear voting issues.\n\nFirst: fiscal burden. Extend our RAND evidence. The negative never answered our opportunity cost mechanism — that every dollar spent on basing is a dollar not invested in domestic modernization. This argument stands and the impact flows cleanly to us.\n\nSecond: escalation risk. Extend our Carnegie Endowment evidence. The deterrence instability warrant was never refuted. The 34 percent provocation spike after joint exercises is uncontested data. This impact — elevated risk of conventional miscalculation — flows affirmative.\n\nBoth of our contentions are standing, both impacts are clean, and neither was answered by the negative. Vote affirmative.",
+  "expected_issues": [
+    {
+      "issue_type": "no_weighing",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "weighing"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "fiscal",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "RAND opportunity cost mechanism stands uncontested",
+      "example_warrant": "Every dollar spent on basing cannot be invested in domestic modernization",
+      "example_evidence": "RAND Corporation",
+      "example_impact": "Erosion of domestic modernization capacity"
+    },
+    {
+      "label_hint": "escalation",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Carnegie deterrence instability evidence stands uncontested",
+      "example_warrant": "34% provocation spike after joint exercises shows deterrence instability",
+      "example_evidence": "Carnegie Endowment",
+      "example_impact": "Elevated risk of conventional miscalculation"
+    }
+  ],
+  "expected_drill_types": ["weighing"],
+  "notes": "Final focus that extends two contentions cleanly but never compares the two impacts against each other. In a real round, a flow judge needs to know which impact wins if they can only vote for one — the speaker gives them no tool to resolve this. This is the most common final_focus mistake: extend without weighing. Tests no_weighing detection in final_focus context (complement to no_weighing_summary which tests summary context)."
+}

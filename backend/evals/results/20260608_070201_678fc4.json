@@ -1,0 +1,40 @@
+{
+  "run_id": "20260608_070201_678fc4",
+  "timestamp": "2026-06-08T07:02:42.893400+00:00",
+  "mock_mode": false,
+  "total_fixtures": 1,
+  "passed": 1,
+  "failed": 0,
+  "avg_issue_precision": 1.0,
+  "avg_issue_recall": 0.5,
+  "avg_issue_f1": 0.6667,
+  "avg_argument_coverage": 1.0,
+  "avg_drill_relevance": 0.5,
+  "total_hallucinated_evidence": 0,
+  "samples": [
+    {
+      "fixture_id": "no_clash_rebuttal",
+      "fixture_title": "Rebuttal That Only Restates Own Case",
+      "speech_type": "rebuttal",
+      "mock_mode": false,
+      "issue_metrics": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6667,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 1
+      },
+      "argument_coverage": 1.0,
+      "drill_relevance": 0.5,
+      "hallucinated_evidence_count": 0,
+      "required_issues_missed": [],
+      "passed": true,
+      "predicted_issue_types": [
+        "no_clash"
+      ],
+      "error": null,
+      "timestamp": "2026-06-08T07:02:01.487679+00:00"
+    }
+  ]
+}

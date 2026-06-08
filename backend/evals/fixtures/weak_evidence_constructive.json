@@ -1,0 +1,44 @@
+{
+  "id": "weak_evidence_constructive",
+  "title": "1AC With Vague Evidence Citations",
+  "event_type": "Public Forum",
+  "speech_type": "constructive",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "Good afternoon. We affirm the resolution.\n\nContention One: Fiscal unsustainability. Studies have shown that maintaining American military bases in East Asia costs tens of billions of dollars per year. Many experts believe this spending is inefficient relative to the security benefits produced. Some research suggests that the same deterrence effect could be achieved with a smaller footprint at significantly lower cost. The impact is that continued basing at current levels creates long-term fiscal drag on defense modernization priorities.\n\nContention Two: Regional instability. It is widely accepted among scholars that a large foreign military presence in any region tends to provoke the host region's rivals. Various think tank reports indicate that incidents near American bases in East Asia are increasing in frequency. Some analysts argue that over-the-horizon deterrence — maintaining capability without a physical presence — could preserve strategic stability at lower escalation risk. The impact is that the current forward-presence posture may be counterproductively increasing the chance of the very conflict it is meant to deter.\n\nFor these reasons, we urge an affirmative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "weak_evidence",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "evidence"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Basing costs are fiscally unsustainable",
+      "example_warrant": "Same deterrence achievable at lower cost with smaller footprint",
+      "example_evidence": null,
+      "example_impact": "Long-term fiscal drag on defense modernization"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Large foreign presence provokes regional rivals",
+      "example_warrant": "Over-the-horizon deterrence preserves stability at lower risk",
+      "example_evidence": null,
+      "example_impact": "Counterproductively increases conflict risk"
+    }
+  ],
+  "expected_drill_types": ["evidence", "warranting"],
+  "notes": "The warrants have decent logic but every evidence citation is vague: 'studies show', 'experts believe', 'various think tank reports', 'some analysts'. No named sources, no years, no specific findings. A flow judge would not grant these cards."
+}

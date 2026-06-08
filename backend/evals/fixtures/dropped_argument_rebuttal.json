@@ -1,0 +1,44 @@
+{
+  "id": "dropped_argument_rebuttal",
+  "title": "Rebuttal That Drops Opponent Contention 2",
+  "event_type": "Public Forum",
+  "speech_type": "rebuttal",
+  "side": "con",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "My opponents run two contentions: an economic burden argument and an escalation risk argument. Let me address the first.\n\nOn their Contention One, economic burden: The affirmative's RAND evidence grossly understates the economic returns on basing. The Peterson Institute's 2022 report finds that US alliances anchored by forward presence generate trade and investment benefits worth over 250 billion dollars annually to the American economy. The cost of basing is a fraction of this return on alliance investment. Moreover, allied cost-sharing — Japan contributes approximately 8 billion dollars per year to base maintenance — further reduces the net burden. The affirmative's opportunity cost framing ignores these offsetting returns. Cross-apply all of this against their C1. The economic argument flows Negative.\n\nExtend our Contention One: Forward basing provides credible extended deterrence that cannot be replicated by over-the-horizon assets. Harvard Belfer Center scholars, writing in 2022, document that allied confidence in American security guarantees drops sharply when physical presence is reduced, triggering independent nuclear hedging programs. South Korean polling data from the Asan Institute shows 78 percent of respondents support the USFK presence. Extended deterrence requires presence. Extend this impact.",
+  "expected_issues": [
+    {
+      "issue_type": "dropped_argument",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "drops"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "economic",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Basing generates trade benefits exceeding its cost",
+      "example_warrant": "Peterson Institute — alliance trade returns $250B annually",
+      "example_evidence": "Peterson Institute 2022",
+      "example_impact": "Economic argument flows Negative"
+    },
+    {
+      "label_hint": "deterrence",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Forward basing provides credible extended deterrence",
+      "example_warrant": "Over-the-horizon assets reduce allied confidence, trigger nuclear hedging",
+      "example_evidence": "Harvard Belfer Center 2022, Asan Institute polling",
+      "example_impact": "Loss of extended deterrence"
+    }
+  ],
+  "expected_drill_types": ["drops", "line_by_line"],
+  "notes": "The rebuttal thoroughly addresses Affirmative C1 (economic burden) but completely ignores Affirmative C2 (escalation risk / Carnegie Endowment / deterrence instability). The Carnegie evidence and the 34% provocation spike go entirely unanswered. In a flow round, this is a clean drop — the affirmative wins C2 by default."
+}

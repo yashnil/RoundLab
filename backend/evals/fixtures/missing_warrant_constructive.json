@@ -1,0 +1,56 @@
+{
+  "id": "missing_warrant_constructive",
+  "title": "Weak 1AC — Claims Without Mechanisms",
+  "event_type": "Public Forum",
+  "speech_type": "constructive",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "We affirm that the United States should substantially reduce its military presence in East Asia.\n\nContention One: The bases cost too much money. The United States spends a lot of money on military bases in East Asia every year. This is unsustainable. We cannot keep spending this much. The impact is that America will be economically weaker if we continue this policy.\n\nContention Two: The military presence causes tension in the region. Having American soldiers stationed in East Asia makes countries like China angry. When countries get angry, bad things happen. The region does not feel safe with American troops nearby. This could lead to a conflict, which would be very harmful for everyone involved, including the United States.\n\nFor these reasons, we urge an affirmative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "missing_warrant",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "warranting"
+    },
+    {
+      "issue_type": "weak_evidence",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "evidence"
+    },
+    {
+      "issue_type": "unclear_impact",
+      "severity": "medium",
+      "required": false,
+      "expected_drill_type": "warranting"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Military bases are too expensive",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "America becomes economically weaker"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Military presence causes regional tension",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Risk of conflict"
+    }
+  ],
+  "expected_drill_types": ["warranting", "evidence"],
+  "notes": "Both contentions are pure assertions. There are no logical mechanisms explaining WHY costs are problematic or HOW presence causes tension. No source citations anywhere. A flow or coach judge would dismiss these contentions without warrants."
+}

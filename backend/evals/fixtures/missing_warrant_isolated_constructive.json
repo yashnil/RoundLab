@@ -1,0 +1,44 @@
+{
+  "id": "missing_warrant_isolated_constructive",
+  "title": "Constructive With Claims and Impacts But No Causal Mechanism",
+  "event_type": "Public Forum",
+  "speech_type": "constructive",
+  "side": "neg",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "We negate the resolution. The United States should maintain its military presence in East Asia.\n\nContention One: Regional stability. American military bases provide regional stability. Without them, the region will become more dangerous. The impact is increased risk of conflict and instability across East Asia.\n\nContention Two: Alliance credibility. Our alliances depend on forward presence. If we withdraw, our allies will not trust us. The impact is that our alliance system will collapse and America will be isolated.\n\nFor these reasons, we urge a negative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "missing_warrant",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "warranting"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Bases provide stability",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Increased risk of conflict"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Withdrawal harms alliance credibility",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Alliance system collapse"
+    }
+  ],
+  "expected_drill_types": ["warranting"],
+  "notes": "Isolated missing_warrant case. Both contentions assert a claim and state an impact but provide no causal mechanism explaining the connection. No named evidence. Intentionally avoids vague attribution phrases to isolate the missing_warrant signal from weak_evidence."
+}

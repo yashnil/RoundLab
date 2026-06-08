@@ -1,0 +1,50 @@
+{
+  "id": "no_clash_rebuttal",
+  "title": "Rebuttal That Only Restates Own Case",
+  "event_type": "Public Forum",
+  "speech_type": "rebuttal",
+  "side": "con",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "Thank you. The Negative team will now present our rebuttal.\n\nWe stand firmly on our Contention One: American military presence in East Asia is the cornerstone of regional stability. The evidence we presented from the Heritage Foundation demonstrates conclusively that the US alliance system has preserved peace in the Indo-Pacific for over 70 years. This record is unparalleled in modern history. The forward presence is not a burden — it is the foundation of the rules-based international order.\n\nWe also extend our Contention Two on alliance economics. Forward-deployed forces provide rapid-response capability that cannot be replicated by over-the-horizon assets. Our military experts confirm that presence and readiness are inseparable. The economic benefits of alliance-enabled trade, as described in our evidence, far outweigh any operational costs.\n\nOur case is strong, our evidence is clear, and our impacts are decisive. For these reasons, we urge a Negative ballot.",
+  "expected_issues": [
+    {
+      "issue_type": "no_clash",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "clash"
+    },
+    {
+      "issue_type": "dropped_argument",
+      "severity": "high",
+      "required": false,
+      "expected_drill_type": "drops"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "US presence preserves regional stability",
+      "example_warrant": "70-year peace record under US security umbrella",
+      "example_evidence": "Heritage Foundation",
+      "example_impact": "Rules-based international order"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Forward presence provides irreplaceable readiness",
+      "example_warrant": "Presence and readiness are inseparable — OTH cannot replicate",
+      "example_evidence": null,
+      "example_impact": "Alliance economic benefits outweigh costs"
+    }
+  ],
+  "expected_drill_types": ["clash", "line_by_line"],
+  "notes": "This rebuttal re-reads the Negative's own case from the constructive without engaging a single affirmative argument. The RAND Corporation economic evidence, the Carnegie Endowment escalation data, and both affirmative contentions go completely unaddressed. A flow judge grants the entire affirmative case as dropped and votes Affirmative. FIXTURE NOTE: dropped_argument is marked required=false because the transcript never mentions the affirmative case by name, making it impossible for the model to identify which specific arguments were dropped from the transcript alone. The model can detect no_clash (zero engagement) but cannot name the dropped contentions without round context."
+}

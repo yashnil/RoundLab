@@ -1,0 +1,37 @@
+{
+  "id": "good_constructive",
+  "title": "Strong 1AC — Economic Burden & Escalation Case",
+  "event_type": "Public Forum",
+  "speech_type": "constructive",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "Good afternoon. We affirm: the United States federal government should substantially reduce its military presence in East Asia. We provide two contentions.\n\nContention One: Economic burden. The United States spends approximately 45 billion dollars annually to maintain forward-deployed forces across Japan, South Korea, and Guam. Research from the RAND Corporation in 2023 finds that this level of basing expenditure crowds out domestic defense industrial investment, creating structural drag on long-run military readiness. The warrant is opportunity cost: every dollar allocated to foreign basing infrastructure cannot simultaneously strengthen the homeland industrial base that produces advanced weapons systems. The impact is erosion of American deterrence capacity over the 20-year horizon, precisely when great power competition demands sustained industrial investment.\n\nContention Two: Escalation risk. Large forward bases serve as consistent flashpoints for unintended conflict. The Carnegie Endowment for International Peace documented in 2024 that Chinese military provocations, including air and naval incursions, spike by an average of 34 percent in the 30 days following major US-ROK joint exercises. The mechanism is deterrence instability: when an adversary perceives its core security interests threatened by proximate foreign forces, it calculates that first-mover advantage outweighs the costs of restraint. The impact is elevated risk of conventional miscalculation — a war that neither side intends to start.\n\nFor these reasons, we are proud to affirm.",
+  "expected_issues": [],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Military bases create unsustainable economic burden",
+      "example_warrant": "Opportunity cost — basing crowds out domestic industrial investment",
+      "example_evidence": "RAND Corporation 2023",
+      "example_impact": "Erosion of American deterrence capacity over 20-year horizon"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Forward bases are escalation flashpoints",
+      "example_warrant": "Deterrence instability — adversaries calculate first-mover advantage",
+      "example_evidence": "Carnegie Endowment 2024, 34% spike in provocations",
+      "example_impact": "Elevated risk of conventional miscalculation and unintended war"
+    }
+  ],
+  "expected_drill_types": [],
+  "notes": "POSITIVE CONTROL fixture. A well-structured constructive with clear C/W/E/I chains on both contentions: named sources (RAND Corporation 2023, Carnegie Endowment 2024), explicit warrant mechanisms ('the warrant is opportunity cost', 'the mechanism is deterrence instability'), and clearly scoped impacts. Expected issues = [] because returning zero issues IS correct for this speech — in a constructive, impact weighing is a summary/FF concern, not a required component. The model must NOT flag missing_warrant or unclear_impact for this speech. False positives here indicate prompt over-sensitivity. This fixture passes when the model returns 0-1 issues AND no required issues are missed (there are none)."
+}

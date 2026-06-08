@@ -1,0 +1,37 @@
+{
+  "id": "strong_weighing_good_summary",
+  "title": "Strong Summary With Explicit Impact Weighing",
+  "event_type": "Public Forum",
+  "speech_type": "summary",
+  "side": "con",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "We collapse to one decisive voting issue: alliance credibility and extended deterrence.\n\nExtend our Contention One. The Harvard Belfer Center evidence — which the affirmative never answered — establishes that forward presence is the structural foundation of extended deterrence. When the affirmative says 'reduce presence,' the mechanism collapses. The affirmative's C1 response, that cost-sharing offsets basing costs, does not answer our deterrence warrant. The affirmative never touched Belfer. Flow this argument cleanly to the Negative.\n\nNow weigh. The affirmative's fiscal impact is 45 billion dollars annually in savings. Our deterrence impact is the prevention of a nuclear hedging cascade among South Korea and Japan — a risk that Belfer quantifies as a destabilizing proliferation chain. Comparing these: on magnitude, the irreversible proliferation of nuclear weapons in a densely populated region categorically outweighs any fiscal savings. On probability, Asan Institute polling showing 78 percent South Korean support for presence demonstrates that withdrawal triggers immediate hedging behavior — this is not speculative. On timeframe, deterrence collapses faster than fiscal drag becomes decisive. Every weighing metric favors the Negative. Vote Negative.",
+  "expected_issues": [],
+  "expected_argument_components": [
+    {
+      "label_hint": "deterrence",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Forward presence is the structural foundation of extended deterrence",
+      "example_warrant": "Harvard Belfer Center — allied confidence drops when presence is reduced, triggering nuclear hedging",
+      "example_evidence": "Harvard Belfer Center, Asan Institute polling",
+      "example_impact": "Nuclear hedging cascade among South Korea and Japan"
+    },
+    {
+      "label_hint": "weighing",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Proliferation impact outweighs fiscal savings on all three metrics",
+      "example_warrant": "Magnitude: irreversible proliferation outweighs fiscal savings; Probability: 78% polling shows immediate hedging; Timeframe: deterrence collapses faster than fiscal drag",
+      "example_evidence": null,
+      "example_impact": "Negative wins on every weighing metric"
+    }
+  ],
+  "expected_drill_types": [],
+  "notes": "Positive control fixture. A strong summary that does everything right: collapses to one issue, extends with warrant re-explanation, notes what opponent did not answer, and explicitly weighs magnitude/probability/timeframe. Should produce 0-1 issues and no required issues missed. Tests that the model does not over-generate false positives for high-quality speeches."
+}

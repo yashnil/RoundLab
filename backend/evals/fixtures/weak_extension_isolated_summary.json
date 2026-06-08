@@ -1,0 +1,44 @@
+{
+  "id": "weak_extension_isolated_summary",
+  "title": "Summary Extends by Label Only — No Warrant Re-Established",
+  "event_type": "Public Forum",
+  "speech_type": "summary",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "We extend our Contention One. Extend it through. This argument still stands and the negative never answered it. The impact is erosion of American deterrence capacity. Vote affirmative.\n\nWe also extend our Contention Two. Carry through our escalation contention. This argument still applies. The impact is risk of great power war. This is a war impact and it flows affirmative.\n\nBoth of our arguments are clean. The negative dropped both of them. Extend both contentions. Vote affirmative for a safer world.",
+  "expected_issues": [
+    {
+      "issue_type": "weak_extension",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "extensions"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Fiscal burden argument extends",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Erosion of American deterrence capacity"
+    },
+    {
+      "label_hint": "C2",
+      "has_claim": true,
+      "has_warrant": false,
+      "has_evidence": false,
+      "has_impact": true,
+      "example_claim": "Escalation risk argument extends",
+      "example_warrant": "",
+      "example_evidence": null,
+      "example_impact": "Risk of great power war"
+    }
+  ],
+  "expected_drill_types": ["extensions"],
+  "notes": "Isolated weak_extension case. Speaker extends both contentions by label and impact only. Zero warrant re-establishment. Intentionally omits no_weighing language to isolate the extension signal."
+}

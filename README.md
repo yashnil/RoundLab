@@ -415,6 +415,88 @@ This is **not** an AI case writer. It's a **practice partner** that gives you fe
 
 ---
 
+## Evaluation Harness
+
+RoundLab includes a labeled evaluation system to measure whether AI outputs are debate-correct.
+
+### Running evals
+
+```bash
+# From the backend/ directory:
+
+# Fast — no API cost, tests eval machinery only
+python -m evals.run_evals --mock
+
+# Fast — run only 3 fixtures
+python -m evals.run_evals --mock --limit 3
+
+# Real LLM — accurate, uses OpenAI API
+python -m evals.run_evals
+
+# Single fixture by ID
+python -m evals.run_evals --fixture good_constructive
+```
+
+Results are written to `backend/evals/results/latest.json` and a timestamped archive.
+
+### Fixtures
+
+Labeled speech fixtures live in `backend/evals/fixtures/`. Each JSON file contains:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique fixture identifier |
+| `speech_type` | constructive · rebuttal · summary · final_focus |
+| `transcript` | Full speech text (used directly — no audio needed) |
+| `expected_issues` | Ground-truth debate issues with severity and `required` flag |
+| `expected_argument_components` | Expected claim/warrant/evidence/impact components |
+| `expected_drill_types` | Expected skill targets for generated drills |
+| `notes` | Explanation of what this fixture tests |
+
+**Current fixtures (8):**
+
+| ID | Type | Primary issue |
+|----|------|---------------|
+| `good_constructive` | constructive | No explicit impact weighing |
+| `missing_warrant_constructive` | constructive | No logical mechanisms |
+| `weak_evidence_constructive` | constructive | Vague/unnamed sources |
+| `no_weighing_summary` | summary | Extensions without impact comparison |
+| `dropped_argument_rebuttal` | rebuttal | Ignores opponent C2 entirely |
+| `new_argument_final_focus` | final_focus | New evidence in final focus |
+| `no_clash_rebuttal` | rebuttal | Only restates own case |
+| `strong_delivery_weak_logic` | constructive | Circular arguments, no evidence |
+
+### Adding a new fixture
+
+1. Create `backend/evals/fixtures/<your_id>.json`
+2. Follow the `EvalSpeechFixture` schema in `backend/evals/models.py`
+3. Set `required: true` for issues that MUST be detected for the sample to pass
+4. Run `python -m evals.run_evals --mock --fixture <your_id>` to verify the fixture loads
+
+### Metrics
+
+| Metric | Description |
+|--------|-------------|
+| Issue Precision | Fraction of detected issues that were expected |
+| Issue Recall | Fraction of expected issues that were detected |
+| Issue F1 | Harmonic mean of precision and recall |
+| Argument Coverage | Fraction of expected argument components found |
+| Drill Relevance | Fraction of expected skill targets in generated drills |
+| Hallucinated Evidence | Arguments with vague/unnamed source attributions |
+
+A sample passes if: issue F1 ≥ 0.5, argument coverage ≥ 0.5, and all `required` issues are detected.
+
+### Eval dashboard
+
+Visit `/evals` in the running app to see the eval quality dashboard (reads static fixture data).
+To update with latest results, copy `backend/evals/results/latest.json` into `frontend/src/lib/eval_results_fixture.ts`.
+
+### Demo page
+
+Visit `/demo` to see a complete polished RoundLab example using static sample data — no login, no recording required.
+
+---
+
 ## Contributing
 
 Pull requests welcome. For major changes, open an issue first.

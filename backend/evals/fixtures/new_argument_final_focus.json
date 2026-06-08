@@ -1,0 +1,44 @@
+{
+  "id": "new_argument_final_focus",
+  "title": "Final Focus With New Evidence",
+  "event_type": "Public Forum",
+  "speech_type": "final_focus",
+  "side": "con",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "In this final focus, we crystallize the round.\n\nExtend our Contention One on alliance credibility. The affirmative never answered the Harvard Belfer Center evidence establishing that forward presence is the foundation of extended deterrence. This argument stands completely uncontested and provides a decisive voting issue for the Negative.\n\nBut most critically, voters should consider the Taiwan contingency. New evidence from the Center for Strategic and International Studies, published in 2026, uses advanced wargaming simulations to show that a reduction in US forward forces in East Asia would make a Taiwan Strait conflict 60 percent more likely within 18 months of withdrawal. This is a first-strike existential risk — a scale of harm that categorically outweighs any fiscal savings the affirmative could claim. This CSIS evidence closes the round for the Negative: the impact magnitude, probability, and timeframe all favor our side.\n\nVote Negative to prevent great power war.",
+  "expected_issues": [
+    {
+      "issue_type": "new_argument",
+      "severity": "high",
+      "required": true,
+      "expected_drill_type": "extensions"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Alliance credibility requires forward presence",
+      "example_warrant": "Extended deterrence collapses without physical presence",
+      "example_evidence": "Harvard Belfer Center",
+      "example_impact": "Loss of extended deterrence guarantees"
+    },
+    {
+      "label_hint": "Taiwan",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Withdrawal triggers 60% higher Taiwan conflict risk",
+      "example_warrant": "CSIS wargaming simulations — forward presence deters first-strike calculation",
+      "example_evidence": "CSIS 2026",
+      "example_impact": "Great power war in the Taiwan Strait"
+    }
+  ],
+  "expected_drill_types": ["extensions", "weighing"],
+  "notes": "The CSIS 2026 Taiwan contingency evidence and the entire Taiwan framing are introduced for the first time in the final focus. These were not raised in the constructive or rebuttal. Under PF rules, new evidence cannot be introduced in the final focus. The new_argument issue should be flagged at high severity."
+}

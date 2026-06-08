@@ -1,0 +1,33 @@
+{
+  "id": "good_extension_summary",
+  "title": "Strong Summary With Full Warrant Re-Establishment",
+  "event_type": "Public Forum",
+  "speech_type": "summary",
+  "side": "pro",
+  "judge_type": "flow",
+  "topic": "Resolved: The United States federal government should substantially reduce its military presence in East Asia.",
+  "transcript": "We collapse to our Contention One on fiscal burden. Extend our RAND 2023 evidence. The warrant is opportunity cost: the mechanism here is that every dollar allocated to foreign basing cannot simultaneously fund the homeland industrial base. This is because the defense budget is zero-sum. Therefore the impact — erosion of deterrence capacity — flows cleanly to us. The negative never responded to the RAND warrant, which means the internal link stands.\n\nOur impact outweighs on magnitude. Even granting everything the negative team says about alliance credibility, erosion of the homeland industrial base is a larger and more probable harm. A degraded defense industrial base causes long-run deterrence failure that cannot be reversed quickly. The negative's scenario is speculative and dependent on adversary choices. Vote affirmative.",
+  "expected_issues": [
+    {
+      "issue_type": "no_weighing",
+      "severity": "medium",
+      "required": false,
+      "expected_drill_type": "weighing"
+    }
+  ],
+  "expected_argument_components": [
+    {
+      "label_hint": "C1",
+      "has_claim": true,
+      "has_warrant": true,
+      "has_evidence": true,
+      "has_impact": true,
+      "example_claim": "Bases crowd out homeland defense investment",
+      "example_warrant": "Opportunity cost — defense budget is zero-sum",
+      "example_evidence": "RAND 2023",
+      "example_impact": "Erosion of deterrence capacity"
+    }
+  ],
+  "expected_drill_types": ["weighing"],
+  "notes": "Control fixture: summary that properly extends with warrant, mechanism, and internal link re-establishment. The detector should NOT fire weak_extension here. Used to validate precision — no over-detection."
+}

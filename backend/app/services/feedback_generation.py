@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from app.config import settings
 from app.models.feedback_report import FeedbackScores
 from app.services.pf_rubrics import get_rubric, get_score_band, SCORE_BANDS
+from app.services.debate_signal_detection import detect_debate_signals, format_signal_injection
+from app.services.issue_calibrator import calibrate_structured_issues
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,67 @@ class _FeedbackOutput(BaseModel):
     # Structured issues — new field, v2 reports only
     structured_issues: list[DebateIssue] = []
 
+
+_MANDATORY_SCAN: dict[str, str] = {
+    "rebuttal": (
+        "  This is a REBUTTAL speech. Scan the transcript now:\n"
+        "  Does this speech directly address ANY opponent argument? Look for phrases like 'on their C1',\n"
+        "  'their evidence', 'the affirmative argues', 'cross-apply', 'my opponents claim',\n"
+        "  or any direct attack on the other side's arguments.\n"
+        "  → If the speech ONLY extends the team's own contentions without engaging ANY opponent argument:\n"
+        "    add no_clash (HIGH, recommended_drill_type=clash). This is mandatory regardless of\n"
+        "    how well the team's own case is argued.\n"
+        "  → If the speech explicitly names a specific opponent argument and then fails to respond:\n"
+        "    also add dropped_argument (HIGH, recommended_drill_type=drops).\n"
+        "  → These can co-occur. If zero engagement AND a named opponent argument is skipped, add both."
+    ),
+    "final_focus": (
+        "  This is a FINAL FOCUS speech. Run BOTH checks below:\n"
+        "  CHECK A — Search the transcript for the exact phrase 'new evidence from' (case-insensitive).\n"
+        "  If this phrase appears ANYWHERE in the transcript, you MUST add new_argument as an issue:\n"
+        "    issue_type=new_argument, severity=high, recommended_drill_type=extensions.\n"
+        "  Example: if the transcript says 'New evidence from the Center for Strategic and International\n"
+        "  Studies shows X', that is ALWAYS new_argument. This is a PF rules violation — new evidence\n"
+        "  is not permitted in the final focus. Do NOT output no_weighing instead. Do NOT skip this.\n"
+        "  CHECK B — Only if the transcript does NOT contain 'new evidence from':\n"
+        "  Do the contentions being extended share two or more distinct impact claims that are NEVER\n"
+        "  directly compared? If the transcript ALREADY contains 'outweighs', 'categorically outweighs',\n"
+        "  'magnitude, probability, and timeframe', or 'these factors favor', do NOT flag no_weighing.\n"
+        "  If no such comparative language exists, add no_weighing (HIGH, recommended_drill_type=weighing)."
+    ),
+    "summary": (
+        "  This is a SUMMARY speech. IMPORTANT: The quality gate below does NOT override these checks.\n"
+        "  CHECK A — Search the transcript for 'new evidence from'. If found → MUST add new_argument\n"
+        "  (HIGH, recommended_drill_type=extensions). New evidence in summary is a PF rules violation.\n"
+        "  CHECK B — Do the extended contentions have two or more distinct impacts that are NEVER\n"
+        "  compared by magnitude, probability, or timeframe? If the transcript does NOT contain\n"
+        "  'outweighs', 'categorically outweighs', 'magnitude, probability, and timeframe', or\n"
+        "  equivalent comparative language → MUST add no_weighing (HIGH, recommended_drill_type=weighing).\n"
+        "  CHECK C — Does each extended argument re-establish WHY the argument is true and WHY the\n"
+        "  opponent failed to respond? If arguments are extended with only 'extend C1' or 'this stands'\n"
+        "  without re-explaining the warrant or the opponent's failure → MUST add weak_extension\n"
+        "  (HIGH, recommended_drill_type=extensions). Having a named source does not substitute for\n"
+        "  re-establishing the warrant."
+    ),
+    "constructive": (
+        "  This is a CONSTRUCTIVE speech. IMPORTANT: The quality gate below does NOT override these.\n"
+        "  Each issue type below may only be added ONCE, even if multiple contentions have the issue.\n"
+        "  CHECK A — Does ANY contention (across the whole speech) cite evidence with only vague\n"
+        "  attribution? Vague: 'studies show', 'experts say', 'research suggests', 'some analysts',\n"
+        "  OR citing a type of org without its actual name ('a Washington-based think tank').\n"
+        "  If found in ANY contention → add weak_evidence (HIGH) ONCE for the speech.\n"
+        "  CHECK B — Does ANY contention (across the whole speech) state a claim and impact WITHOUT\n"
+        "  a causal mechanism sentence ('the warrant is', 'the mechanism is', 'because X causes Y')?\n"
+        "  If found in ANY contention → add missing_warrant (HIGH) ONCE for the speech.\n"
+        "  Circular reasoning ('X is bad because X is bad') = missing_warrant.\n"
+        "  NOTE: Flag each issue type AT MOST ONCE even if it applies to multiple contentions.\n"
+        "  No no_clash or new_argument checks apply to constructive speeches."
+    ),
+    "crossfire": (
+        "  This is a CROSSFIRE exchange. Check for damaging concessions or strategic weakness.\n"
+        "  Flag no structural violations — no_clash and new_argument do not apply here."
+    ),
+}
 
 _SPEECH_TYPE_GUIDANCE: dict[str, str] = {
     "constructive": (
@@ -211,16 +274,49 @@ Output field instructions:
 - judge_adaptation_notes: 2–3 sentences. Was this speech appropriate for a {judge_type} judge? What specific changes would better adapt it?
 - top_3_priorities: Exactly 3 items. The most important skills to develop before the next round, ordered by priority. Make these {speech_type}-specific (e.g., for constructive: warranting, impact development; for summary: extensions, weighing).
 - recommendations: 3–5 specific practice drills, exercises, or techniques that directly address the top weaknesses. Make these {speech_type}-appropriate.
-- structured_issues: Generate 2–4 structured issues. For each issue:
-  * issue_type: one of missing_warrant | weak_evidence | unclear_impact | no_weighing | dropped_argument | weak_extension | no_clash | new_argument | organization | delivery
-  * severity: low | medium | high (based on how much this would cost them in a real round)
-  * title: short specific title, e.g. "Missing warrant on Contention 2"
-  * explanation: 1-2 sentences — what exactly is wrong, grounded in the speech
+- structured_issues: Follow these steps in order.
+
+  MANDATORY SCAN — REQUIRED BEFORE ANYTHING ELSE:
+{mandatory_scan}
+
+  After the mandatory scan above, apply quality checks:
+
+  QUALITY GATE — Only applies to issues NOT already required by the mandatory scan above.
+  The mandatory scan's MUST findings override this gate.
+  For any remaining weak_evidence, missing_warrant, or unclear_impact candidates:
+  - Do NOT flag weak_evidence if the contention cites a specific named organization or author plus
+    year (e.g., "RAND Corporation 2023", "Carnegie Endowment 2024"). Named + year = verifiable.
+  - Do NOT flag missing_warrant if the contention includes explicit mechanism language
+    ("the warrant is", "the mechanism is", "because X causes Y", "this means that").
+  - Do NOT flag unclear_impact if the contention names a specific harm with identifiable scope
+    (e.g., "erosion of American deterrence capacity", "elevated risk of conventional miscalculation").
+  This gate is a precision filter, not a blanket suppressor. If the mandatory scan found issues,
+  include them. Zero issues is only valid when no mandatory check triggered AND no quality issue exists.
+
+  STEP 3 — REMAINING QUALITY ISSUES (flag only if genuinely present):
+  * weak_evidence: Vague attribution — "studies show", "experts say", "some analysts", "it is widely
+    known", OR citing only a type of org without its name ("a Washington-based think tank").
+    Naming an org type without its actual name is ALWAYS weak_evidence.
+  * missing_warrant: Claim with no causal mechanism. Circular reasoning = missing_warrant.
+  * unclear_impact: Impact too abstract — "bad things happen", "this is harmful".
+  * weak_extension: Argument extended without re-establishing why the opponent failed to answer it.
+  * organization / delivery: Only if structure or delivery directly hurts debate performance.
+
+  issue_type MUST be exactly one of: missing_warrant | weak_evidence | unclear_impact | no_weighing |
+  dropped_argument | weak_extension | no_clash | new_argument | organization | delivery
+  Do not use any other string. Each issue_type may appear AT MOST ONCE in the list.
+  Generate 0–4 issues total. Report only real weaknesses — do not pad.\
+
+  For each issue:
+  * issue_type: one of the valid types listed above
+  * severity: low | medium | high (based on how much this costs them in a real round)
+  * title: short specific title, e.g. "Missing warrant on Contention 2 escalation claim"
+  * explanation: 1-2 sentences — what exactly is wrong, grounded in the speech (quote or closely paraphrase)
   * why_it_matters: 1 sentence — real-round consequence for a {judge_type} judge
   * recommendation: 1 concrete action the debater can take next
   * affected_argument_labels: list of argument labels from the argument map that exhibit this issue (use exact labels from the argument map provided). Empty list if not determinable.
   * recommended_drill_type: one of warranting | weighing | drops | extensions | evidence | clash | judge_adaptation | collapse | line_by_line
-  Order issues by severity (high first). Do not repeat the same issue_type twice.\
+  Order issues by severity (high first).\
 """
 
 
@@ -314,6 +410,10 @@ NOTE: Total these to get overall_score out of 100."""
         )
 
     judge_key = judge_type or ""
+    mandatory_scan = _MANDATORY_SCAN.get(
+        speech_type,
+        "  Check for any clear structural violations appropriate to this speech type.",
+    )
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
         speech_type=speech_type,
         side=side or "unknown",
@@ -329,13 +429,20 @@ NOTE: Total these to get overall_score out of 100."""
         score_bands=score_bands,
         score_mapping=score_mapping,
         do_not_penalize=do_not_penalize,
+        mandatory_scan=mandatory_scan,
     )
     system_prompt += calibration_note
 
     arguments_summary = (
         json.dumps(arguments, indent=2) if arguments else "No argument map available."
     )
-    user_message = f"Transcript:\n\n{text}\n\nArgument map:\n\n{arguments_summary}"
+
+    # ── Hybrid signal detection (pre-LLM) ─────────────────────────────────────
+    signal_report = detect_debate_signals(text, speech_type, side, judge_type)
+    signal_block = format_signal_injection(signal_report)
+
+    signal_section = f"\n\n{signal_block}" if signal_block else ""
+    user_message = f"Transcript:\n\n{text}{signal_section}\n\nArgument map:\n\n{arguments_summary}"
 
     try:
         client = openai.OpenAI(api_key=settings.openai_api_key)
@@ -372,9 +479,15 @@ NOTE: Total these to get overall_score out of 100."""
         logger.error("feedback_generation: structured output returned None")
         raise FeedbackGenerationError("Feedback generation returned no data.")
 
+    # ── Post-LLM calibration ───────────────────────────────────────────────────
+    raw_issue_dicts = [i.model_dump() for i in parsed.structured_issues]
+    calibrated_dicts = calibrate_structured_issues(raw_issue_dicts, signal_report, speech_type)
+    parsed.structured_issues = [DebateIssue(**d) for d in calibrated_dicts]
+
     logger.info(
-        "feedback_generation: success | overall_score=%d speech_id_context=%s",
+        "feedback_generation: success | overall_score=%d issues_raw=%d issues_calibrated=%d",
         parsed.overall_score,
-        speech_type,
+        len(raw_issue_dicts),
+        len(parsed.structured_issues),
     )
     return parsed

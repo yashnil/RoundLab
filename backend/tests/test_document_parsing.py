@@ -14,6 +14,7 @@ import pytest
 from app.services.document_parsing import (
     DocumentParseError,
     _chunk_text,
+    _chunk_by_card_markers,
     _parse_txt,
     TextChunk,
     _MIN_CHUNK_CHARS,
@@ -115,6 +116,49 @@ class TestChunkText:
 
 
 # ── DocumentParseError ─────────────────────────────────────────────────────────
+
+class TestChunkByCardMarkers:
+    _DOC = (
+        "TITLE: Test File\nSome intro text that should be excluded.\n\n"
+        "CARD 1\n\n"
+        "Tag: First Argument\nAuthor: Smith\n\n"
+        "Body of card one with sufficient length to pass the minimum threshold.\n\n"
+        "CARD 2\n\n"
+        "Tag: Second Argument\nAuthor: Jones\n\n"
+        "Body of card two with sufficient length to pass the minimum threshold."
+    )
+
+    def test_produces_two_chunks_for_two_cards(self):
+        chunks = _chunk_by_card_markers(self._DOC)
+        assert len(chunks) == 2
+
+    def test_headings_are_card_labels(self):
+        chunks = _chunk_by_card_markers(self._DOC)
+        assert chunks[0].heading == "CARD 1"
+        assert chunks[1].heading == "CARD 2"
+
+    def test_intro_not_in_any_chunk(self):
+        chunks = _chunk_by_card_markers(self._DOC)
+        for c in chunks:
+            assert "TITLE:" not in c.chunk_text
+            assert "Some intro text" not in c.chunk_text
+
+    def test_chunk_indices_sequential(self):
+        chunks = _chunk_by_card_markers(self._DOC)
+        for i, chunk in enumerate(chunks):
+            assert chunk.chunk_index == i
+
+    def test_card_text_does_not_include_marker(self):
+        chunks = _chunk_by_card_markers(self._DOC)
+        for chunk in chunks:
+            assert "CARD 1" not in chunk.chunk_text
+            assert "CARD 2" not in chunk.chunk_text
+
+    def test_full_pipeline_uses_card_markers(self):
+        chunks = _chunk_text(self._DOC, page_count=None)
+        assert len(chunks) == 2
+        assert all(c.heading and c.heading.startswith("CARD") for c in chunks)
+
 
 class TestDocumentParseError:
     def test_is_exception(self):

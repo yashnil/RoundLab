@@ -113,18 +113,65 @@ def _parse_docx(raw_bytes: bytes) -> tuple[str, Optional[int]]:
 # ── Chunking ───────────────────────────────────────────────────────────────────
 
 _HEADING_RE = re.compile(
-    r"^(?:#{1,4}\s+.+|[A-Z][A-Z0-9\s]{3,60}:|CONTENTION\s+\w+|TAG\s*:.*)",
+    r"^(?:#{1,4}\s+.+|[A-Z][A-Z0-9\s]{3,60}:|CONTENTION\s+\w+)",
     re.MULTILINE,
 )
 
+# Explicit "CARD N" section markers used in structured evidence files.
+# Matches "CARD 1", "Card 2", "CARD 10", etc. on a line by itself.
+_CARD_MARKER_RE = re.compile(r"^\s*(CARD\s+\d+)\s*$", re.MULTILINE | re.IGNORECASE)
+
+
+def _chunk_by_card_markers(full_text: str) -> list[TextChunk]:
+    """Split a document into one chunk per 'CARD N' section.
+
+    Text before the first CARD marker (the document intro/title) is discarded —
+    it is never an evidence card.  Each CARD section becomes one TextChunk with
+    heading = 'CARD N'.
+    """
+    # re.split with a capturing group gives:
+    # [intro, "CARD 1", body1, "CARD 2", body2, ...]
+    parts = re.split(
+        r"^\s*(CARD\s+\d+)\s*$",
+        full_text,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    # parts[0] is the intro (before first CARD) — skip it.
+    # parts[1] = "CARD 1", parts[2] = body1, parts[3] = "CARD 2", parts[4] = body2 …
+    chunks: list[TextChunk] = []
+    i = 1
+    while i + 1 < len(parts):
+        label = parts[i].strip()   # e.g. "CARD 1"
+        body = parts[i + 1].strip()
+        if len(body) >= _MIN_CHUNK_CHARS:
+            chunks.append(TextChunk(
+                chunk_text=body,
+                chunk_index=len(chunks),
+                heading=label,
+                page_number=None,
+            ))
+        i += 2
+    return chunks
+
 
 def _chunk_text(full_text: str, page_count: Optional[int]) -> list[TextChunk]:
-    """Split text into chunks by paragraph, respecting size limits.
+    """Split text into chunks, preferring explicit CARD-marker structure.
 
-    Headings (ALL-CAPS lines, markdown headers, TAG lines) become chunk metadata.
+    If the document contains 'CARD N' section markers, each section becomes one
+    chunk and the preamble is discarded.  Otherwise falls back to paragraph-based
+    chunking with heading detection.
     """
-    # Normalize line endings and split on blank lines
-    paragraphs = re.split(r"\n{2,}", full_text.replace("\r\n", "\n").replace("\r", "\n"))
+    # Normalise line endings first
+    text = full_text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Prefer card-marker splitting for structured evidence files
+    if _CARD_MARKER_RE.search(text):
+        chunks = _chunk_by_card_markers(text)
+        if chunks:  # only if we actually produced card chunks
+            return chunks
+
+    # ── Paragraph-based fallback ───────────────────────────────────────────────
+    paragraphs = re.split(r"\n{2,}", text)
 
     chunks: list[TextChunk] = []
     current_heading: Optional[str] = None
@@ -133,10 +180,10 @@ def _chunk_text(full_text: str, page_count: Optional[int]) -> list[TextChunk]:
 
     def _flush(heading: Optional[str]) -> None:
         nonlocal current_parts, current_len
-        text = "\n\n".join(current_parts).strip()
-        if len(text) >= _MIN_CHUNK_CHARS:
+        body = "\n\n".join(current_parts).strip()
+        if len(body) >= _MIN_CHUNK_CHARS:
             chunks.append(TextChunk(
-                chunk_text=text,
+                chunk_text=body,
                 chunk_index=len(chunks),
                 heading=heading,
                 page_number=None,
@@ -149,14 +196,13 @@ def _chunk_text(full_text: str, page_count: Optional[int]) -> list[TextChunk]:
         if not para:
             continue
 
-        # Detect heading paragraphs
+        # Detect heading paragraphs (but NOT "CARD N" lines — those are handled above)
         if _HEADING_RE.match(para) and len(para) < 150:
             if current_parts:
                 _flush(current_heading)
             current_heading = para
             continue
 
-        # If adding this paragraph would exceed max size, flush first
         if current_len + len(para) > _MAX_CHUNK_CHARS and current_parts:
             _flush(current_heading)
 

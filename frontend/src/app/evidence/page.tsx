@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText, Upload, Search, Trash2, ChevronDown, ChevronUp,
-  AlertCircle, CheckCircle2, Clock, X, BookOpen,
+  AlertCircle, CheckCircle2, X, BookOpen,
 } from "lucide-react";
 import PageShell from "@/components/PageShell";
 import SectionHeader from "@/components/SectionHeader";
@@ -51,49 +51,77 @@ function extFromFilename(name: string): string {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function AttributionBadge({ card }: { card: EvidenceCard }) {
-  if (card.attribution_complete) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-        <CheckCircle2 size={10} /> {card.author} · {card.year}
-      </span>
-    );
-  }
+function AttributionRow({ card }: { card: EvidenceCard }) {
+  const parts: string[] = [];
+  if (card.author) parts.push(card.author);
+  if (card.source) parts.push(card.source);
+  if (card.year) parts.push(String(card.year));
+
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-amber-600">
-      <AlertCircle size={10} />
-      {card.author ?? "author unclear"}{card.year ? ` · ${card.year}` : " · date not found"}
-    </span>
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {parts.length > 0 ? (
+        <span className="text-xs text-ink-subtle">{parts.join(" · ")}</span>
+      ) : null}
+      {card.attribution_complete ? (
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+          <CheckCircle2 size={9} /> Attribution complete
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+          <AlertCircle size={9} />
+          {!card.author && !card.year ? "Missing author & date" :
+           !card.author ? "Missing author" :
+           !card.year ? "Missing date" : "Incomplete"}
+        </span>
+      )}
+    </div>
   );
 }
 
-function CardItem({ card, defaultOpen = false }: { card: EvidenceCard; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function CardItem({ card }: { card: EvidenceCard }) {
+  const [open, setOpen] = useState(false);
+
+  // Use tag as title; fall back to claim_summary truncated, then generic label
+  const title = card.tag && !card.tag.match(/^CARD\s+\d+$/i)
+    ? card.tag
+    : card.claim_summary
+      ? card.claim_summary.slice(0, 80) + (card.claim_summary.length > 80 ? "…" : "")
+      : "Evidence card";
+
   return (
     <div className="rounded-lg border border-hairline bg-surface-2 text-sm">
-      <button
-        className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <div className="flex flex-col gap-0.5 min-w-0">
-          {card.tag && (
-            <span className="truncate text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-              {card.tag}
-            </span>
-          )}
-          <AttributionBadge card={card} />
+      {/* Compact header — always visible */}
+      <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          <p className="text-xs font-semibold text-ink leading-snug">{title}</p>
+          <AttributionRow card={card} />
           {card.claim_summary && (
-            <p className="text-xs text-ink-subtle mt-0.5 line-clamp-2">{card.claim_summary}</p>
+            <p className="text-xs text-ink-subtle leading-relaxed line-clamp-2">
+              {card.claim_summary}
+            </p>
+          )}
+          {/* Card body excerpt — always visible, clamped to 4 lines */}
+          {card.card_text && (
+            <p className={`mt-1 text-xs leading-relaxed text-ink-muted ${open ? "whitespace-pre-wrap" : "line-clamp-4"}`}>
+              {card.card_text}
+            </p>
           )}
         </div>
-        {open ? <ChevronUp size={14} className="shrink-0 mt-1 text-ink-muted" /> : <ChevronDown size={14} className="shrink-0 mt-1 text-ink-muted" />}
-      </button>
-      {open && (
-        <div className="border-t border-hairline px-3 py-2.5">
-          <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{card.card_text}</p>
-          {card.source && (
-            <p className="mt-1.5 text-xs text-ink-subtle">Source: {card.source}</p>
-          )}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="shrink-0 mt-0.5 text-ink-muted hover:text-ink"
+          aria-label={open ? "Collapse" : "Expand"}
+        >
+          {open
+            ? <ChevronUp size={13} />
+            : <ChevronDown size={13} />}
+        </button>
+      </div>
+
+      {/* Expanded: source note */}
+      {open && card.source && (
+        <div className="border-t border-hairline px-3 py-1.5">
+          <p className="text-xs text-ink-subtle">Source: {card.source}</p>
         </div>
       )}
     </div>
@@ -187,13 +215,20 @@ function DocumentCard({
 
         {expanded && cards.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
-            <p className="text-xs text-ink-subtle font-medium">{cards.length} extracted card{cards.length !== 1 ? "s" : ""}</p>
-            {cards.slice(0, 10).map((card) => (
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-ink-subtle">
+                {cards.length} extracted card{cards.length !== 1 ? "s" : ""}
+              </p>
+              {cards.filter(c => !c.attribution_complete).length > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                  <AlertCircle size={10} />
+                  {cards.filter(c => !c.attribution_complete).length} with incomplete attribution
+                </span>
+              )}
+            </div>
+            {cards.map((card) => (
               <CardItem key={card.id} card={card} />
             ))}
-            {cards.length > 10 && (
-              <p className="text-xs text-ink-muted text-center">+{cards.length - 10} more cards</p>
-            )}
           </div>
         )}
         {expanded && cards.length === 0 && (
@@ -206,28 +241,46 @@ function DocumentCard({
 
 function SearchResultCard({ item }: { item: SearchResultItem }) {
   const [open, setOpen] = useState(false);
+  // Show meaningful heading: prefer card tag, then CARD N label, then nothing
+  const topCard = item.cards[0];
+  const displayTitle = (topCard?.tag && !topCard.tag.match(/^CARD\s+\d+$/i))
+    ? topCard.tag
+    : item.chunk.heading ?? null;
+
   return (
     <div className="rounded-xl border border-hairline bg-surface p-3 text-sm">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-ink-subtle truncate">{item.document_filename}</p>
-          {item.chunk.heading && (
-            <p className="text-xs font-semibold text-lav mt-0.5">{item.chunk.heading}</p>
+        <div className="min-w-0 flex-1">
+          {/* Source document */}
+          <p className="text-[10px] font-medium uppercase tracking-wide text-ink-muted truncate">
+            {item.document_filename}
+          </p>
+          {/* Card tag or chunk heading */}
+          {displayTitle && (
+            <p className="text-xs font-semibold text-ink mt-0.5 leading-snug">{displayTitle}</p>
+          )}
+          {/* Attribution metadata from matched card */}
+          {topCard && (
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {topCard.author && <span className="text-xs text-ink-subtle">{topCard.author}</span>}
+              {topCard.source && <span className="text-xs text-ink-subtle">· {topCard.source}</span>}
+              {topCard.year && <span className="text-xs text-ink-subtle">· {topCard.year}</span>}
+            </div>
           )}
         </div>
-        <button onClick={() => setOpen((v) => !v)} className="shrink-0 text-ink-muted hover:text-ink">
-          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        <button onClick={() => setOpen((v) => !v)} className="shrink-0 text-ink-muted hover:text-ink mt-0.5">
+          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </button>
       </div>
-      <p className={`mt-1.5 text-xs leading-relaxed text-ink ${open ? "" : "line-clamp-3"}`}>
-        {item.chunk.chunk_text}
+      {/* Text excerpt */}
+      <p className={`mt-2 text-xs leading-relaxed text-ink-muted ${open ? "whitespace-pre-wrap" : "line-clamp-4"}`}>
+        {topCard?.card_text ?? item.chunk.chunk_text}
       </p>
-      {item.cards.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1.5">
-          {item.cards.map((card) => (
-            <AttributionBadge key={card.id} card={card} />
-          ))}
-        </div>
+      {/* Claim summary when collapsed */}
+      {!open && topCard?.claim_summary && (
+        <p className="mt-1.5 text-xs text-ink-subtle italic line-clamp-1">
+          Supports: {topCard.claim_summary}
+        </p>
       )}
     </div>
   );

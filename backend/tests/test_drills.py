@@ -358,6 +358,12 @@ def test_get_drill_attempts_drill_not_found():
     assert response.status_code == 404
 
 
+def test_get_drill_attempts_missing_user_id_returns_422():
+    """Returns 422 when user_id query param is missing — FastAPI validation."""
+    response = client.get(f"/drills/{DRILL_ID}/attempts")
+    assert response.status_code == 422
+
+
 def test_create_drill_attempt_success():
     """Successfully creates a drill attempt."""
     audio_url = f"{USER_ID}/{SPEECH_ID}/drills/{DRILL_ID}/attempt-1234567890.webm"
@@ -473,3 +479,181 @@ def test_can_access_own_drills():
     assert response.status_code == 200
     data = response.json()
     assert len(data) > 0
+
+
+# ── Scoring service unit tests ────────────────────────────────────────────────
+
+def test_drill_attempt_feedback_schema_valid():
+    """DrillAttemptFeedback validates and exposes all expected fields."""
+    from app.services.drill_attempt_scoring import DrillAttemptFeedback
+
+    fb = DrillAttemptFeedback(
+        score=75,
+        met_success_criteria=True,
+        feedback_summary="Good warranting structure with clear claim-warrant chain.",
+        strengths=["Explicit claim-warrant link", "Named opponent impact"],
+        improvements=["Add probability weighing"],
+        next_instruction="Redo the drill and add a timeframe comparison.",
+        should_retry=False,
+    )
+    assert fb.score == 75
+    assert fb.met_success_criteria is True
+    assert fb.should_retry is False
+    d = fb.model_dump()
+    assert set(d.keys()) == {
+        "score", "met_success_criteria", "feedback_summary",
+        "strengths", "improvements", "next_instruction", "should_retry",
+    }
+
+
+def test_drill_attempt_feedback_should_retry_low_score():
+    """should_retry True when score < 70."""
+    from app.services.drill_attempt_scoring import DrillAttemptFeedback
+
+    fb = DrillAttemptFeedback(
+        score=65, met_success_criteria=True,
+        feedback_summary="Developing.", strengths=[], improvements=["More weighing"],
+        next_instruction="Try again.", should_retry=True,
+    )
+    assert fb.should_retry is True
+
+
+def test_drill_attempt_feedback_should_retry_criteria_not_met():
+    """should_retry True when met_success_criteria is False even at high score."""
+    from app.services.drill_attempt_scoring import DrillAttemptFeedback
+
+    fb = DrillAttemptFeedback(
+        score=72, met_success_criteria=False,
+        feedback_summary="Missing a success criterion.", strengths=["Good delivery"],
+        improvements=["Address all criteria"], next_instruction="Re-record with criteria in mind.",
+        should_retry=True,
+    )
+    assert fb.should_retry is True
+
+
+def test_drill_attempt_feedback_no_retry_when_high_score_and_criteria_met():
+    """should_retry False when score >= 70 and criteria met."""
+    from app.services.drill_attempt_scoring import DrillAttemptFeedback
+
+    fb = DrillAttemptFeedback(
+        score=91, met_success_criteria=True,
+        feedback_summary="Excellent response.", strengths=["Clear weighing", "Explicit impact link"],
+        improvements=[], next_instruction="Move to next drill.",
+        should_retry=False,
+    )
+    assert fb.should_retry is False
+
+
+# ── POST attempt: transcription + scoring integrated ─────────────────────────
+
+FAKE_DRILL_ROW_FULL = {**FAKE_DRILL_ROW, "time_limit_seconds": 60}
+
+FAKE_DRILL_ATTEMPT_SCORED = {
+    **FAKE_DRILL_ATTEMPT,
+    "response": "Our economy impact outweighs by magnitude and probability.",
+    "score": 78,
+    "feedback": {
+        "met_success_criteria": True,
+        "feedback_summary": "Solid explicit weighing with two criteria applied.",
+        "strengths": ["Named both impacts", "Applied magnitude comparison"],
+        "improvements": ["Add timeframe weighing"],
+        "next_instruction": "Add a timeframe comparison in your next rep.",
+        "should_retry": False,
+    },
+}
+
+
+def test_create_attempt_with_transcription_and_scoring():
+    """Attempt is saved with score and feedback when transcription and scoring both succeed."""
+    from app.services.drill_attempt_scoring import DrillAttemptFeedback
+
+    audio_url = FAKE_DRILL_ATTEMPT_SCORED["audio_url"]
+    transcript = "Our economy impact outweighs by magnitude and probability."
+    fake_feedback = DrillAttemptFeedback(
+        score=78, met_success_criteria=True,
+        feedback_summary="Solid explicit weighing with two criteria applied.",
+        strengths=["Named both impacts", "Applied magnitude comparison"],
+        improvements=["Add timeframe weighing"],
+        next_instruction="Add a timeframe comparison in your next rep.",
+        should_retry=False,
+    )
+
+    mock_client = MagicMock()
+    drill_mock = MagicMock()
+    drill_mock.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [FAKE_DRILL_ROW_FULL]
+    insert_mock = MagicMock()
+    insert_mock.insert.return_value.execute.return_value.data = [FAKE_DRILL_ATTEMPT_SCORED]
+    mock_client.table.side_effect = [drill_mock, insert_mock, MagicMock()]
+
+    with (
+        patch("app.api.drills.get_supabase", return_value=mock_client),
+        patch("app.api.drills.transcribe_speech", return_value=(transcript, 10)),
+        patch("app.api.drills.score_drill_attempt", return_value=fake_feedback),
+    ):
+        response = client.post(f"/drills/{DRILL_ID}/attempts?user_id={USER_ID}", json={"audio_url": audio_url})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["score"] == 78
+    assert data["response"] == transcript
+    assert data["feedback"]["met_success_criteria"] is True
+    assert data["feedback"]["should_retry"] is False
+    assert "feedback_summary" in data["feedback"]
+    assert isinstance(data["feedback"]["strengths"], list)
+    assert isinstance(data["feedback"]["improvements"], list)
+
+
+def test_create_attempt_saves_when_transcription_fails():
+    """Attempt is saved with just audio_url when transcription fails — no 500."""
+    from app.services.transcription import StorageDownloadError
+
+    audio_url = FAKE_DRILL_ATTEMPT["audio_url"]
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [FAKE_DRILL_ROW_FULL]
+    mock_client.table.return_value.insert.return_value.execute.return_value.data = [FAKE_DRILL_ATTEMPT]
+
+    with (
+        patch("app.api.drills.get_supabase", return_value=mock_client),
+        patch("app.api.drills.transcribe_speech", side_effect=StorageDownloadError("no audio")),
+    ):
+        response = client.post(f"/drills/{DRILL_ID}/attempts?user_id={USER_ID}", json={"audio_url": audio_url})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["drill_id"] == DRILL_ID
+    assert data["score"] is None
+    assert data["feedback"] is None
+
+
+def test_create_attempt_saves_when_scoring_fails():
+    """Attempt is saved with transcript but no score/feedback when scoring fails — no 500."""
+    from app.services.drill_attempt_scoring import DrillScoringError
+
+    audio_url = FAKE_DRILL_ATTEMPT["audio_url"]
+    attempt_with_transcript = {**FAKE_DRILL_ATTEMPT, "response": "Some transcript text."}
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [FAKE_DRILL_ROW_FULL]
+    mock_client.table.return_value.insert.return_value.execute.return_value.data = [attempt_with_transcript]
+
+    with (
+        patch("app.api.drills.get_supabase", return_value=mock_client),
+        patch("app.api.drills.transcribe_speech", return_value=("Some transcript text.", 3)),
+        patch("app.api.drills.score_drill_attempt", side_effect=DrillScoringError("LLM unavailable")),
+    ):
+        response = client.post(f"/drills/{DRILL_ID}/attempts?user_id={USER_ID}", json={"audio_url": audio_url})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response"] == "Some transcript text."
+    assert data["score"] is None
+    assert data["feedback"] is None
+
+
+def test_old_attempt_null_score_feedback_validates():
+    """DrillAttemptRow with null score and feedback is valid (backward compat)."""
+    from app.models.drill import DrillAttemptRow
+
+    row = DrillAttemptRow(**FAKE_DRILL_ATTEMPT)
+    assert row.score is None
+    assert row.feedback is None
+    assert row.response is None

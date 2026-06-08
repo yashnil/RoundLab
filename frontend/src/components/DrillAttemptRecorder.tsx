@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { DrillAttempt } from "@/types";
 
 type RecordState = "idle" | "requesting" | "recording" | "recorded" | "uploading" | "error";
 
@@ -10,7 +11,7 @@ interface DrillAttemptRecorderProps {
   drillId: string;
   userId: string;
   speechId: string;
-  onAttemptSaved: () => void;
+  onAttemptSaved: (attempt: DrillAttempt) => void;
 }
 
 function formatTime(s: number) {
@@ -119,6 +120,11 @@ export default function DrillAttemptRecorder({
 
   async function saveRec() {
     if (!blob) return;
+    if (blob.size === 0) {
+      setState("error");
+      setError("Recording was empty — please try recording again.");
+      return;
+    }
     setState("uploading");
     const timestamp = Date.now();
     const path = `${userId}/${speechId}/drills/${drillId}/attempt-${timestamp}.${extRef.current}`;
@@ -138,15 +144,18 @@ export default function DrillAttemptRecorder({
         return;
       }
 
-      // 2. Save attempt record via API
+      // 2. Save attempt record via API and capture the created attempt
       const { apiFetch } = await import("@/lib/api");
-      await apiFetch(`/drills/${drillId}/attempts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: path }),
-      });
+      const savedAttempt = await apiFetch<DrillAttempt>(
+        `/drills/${drillId}/attempts?user_id=${encodeURIComponent(userId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audio_url: path }),
+        },
+      );
 
-      // 3. Clean up and notify parent
+      // 3. Clean up and notify parent with the saved attempt
       if (urlRef.current) {
         URL.revokeObjectURL(urlRef.current);
         urlRef.current = null;
@@ -155,7 +164,7 @@ export default function DrillAttemptRecorder({
       setBlob(null);
       setState("idle");
       setSeconds(0);
-      onAttemptSaved();
+      onAttemptSaved(savedAttempt);
     } catch (err: unknown) {
       setState("error");
       setError(err instanceof Error ? err.message : "Upload failed.");
@@ -232,7 +241,8 @@ export default function DrillAttemptRecorder({
         ) : state === "uploading" ? (
           <div className="flex flex-col items-center gap-2 py-4">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-lav border-t-transparent" />
-            <p className="text-xs text-ink-subtle">Saving attempt…</p>
+            <p className="text-xs text-ink-subtle">Saving & analyzing attempt…</p>
+            <p className="text-[10px] text-ink-faint">This may take 15–20 seconds</p>
           </div>
         ) : null}
       </div>

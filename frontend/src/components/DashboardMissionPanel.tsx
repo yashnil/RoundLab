@@ -18,8 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EASE } from "@/lib/motion";
-import type { ProgressSummary, SkillAverages } from "@/types";
-import { deriveLowestSkill } from "@/lib/debateHelpers";
+import type { ProgressSummary, Speech, SkillAverages } from "@/types";
+import { deriveLowestSkill, derivePracticeNextAction } from "@/lib/debateHelpers";
 
 // ── Compact metric cell ────────────────────────────────────────────────────────
 
@@ -120,34 +120,17 @@ export function DashboardMissionPanelSkeleton() {
 
 interface DashboardMissionPanelProps {
   progress: ProgressSummary;
+  latestSpeech?: Speech | null;
 }
 
-export default function DashboardMissionPanel({ progress }: DashboardMissionPanelProps) {
-  // Derive mission state
-  const hasIncompleteDrills = progress.incomplete_drills.length > 0;
+export default function DashboardMissionPanel({ progress, latestSpeech = null }: DashboardMissionPanelProps) {
+  // Derive the canonical next action from the shared helper
+  const action = derivePracticeNextAction(progress, latestSpeech);
+
+  // XP label is cosmetic only — keep simple local derivation
   const isFirstTime = progress.drill_attempts_count === 0;
-
-  const missionTitle = isFirstTime
-    ? "Complete your first drill attempt"
-    : hasIncompleteDrills
-    ? progress.incomplete_drills[0]?.title ?? "Practice your next drill"
-    : progress.feedback_ready_count === 0
-    ? "Generate feedback from a speech"
-    : "Start a new practice session";
-
-  const missionBody = isFirstTime
-    ? "Drill attempts are worth 50 XP — the fastest way to level up."
-    : hasIncompleteDrills
-    ? `${progress.incomplete_drills[0]?.skill_target?.replace(/_/g, " ") ?? "skill"} · ${progress.incomplete_drills[0]?.difficulty ?? ""}`
-    : "Record a speech to get judge-style feedback and personalized drills.";
-
+  const hasIncompleteDrills = progress.incomplete_drills.length > 0;
   const xpLabel = isFirstTime ? "+50 XP" : hasIncompleteDrills ? "+20 XP" : "+10 XP";
-
-  const ctaHref = hasIncompleteDrills
-    ? `/speech/${progress.incomplete_drills[0]?.speech_id}`
-    : "/session";
-
-  const ctaLabel = hasIncompleteDrills ? "Practice Now" : "New Session";
 
   // Focus skill
   const focusSkill = progress.skill_averages
@@ -174,8 +157,8 @@ export default function DashboardMissionPanel({ progress }: DashboardMissionPane
                 {xpLabel}
               </span>
             </div>
-            <p className="text-sm font-semibold leading-snug text-ink">{missionTitle}</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-ink-subtle">{missionBody}</p>
+            <p className="text-sm font-semibold leading-snug text-ink">{action.title}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-subtle">{action.description}</p>
           </div>
         </div>
 
@@ -189,8 +172,8 @@ export default function DashboardMissionPanel({ progress }: DashboardMissionPane
 
         {/* CTA */}
         <Button asChild size="sm" className="gap-1.5">
-          <Link href={ctaHref}>
-            {ctaLabel} <ArrowRight size={12} />
+          <Link href={action.primaryHref}>
+            {action.primaryLabel} <ArrowRight size={12} />
           </Link>
         </Button>
       </div>

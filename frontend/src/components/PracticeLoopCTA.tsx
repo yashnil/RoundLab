@@ -57,8 +57,6 @@ export default function PracticeLoopCTA({
       eyebrow: `${assignedDrills.length} drill${assignedDrills.length > 1 ? "s" : ""} waiting`,
       title: assignedDrills[0]?.title ?? "Start your first drill",
       body: `Targeting: ${assignedDrills[0]?.skill_target?.replace(/_/g, " ") ?? "key weakness"}`,
-      primary: { label: "Start drill", href: null },
-      secondary: { label: "Re-record instead", href: null },
       accentColor: "lav",
     },
     drills_in_progress: {
@@ -68,17 +66,13 @@ export default function PracticeLoopCTA({
       body: assignedDrills[0]
         ? `Next up: ${assignedDrills[0].title}`
         : "Re-record to track your improvement.",
-      primary: null,
-      secondary: null,
       accentColor: "lav",
     },
     all_done: {
       icon: CheckCircle2,
       eyebrow: "All drills complete",
       title: "Ready to re-record and track progress",
-      body: "You've practiced all your drills. Start a new attempt with the same setup to measure improvement.",
-      primary: { label: "Start new attempt", href: null },
-      secondary: { label: "Back to dashboard", href: "/dashboard" },
+      body: "You've practiced all your drills. Start a new session with the same setup to measure improvement.",
       accentColor: "ok",
     },
   }[loopState];
@@ -127,10 +121,14 @@ export default function PracticeLoopCTA({
           {loopState === "drills_ready" && (
             <>
               <Link
-                href={`/speech/${speechId}#drills`}
+                href={
+                  assignedDrills[0]?.id
+                    ? `/drills/${assignedDrills[0].id}`
+                    : `/speech/${speechId}#drills`
+                }
                 className="flex items-center gap-1.5 rounded-md bg-lav px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-lav-hi"
               >
-                Start drill <ArrowRight size={12} />
+                Open drill workspace <ArrowRight size={12} />
               </Link>
               {onStartNewAttempt && (
                 <button
@@ -146,10 +144,14 @@ export default function PracticeLoopCTA({
 
           {loopState === "drills_in_progress" && assignedDrills.length > 0 && (
             <Link
-              href={`/speech/${speechId}#drills`}
+              href={
+                assignedDrills[0]?.id
+                  ? `/drills/${assignedDrills[0].id}`
+                  : `/speech/${speechId}#drills`
+              }
               className="flex items-center gap-1.5 rounded-md bg-lav px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-lav-hi"
             >
-              Next drill <ArrowRight size={12} />
+              Open drill workspace <ArrowRight size={12} />
             </Link>
           )}
 

@@ -311,11 +311,12 @@ export default function ReportVerdictPanel({
               <p className="text-[11px] text-ink-faint leading-relaxed line-clamp-2">
                 {assignedDrills[0]?.title}
               </p>
+              {/* Navigate to focused drill page when id is available; anchor fallback */}
               <Button asChild size="sm" className="w-full gap-1.5">
-                <a href="#drills">
+                <Link href={assignedDrills[0]?.id ? `/drills/${assignedDrills[0].id}` : "#drills"}>
                   <Target size={12} />
                   Start drill
-                </a>
+                </Link>
               </Button>
             </>
           ) : allDone ? (

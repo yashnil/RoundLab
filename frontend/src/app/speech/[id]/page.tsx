@@ -31,6 +31,7 @@ import { fadeUp, staggerParent, staggerChild, T, EASE } from "@/lib/motion";
 import DrillCard from "@/components/DrillCard";
 import FlowTable from "@/components/FlowTable";
 import PracticeLoopCTA from "@/components/PracticeLoopCTA";
+import ImprovementComparisonCard from "@/components/ImprovementComparisonCard";
 import CoachMarginNote from "@/components/CoachMarginNote";
 import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue } from "@/lib/debateHelpers";
 import type { ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
@@ -605,6 +606,9 @@ export default function SpeechPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteErr, setDeleteErr] = useState("");
 
+  // Re-record comparison (fetched best-effort when speech has parent_speech_id)
+  const [comparison, setComparison] = useState<import("@/types").SpeechComparisonResult | null>(null);
+
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
   const stream  = useRef<MediaStream | null>(null);
@@ -631,6 +635,12 @@ export default function SpeechPage() {
         if (!result) return;
         const { s, uid } = result;
         setSpeech(s);
+        // Fetch improvement comparison if this is a re-record (best-effort, non-blocking)
+        if (s.parent_speech_id) {
+          apiFetch<import("@/types").SpeechComparisonResult>(
+            `/speeches/${speechId}/comparison?user_id=${uid}`
+          ).then(setComparison).catch(() => {});
+        }
         // Load all related data in parallel for faster initial page load
         const [txData, argData, fbData, drillData] = await Promise.allSettled([
           apiFetch<Transcript>(`/speeches/${speechId}/transcript?user_id=${uid}`),
@@ -1188,6 +1198,13 @@ export default function SpeechPage() {
               </p>
             )}
           </motion.div>
+
+          {/* Improvement comparison — shown when this is a re-recorded speech */}
+          {comparison?.has_parent && (
+            <motion.div variants={staggerChild}>
+              <ImprovementComparisonCard comparison={comparison} />
+            </motion.div>
+          )}
 
           {/* Stepper — only show for incomplete sessions */}
           {!isComplete && (

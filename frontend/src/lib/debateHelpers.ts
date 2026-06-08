@@ -4,7 +4,7 @@
  * All functions are side-effect-free and depend only on their arguments.
  */
 
-import type { SkillAverages, DebateIssueType, DebateIssue, SpeechStatus } from "@/types";
+import type { SkillAverages, DebateIssueType, DebateIssue, SpeechStatus, ProgressSummary, Speech, FeedbackReport, FeedbackScores, SpeechComparisonResult } from "@/types";
 
 // ── Skill analysis ─────────────────────────────────────────────────────────────
 
@@ -260,4 +260,237 @@ export function priorityToIssueKeyword(text: string): string | null {
   if (t.includes("extension") || t.includes("extend"))       return "extension";
   if (t.includes("clash"))                                    return "clash";
   return null;
+}
+
+// ── Practice next-action helper ────────────────────────────────────────────────
+
+export type PracticeNextActionState =
+  | "start_first_speech"
+  | "open_report"
+  | "wait_for_analysis"
+  | "generate_drills"
+  | "start_drill"
+  | "continue_drill"
+  | "re_record"
+  | "view_improvement";
+
+export interface PracticeNextAction {
+  state: PracticeNextActionState;
+  /** 0-indexed TrainingLoopMap step: 0=Speech, 1=Report, 2=Drill, 3=Re-record, 4=Improvement */
+  loopStep: 0 | 1 | 2 | 3 | 4;
+  title: string;
+  description: string;
+  primaryLabel: string;
+  primaryHref: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+}
+
+/**
+ * Derives the single most-important next action for the student.
+ * Pure function — testable without React.
+ */
+export function derivePracticeNextAction(
+  progress: ProgressSummary | null,
+  latestSpeech: Speech | null,
+): PracticeNextAction {
+  if (!progress || progress.speech_count === 0) {
+    return {
+      state: "start_first_speech",
+      loopStep: 0,
+      title: "Record your first practice speech",
+      description: "Speak for 30–90 seconds. RoundLab builds a flow, generates a judge ballot, and assigns targeted drills.",
+      primaryLabel: "Start practice session",
+      primaryHref: "/session",
+    };
+  }
+
+  if (progress.feedback_ready_count === 0) {
+    const isProcessing =
+      latestSpeech?.status === "transcribing" || latestSpeech?.status === "analyzing";
+    if (isProcessing) {
+      return {
+        state: "wait_for_analysis",
+        loopStep: 1,
+        title: "Analysis in progress",
+        description: "RoundLab is building your flow and judge ballot — usually 30–60 seconds.",
+        primaryLabel: "Open session",
+        primaryHref: latestSpeech ? `/speech/${latestSpeech.id}` : "/dashboard",
+      };
+    }
+    return {
+      state: "open_report",
+      loopStep: 1,
+      title: "Open your speech report",
+      description: "Your flow and judge ballot are ready. Review your arguments and generate targeted drills.",
+      primaryLabel: "Open flow report",
+      primaryHref: latestSpeech ? `/speech/${latestSpeech.id}` : "/dashboard",
+    };
+  }
+
+  if (progress.drills_assigned_count === 0) {
+    return {
+      state: "generate_drills",
+      loopStep: 2,
+      title: "Generate your personalized drills",
+      description: "Open your speech report and click Generate Drills to get 3 targeted exercises.",
+      primaryLabel: "Open flow report",
+      primaryHref: latestSpeech ? `/speech/${latestSpeech.id}` : "/dashboard",
+    };
+  }
+
+  if (progress.incomplete_drills.length > 0) {
+    const next = progress.incomplete_drills[0];
+    const isFirstDrill = progress.drill_attempts_count === 0;
+    return {
+      state: isFirstDrill ? "start_drill" : "continue_drill",
+      loopStep: 2,
+      title: isFirstDrill
+        ? `Start your first drill`
+        : `Continue: ${next.title}`,
+      description: isFirstDrill
+        ? `${next.title} — targeting ${next.skill_target.replace(/_/g, " ")}`
+        : `Targeting ${next.skill_target.replace(/_/g, " ")} · ${next.difficulty}`,
+      primaryLabel: "Open drill workspace",
+      primaryHref: `/drills/${next.id}`,
+      secondaryLabel:
+        progress.incomplete_drills.length > 1
+          ? `+${progress.incomplete_drills.length - 1} more drill${progress.incomplete_drills.length - 1 !== 1 ? "s" : ""} assigned`
+          : undefined,
+      secondaryHref:
+        progress.incomplete_drills.length > 1 && latestSpeech
+          ? `/speech/${latestSpeech.id}#drills`
+          : undefined,
+    };
+  }
+
+  // Check if the latest speech is a deliberate re-record (has parent_speech_id)
+  if (latestSpeech?.parent_speech_id) {
+    if (latestSpeech.status === "transcribing" || latestSpeech.status === "analyzing") {
+      return {
+        state: "wait_for_analysis",
+        loopStep: 3,
+        title: "Re-record is being analyzed",
+        description: "Your new speech is being processed. The improvement comparison will appear when ready.",
+        primaryLabel: "Open session",
+        primaryHref: `/speech/${latestSpeech.id}`,
+      };
+    }
+    if (latestSpeech.status === "done") {
+      return {
+        state: "view_improvement",
+        loopStep: 4,
+        title: "View your improvement comparison",
+        description: "Your re-recorded speech is analyzed. See how your drill work paid off.",
+        primaryLabel: "View improvement report",
+        primaryHref: `/speech/${latestSpeech.id}`,
+      };
+    }
+  }
+
+  if (progress.speech_count < 2) {
+    return {
+      state: "re_record",
+      loopStep: 3,
+      title: "Re-record your speech to track improvement",
+      description: "You've worked through your drills. Record the same speech again to see how your score changes.",
+      primaryLabel: "Start re-record session",
+      primaryHref: "/session",
+      secondaryLabel: "Back to dashboard",
+      secondaryHref: "/dashboard",
+    };
+  }
+
+  return {
+    state: "view_improvement",
+    loopStep: 4,
+    title: "View your improvement",
+    description: "Compare your latest flow report to previous rounds to see skill growth.",
+    primaryLabel: "Open latest report",
+    primaryHref: latestSpeech ? `/speech/${latestSpeech.id}` : "/dashboard",
+  };
+}
+
+// ── Speech comparison helper ───────────────────────────────────────────────────
+
+/** Maps drill skill_target to the feedback_report score dimension it most affects. */
+const SKILL_TO_SCORE_DIM: Partial<Record<string, keyof FeedbackScores>> = {
+  weighing: "weighing",
+  warranting: "clash",
+  drops: "drops",
+  extensions: "extensions",
+  evidence: "drops",
+  clash: "clash",
+  judge_adaptation: "judge_adaptation",
+  collapse: "extensions",
+  line_by_line: "drops",
+};
+
+type PartialFeedback = Pick<FeedbackReport, "overall_score" | "scores" | "weaknesses"> | null;
+
+/**
+ * Computes a deterministic improvement comparison between two feedback reports.
+ * Pure function — no API calls, no side effects.
+ * Used for testing and as a client-side fallback if the backend endpoint is unavailable.
+ */
+export function compareSpeeches(
+  originalFeedback: PartialFeedback,
+  newFeedback: PartialFeedback,
+  drillSkillTarget: string | null,
+): SpeechComparisonResult {
+  const origScore = originalFeedback?.overall_score ?? null;
+  const newScore  = newFeedback?.overall_score ?? null;
+  const overallDelta = origScore !== null && newScore !== null ? newScore - origScore : null;
+
+  const scoreDim = drillSkillTarget ? (SKILL_TO_SCORE_DIM[drillSkillTarget] ?? null) : null;
+  const origSkillScore: number | null = (scoreDim !== null && originalFeedback?.scores != null)
+    ? originalFeedback.scores[scoreDim]
+    : null;
+  const newSkillScore: number | null = (scoreDim !== null && newFeedback?.scores != null)
+    ? newFeedback.scores[scoreDim]
+    : null;
+  const skillDelta = origSkillScore !== null && newSkillScore !== null
+    ? newSkillScore - origSkillScore
+    : null;
+
+  // Build summary
+  const parts: string[] = [];
+  if (overallDelta !== null) {
+    if (overallDelta > 5) parts.push(`Strong improvement — overall score up ${overallDelta} points after the drill.`);
+    else if (overallDelta > 0) parts.push(`Score improved by ${overallDelta} point${overallDelta !== 1 ? "s" : ""} after the drill.`);
+    else if (overallDelta === 0) parts.push("Score held steady — your drill work is consolidating.");
+    else parts.push(`Score dipped by ${Math.abs(overallDelta)} — that can happen while internalizing new technique.`);
+  }
+  if (drillSkillTarget && skillDelta !== null && overallDelta !== null) {
+    const label = drillSkillTarget.replace(/_/g, " ");
+    if (skillDelta > 0) parts.push(`Your ${label} score also improved by ${skillDelta}.`);
+    else if (skillDelta < 0) parts.push(`Your ${label} score slipped — focus there next.`);
+  } else if (drillSkillTarget && skillDelta !== null) {
+    const dir = skillDelta > 0 ? "improved" : skillDelta === 0 ? "held steady" : "dipped";
+    parts.push(`Your ${drillSkillTarget.replace(/_/g, " ")} ${dir} after the drill.`);
+  }
+  const summary = parts.length > 0 ? parts.join(" ") : "Report comparison is ready — compare the two to see what changed.";
+
+  const stillNeedsWork = newFeedback?.weaknesses?.[0] ?? null;
+
+  let nextAction: string;
+  if (overallDelta !== null && overallDelta >= 5) nextAction = "Great progress — consider moving to the next skill drill.";
+  else if (overallDelta !== null && overallDelta > 0) nextAction = "Keep practicing — one more rep of this drill will reinforce the skill.";
+  else nextAction = "Record another drill rep, then re-record the speech to track improvement.";
+
+  return {
+    has_parent: true,
+    parent_speech_id: null,
+    source_drill_id: null,
+    source_drill_skill: drillSkillTarget,
+    original_overall_score: origScore,
+    new_overall_score: newScore,
+    overall_delta: overallDelta,
+    original_skill_score: origSkillScore,
+    new_skill_score: newSkillScore,
+    skill_delta: skillDelta,
+    summary,
+    still_needs_work: stillNeedsWork,
+    next_action: nextAction,
+  };
 }

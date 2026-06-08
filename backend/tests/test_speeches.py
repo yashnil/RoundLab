@@ -270,3 +270,154 @@ def test_can_access_own_speech():
         response = client.get(f"/speeches/{FAKE_ROW['id']}?user_id={FAKE_ROW['user_id']}")
     assert response.status_code == 200
     assert response.json()["id"] == FAKE_ROW["id"]
+
+
+# ── Re-record relationship tests ──────────────────────────────────────────────
+
+PARENT_SPEECH_ID = "pppppppp-0000-0000-0000-000000000001"
+SOURCE_DRILL_ID  = "dddddddd-0000-0000-0000-000000000002"
+
+RERECORD_ROW = {
+    **FAKE_ROW,
+    "id": "rrrrrrrr-0000-0000-0000-000000000099",
+    "title": "Re-record: 1AC Round 1",
+    "parent_speech_id": PARENT_SPEECH_ID,
+    "source_drill_id": SOURCE_DRILL_ID,
+}
+
+FAKE_ORIG_FEEDBACK = {
+    "overall_score": 62,
+    "scores": {"clash": 10, "weighing": 9, "extensions": 14, "drops": 16, "judge_adaptation": 13},
+    "weaknesses": ["Impact weighing not explicit"],
+}
+FAKE_NEW_FEEDBACK = {
+    "overall_score": 70,
+    "scores": {"clash": 10, "weighing": 13, "extensions": 14, "drops": 16, "judge_adaptation": 17},
+    "weaknesses": ["Evidence comparison still thin"],
+}
+
+
+def test_create_speech_with_rerecord_fields():
+    """Creating a speech with parent_speech_id/source_drill_id persists them."""
+    mock_client = MagicMock()
+    mock_client.table.return_value.insert.return_value.execute.return_value.data = [RERECORD_ROW]
+    payload = {
+        **PAYLOAD,
+        "parent_speech_id": PARENT_SPEECH_ID,
+        "source_drill_id": SOURCE_DRILL_ID,
+    }
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.post("/speeches", json=payload)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["parent_speech_id"] == PARENT_SPEECH_ID
+    assert body["source_drill_id"] == SOURCE_DRILL_ID
+
+
+def test_create_speech_without_rerecord_fields():
+    """Creating a speech without re-record fields still works (nulls)."""
+    mock_client = MagicMock()
+    mock_client.table.return_value.insert.return_value.execute.return_value.data = [FAKE_ROW]
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.post("/speeches", json=PAYLOAD)
+    assert response.status_code == 201
+    body = response.json()
+    assert body.get("parent_speech_id") is None
+    assert body.get("source_drill_id") is None
+
+
+def test_comparison_no_parent():
+    """Returns has_parent=False when speech has no parent_speech_id."""
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"parent_speech_id": None, "source_drill_id": None}
+    ]
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.get(f"/speeches/{FAKE_ROW['id']}/comparison?user_id={FAKE_ROW['user_id']}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["has_parent"] is False
+
+
+def test_comparison_not_found():
+    """Returns 404 when speech does not exist."""
+    mock_client = MagicMock()
+    mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.get(f"/speeches/{FAKE_ROW['id']}/comparison?user_id={FAKE_ROW['user_id']}")
+    assert response.status_code == 404
+
+
+def test_comparison_with_scores():
+    """Returns correct deltas when both feedback reports exist."""
+    mock_client = MagicMock()
+
+    # Speech fetch
+    speech_mock = MagicMock()
+    speech_mock.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"parent_speech_id": PARENT_SPEECH_ID, "source_drill_id": SOURCE_DRILL_ID}
+    ]
+
+    # New feedback
+    new_fb_mock = MagicMock()
+    new_fb_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [FAKE_NEW_FEEDBACK]
+
+    # Original feedback
+    orig_fb_mock = MagicMock()
+    orig_fb_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [FAKE_ORIG_FEEDBACK]
+
+    # Source drill
+    drill_mock = MagicMock()
+    drill_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"skill_target": "weighing"}
+    ]
+
+    mock_client.table.side_effect = [speech_mock, new_fb_mock, orig_fb_mock, drill_mock]
+
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.get(f"/speeches/{RERECORD_ROW['id']}/comparison?user_id={FAKE_ROW['user_id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["has_parent"] is True
+    assert body["overall_delta"] == 8    # 70 - 62
+    assert body["skill_delta"] == 4      # 13 - 9 (weighing improved)
+    assert body["source_drill_skill"] == "weighing"
+    assert "improvement" in body["summary"].lower() or "improved" in body["summary"].lower()
+
+
+def test_comparison_missing_feedback_graceful():
+    """Returns has_parent=True with null scores when feedback reports are missing."""
+    mock_client = MagicMock()
+
+    speech_mock = MagicMock()
+    speech_mock.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"parent_speech_id": PARENT_SPEECH_ID, "source_drill_id": None}
+    ]
+
+    # Both feedback reports missing
+    fb_mock = MagicMock()
+    fb_mock.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+
+    mock_client.table.side_effect = [speech_mock, fb_mock, fb_mock, MagicMock()]
+
+    with patch("app.api.speeches.get_supabase", return_value=mock_client):
+        response = client.get(f"/speeches/{FAKE_ROW['id']}/comparison?user_id={FAKE_ROW['user_id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["has_parent"] is True
+    assert body["overall_delta"] is None
+    assert body["skill_delta"] is None
+
+
+def test_comparison_summary_helpers():
+    """Unit-test the comparison summary/next_action builder helpers."""
+    from app.api.speeches import _build_comparison_summary, _derive_next_action
+
+    assert "+8" in _build_comparison_summary(8, "weighing", 4) or "improved" in _build_comparison_summary(8, "weighing", 4).lower()
+    assert "steady" in _build_comparison_summary(0, None, None).lower()
+    assert "dipped" in _build_comparison_summary(-3, None, None).lower()
+    assert "great" in _derive_next_action(8).lower()
+    assert "keep" in _derive_next_action(2).lower()
+    assert "another" in _derive_next_action(-1).lower() or "record" in _derive_next_action(-1).lower()

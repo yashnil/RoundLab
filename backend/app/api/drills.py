@@ -3,8 +3,15 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from app.models.drill import DrillAttemptCreate, DrillAttemptRow, DrillRow, DrillStatusUpdate
+from app.services.drill_attempt_scoring import DrillScoringError, score_drill_attempt
 from app.services.drill_generation import DrillGenerationError, generate_drills
 from app.services.supabase_client import get_supabase
+from app.services.transcription import (
+    AudioTooLargeError,
+    OpenAITranscriptionError,
+    StorageDownloadError,
+    transcribe_speech,
+)
 from app.services.xp_ledger import award_xp
 
 logger = logging.getLogger(__name__)
@@ -216,6 +223,30 @@ async def get_drills(speech_id: str, user_id: str = Query(...)) -> list[DrillRow
         raise HTTPException(status_code=500, detail="Failed to fetch drills") from exc
 
 
+# ── GET /drills/{drill_id} ────────────────────────────────────────────────────
+
+@drills_router.get("/{drill_id}", response_model=DrillRow)
+async def get_drill(drill_id: str, user_id: str = Query(...)) -> DrillRow:
+    """Fetch a single drill by ID with ownership check."""
+    supabase = get_supabase()
+    try:
+        result = (
+            supabase.table("drills")
+            .select("*")
+            .eq("id", drill_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.error("get_drill: fetch failed | %s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Failed to fetch drill") from exc
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Drill not found")
+    return result.data[0]
+
+
 # ── PATCH /drills/{drill_id} ──────────────────────────────────────────────────
 
 @drills_router.patch("/{drill_id}", response_model=DrillRow)
@@ -322,14 +353,14 @@ async def get_drill_attempts(drill_id: str, user_id: str = Query(...)) -> list[D
 
 @drills_router.post("/{drill_id}/attempts", response_model=DrillAttemptRow)
 async def create_drill_attempt(drill_id: str, body: DrillAttemptCreate, user_id: str = Query(...)) -> DrillAttemptRow:
-    """Create a new drill attempt with audio."""
+    """Create a new drill attempt: upload → transcribe → score (best-effort) → persist."""
     supabase = get_supabase()
 
-    # 1. Fetch drill and verify ownership
+    # 1. Fetch full drill and verify ownership
     try:
         drill_res = (
             supabase.table("drills")
-            .select("id, user_id")
+            .select("*")
             .eq("id", drill_id)
             .eq("user_id", user_id)
             .limit(1)
@@ -344,20 +375,61 @@ async def create_drill_attempt(drill_id: str, body: DrillAttemptCreate, user_id:
 
     drill = drill_res.data[0]
 
-    # 2. Create attempt record
-    attempt_row = {
+    # 2. Transcribe audio (best-effort — failure does not block saving)
+    transcript: str | None = None
+    try:
+        text, _ = transcribe_speech(body.audio_url)
+        transcript = text or None
+    except (StorageDownloadError, AudioTooLargeError, OpenAITranscriptionError) as exc:
+        logger.warning("create_drill_attempt: transcription failed | %s | drill_id=%s", type(exc).__name__, drill_id)
+    except Exception as exc:
+        logger.warning("create_drill_attempt: transcription unexpected | %s | drill_id=%s", type(exc).__name__, drill_id)
+
+    # 3. Score attempt if transcript available (best-effort)
+    score: int | None = None
+    feedback_dict: dict | None = None
+    if transcript:
+        try:
+            fb = score_drill_attempt(
+                drill_title=drill["title"],
+                skill_target=drill["skill_target"],
+                instructions=drill.get("instructions"),
+                success_criteria=drill.get("success_criteria") or [],
+                source_weakness=drill.get("source_weakness"),
+                time_limit_seconds=drill.get("time_limit_seconds"),
+                difficulty=drill.get("difficulty", "beginner"),
+                transcript=transcript,
+            )
+            score = fb.score
+            feedback_dict = fb.model_dump(exclude={"score"})
+        except DrillScoringError as exc:
+            logger.warning("create_drill_attempt: scoring failed | %s | drill_id=%s", exc, drill_id)
+        except Exception as exc:
+            logger.warning("create_drill_attempt: scoring unexpected | %s | drill_id=%s", type(exc).__name__, drill_id)
+
+    # 4. Build attempt row (only include scored fields if present)
+    attempt_row: dict = {
         "drill_id": drill_id,
         "user_id": drill["user_id"],
         "audio_url": body.audio_url,
     }
+    if transcript is not None:
+        attempt_row["response"] = transcript
+    if score is not None:
+        attempt_row["score"] = score
+    if feedback_dict is not None:
+        attempt_row["feedback"] = feedback_dict
 
+    # 5. Insert attempt
     try:
         result = supabase.table("drill_attempts").insert(attempt_row).execute()
         attempt = result.data[0]
-        logger.info("create_drill_attempt: created | drill_id=%s attempt_id=%s", drill_id, attempt["id"])
+        logger.info(
+            "create_drill_attempt: saved | drill_id=%s attempt_id=%s score=%s has_transcript=%s",
+            drill_id, attempt["id"], score, transcript is not None,
+        )
 
-        # Award XP for drill attempt (first attempt gets more XP)
-        # Check if this is first attempt for this drill
+        # Award XP
         try:
             previous_attempts = (
                 supabase.table("drill_attempts")
@@ -366,8 +438,7 @@ async def create_drill_attempt(drill_id: str, body: DrillAttemptCreate, user_id:
                 .eq("user_id", user_id)
                 .execute()
             )
-            is_first_attempt = (previous_attempts.count or 0) == 1  # Just created this one
-
+            is_first_attempt = (previous_attempts.count or 0) == 1
             if is_first_attempt:
                 award_xp(user_id, "drill_attempt_first", f"drill_attempt:{attempt['id']}")
             else:

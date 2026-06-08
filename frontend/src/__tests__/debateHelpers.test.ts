@@ -353,3 +353,263 @@ describe("normalizeSeverity", () => {
     expect(normalizeSeverity("")).toBe("medium");
   });
 });
+
+// ── derivePracticeNextAction ───────────────────────────────────────────────────
+
+import type { ProgressSummary, Speech } from "../types";
+
+const BASE_PROGRESS: ProgressSummary = {
+  speech_count: 0,
+  feedback_ready_count: 0,
+  drills_assigned_count: 0,
+  drill_attempts_count: 0,
+  drills_completed_count: 0,
+  drill_completion_rate: null,
+  incomplete_drills: [],
+  skill_averages: null,
+  xp: 0,
+  level: 1,
+  xp_to_next_level: 100,
+  badges: [],
+};
+
+const BASE_DRILL = {
+  id: "drill-1",
+  speech_id: "speech-1",
+  title: "Impact Comparison Sprint",
+  skill_target: "weighing",
+  difficulty: "beginner",
+  status: "assigned",
+  speech_title: "Round 1 Constructive",
+};
+
+describe("derivePracticeNextAction", () => {
+  it("returns start_first_speech when no speeches", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const action = derivePracticeNextAction(null, null);
+    expect(action.state).toBe("start_first_speech");
+    expect(action.primaryHref).toBe("/session");
+    expect(action.loopStep).toBe(0);
+  });
+
+  it("returns start_first_speech when progress has 0 speeches", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const action = derivePracticeNextAction(BASE_PROGRESS, null);
+    expect(action.state).toBe("start_first_speech");
+  });
+
+  it("returns wait_for_analysis for analyzing speech", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = { ...BASE_PROGRESS, speech_count: 1 };
+    const speech = { id: "sp-1", status: "analyzing" } as Speech;
+    const action = derivePracticeNextAction(progress, speech);
+    expect(action.state).toBe("wait_for_analysis");
+    expect(action.loopStep).toBe(1);
+    expect(action.primaryHref).toBe("/speech/sp-1");
+  });
+
+  it("returns open_report for done speech with no feedback", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = { ...BASE_PROGRESS, speech_count: 1 };
+    const speech = { id: "sp-1", status: "done" } as Speech;
+    const action = derivePracticeNextAction(progress, speech);
+    expect(action.state).toBe("open_report");
+    expect(action.primaryHref).toBe("/speech/sp-1");
+  });
+
+  it("returns generate_drills when feedback exists but no drills", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = { ...BASE_PROGRESS, speech_count: 1, feedback_ready_count: 1 };
+    const speech = { id: "sp-1", status: "done" } as Speech;
+    const action = derivePracticeNextAction(progress, speech);
+    expect(action.state).toBe("generate_drills");
+    expect(action.loopStep).toBe(2);
+  });
+
+  it("returns start_drill for first drill with no attempts", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = {
+      ...BASE_PROGRESS,
+      speech_count: 1,
+      feedback_ready_count: 1,
+      drills_assigned_count: 3,
+      drill_attempts_count: 0,
+      incomplete_drills: [BASE_DRILL],
+    };
+    const action = derivePracticeNextAction(progress, null);
+    expect(action.state).toBe("start_drill");
+    expect(action.primaryHref).toBe("/drills/drill-1");
+    expect(action.primaryLabel).toBe("Open drill workspace");
+  });
+
+  it("returns continue_drill when some attempts exist", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = {
+      ...BASE_PROGRESS,
+      speech_count: 1,
+      feedback_ready_count: 1,
+      drills_assigned_count: 3,
+      drill_attempts_count: 2,
+      incomplete_drills: [BASE_DRILL],
+    };
+    const action = derivePracticeNextAction(progress, null);
+    expect(action.state).toBe("continue_drill");
+    expect(action.primaryHref).toBe("/drills/drill-1");
+  });
+
+  it("returns re_record when all drills done and only 1 speech", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = {
+      ...BASE_PROGRESS,
+      speech_count: 1,
+      feedback_ready_count: 1,
+      drills_assigned_count: 3,
+      drill_attempts_count: 3,
+      incomplete_drills: [],
+    };
+    const action = derivePracticeNextAction(progress, null);
+    expect(action.state).toBe("re_record");
+    expect(action.primaryHref).toBe("/session");
+    expect(action.loopStep).toBe(3);
+  });
+
+  it("returns view_improvement when 2+ speeches", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = {
+      ...BASE_PROGRESS,
+      speech_count: 2,
+      feedback_ready_count: 2,
+      drills_assigned_count: 3,
+      drill_attempts_count: 3,
+      incomplete_drills: [],
+    };
+    const speech = { id: "sp-2", status: "done" } as Speech;
+    const action = derivePracticeNextAction(progress, speech);
+    expect(action.state).toBe("view_improvement");
+    expect(action.loopStep).toBe(4);
+  });
+
+  it("returns view_improvement when latest speech is a re-record and done", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = {
+      ...BASE_PROGRESS,
+      speech_count: 2,
+      feedback_ready_count: 2,
+      drills_assigned_count: 3,
+      drill_attempts_count: 3,
+      incomplete_drills: [],
+    };
+    const speech = { id: "sp-rerecord", status: "done", parent_speech_id: "sp-original" } as Speech;
+    const action = derivePracticeNextAction(progress, speech);
+    expect(action.state).toBe("view_improvement");
+    expect(action.primaryHref).toBe("/speech/sp-rerecord");
+    expect(action.loopStep).toBe(4);
+  });
+
+  it("returns wait_for_analysis when latest speech is a re-record and analyzing", () => {
+    const { derivePracticeNextAction } = require("../lib/debateHelpers");
+    const progress = {
+      ...BASE_PROGRESS,
+      speech_count: 2,
+      feedback_ready_count: 1,
+      drills_assigned_count: 3,
+      drill_attempts_count: 3,
+      incomplete_drills: [],
+    };
+    const speech = { id: "sp-rerecord", status: "analyzing", parent_speech_id: "sp-original" } as Speech;
+    const action = derivePracticeNextAction(progress, speech);
+    expect(action.state).toBe("wait_for_analysis");
+    expect(action.primaryHref).toBe("/speech/sp-rerecord");
+    expect(action.loopStep).toBe(3);
+  });
+});
+
+// ── compareSpeeches ────────────────────────────────────────────────────────────
+
+import type { FeedbackReport } from "../types";
+
+const ORIG_FEEDBACK: Pick<FeedbackReport, "overall_score" | "scores" | "weaknesses"> = {
+  overall_score: 62,
+  scores: { clash: 10, weighing: 9, extensions: 14, drops: 16, judge_adaptation: 13 },
+  weaknesses: ["Impact weighing not explicit"],
+};
+
+const NEW_FEEDBACK: Pick<FeedbackReport, "overall_score" | "scores" | "weaknesses"> = {
+  overall_score: 70,
+  scores: { clash: 10, weighing: 13, extensions: 14, drops: 16, judge_adaptation: 17 },
+  weaknesses: ["Evidence comparison still thin"],
+};
+
+describe("compareSpeeches", () => {
+  it("computes correct overall delta", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(ORIG_FEEDBACK, NEW_FEEDBACK, null);
+    expect(result.overall_delta).toBe(8); // 70 - 62
+    expect(result.has_parent).toBe(true);
+  });
+
+  it("computes targeted skill delta for weighing", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(ORIG_FEEDBACK, NEW_FEEDBACK, "weighing");
+    expect(result.skill_delta).toBe(4); // 13 - 9
+    expect(result.source_drill_skill).toBe("weighing");
+    expect(result.original_skill_score).toBe(9);
+    expect(result.new_skill_score).toBe(13);
+  });
+
+  it("maps warranting skill to clash dimension", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(ORIG_FEEDBACK, NEW_FEEDBACK, "warranting");
+    // clash: 10 → 10 = delta 0
+    expect(result.skill_delta).toBe(0);
+    expect(result.original_skill_score).toBe(10);
+  });
+
+  it("returns null deltas when original feedback is missing", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(null, NEW_FEEDBACK, "weighing");
+    expect(result.overall_delta).toBeNull();
+    expect(result.skill_delta).toBeNull();
+  });
+
+  it("returns null deltas when new feedback is missing", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(ORIG_FEEDBACK, null, "weighing");
+    expect(result.overall_delta).toBeNull();
+    expect(result.skill_delta).toBeNull();
+  });
+
+  it("returns null deltas when both feedbacks are missing", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(null, null, null);
+    expect(result.overall_delta).toBeNull();
+    expect(result.skill_delta).toBeNull();
+    expect(result.has_parent).toBe(true);
+  });
+
+  it("uses still_needs_work from the new feedback weaknesses", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(ORIG_FEEDBACK, NEW_FEEDBACK, null);
+    expect(result.still_needs_work).toBe("Evidence comparison still thin");
+  });
+
+  it("summary mentions improvement when score increased significantly", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const result = compareSpeeches(ORIG_FEEDBACK, NEW_FEEDBACK, null);
+    expect(result.summary.toLowerCase()).toMatch(/improve|up/);
+  });
+
+  it("summary mentions dip when score decreased", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const lowerNew = { ...NEW_FEEDBACK, overall_score: 55 };
+    const result = compareSpeeches(ORIG_FEEDBACK, lowerNew, null);
+    expect(result.summary.toLowerCase()).toContain("dipped");
+  });
+
+  it("summary mentions steady when score unchanged", () => {
+    const { compareSpeeches } = require("../lib/debateHelpers");
+    const sameScore = { ...NEW_FEEDBACK, overall_score: 62 };
+    const result = compareSpeeches(ORIG_FEEDBACK, sameScore, null);
+    expect(result.summary.toLowerCase()).toContain("steady");
+  });
+});

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import {
-  Mic, GitBranch, FileText, ArrowRight, Target, Zap,
+  Mic, GitBranch, FileText, ArrowRight, Target, Zap, RefreshCw,
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import { Button } from "@/components/ui/button";
@@ -81,15 +81,21 @@ function FormSection({ label }: { label: string }) {
 
 export default function SessionPage() {
   const router = useRouter();
-  const [userId,      setUserId]      = useState<string | null>(null);
-  const [userLoading, setUserLoading] = useState(true);
-  const [title,       setTitle]       = useState("");
-  const [speechType,  setSpeechType]  = useState("constructive");
-  const [side,        setSide]        = useState("");
-  const [judgeType,   setJudgeType]   = useState("");
-  const [topic,       setTopic]       = useState("");
-  const [submitting,  setSubmitting]  = useState(false);
-  const [error,       setError]       = useState("");
+  const [userId,           setUserId]           = useState<string | null>(null);
+  const [userLoading,      setUserLoading]      = useState(true);
+  const [title,            setTitle]            = useState("");
+  const [speechType,       setSpeechType]       = useState("constructive");
+  const [side,             setSide]             = useState("");
+  const [judgeType,        setJudgeType]        = useState("");
+  const [topic,            setTopic]            = useState("");
+  const [submitting,       setSubmitting]       = useState(false);
+  const [error,            setError]            = useState("");
+  // Re-record mode
+  const [isRerecordMode,   setIsRerecordMode]   = useState(false);
+  const [sourceSpeechId,   setSourceSpeechId]   = useState<string | null>(null);
+  const [sourceDrillId,    setSourceDrillId]    = useState<string | null>(null);
+  const [contextLoading,   setContextLoading]   = useState(false);
+  const [contextError,     setContextError]     = useState("");
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data }) => {
@@ -98,22 +104,54 @@ export default function SessionPage() {
     }).finally(() => setUserLoading(false));
   }, [router]);
 
+  // Read re-record URL params client-side (avoids useSearchParams/Suspense requirement)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "rerecord") {
+      setIsRerecordMode(true);
+      setSourceSpeechId(params.get("source_speech_id"));
+      setSourceDrillId(params.get("source_drill_id"));
+    }
+  }, []);
+
+  // Prefill form from source speech when in re-record mode
+  useEffect(() => {
+    if (!userId || !isRerecordMode || !sourceSpeechId) return;
+    setContextLoading(true);
+    setContextError("");
+    apiFetch<Speech>(`/speeches/${sourceSpeechId}?user_id=${userId}`)
+      .then((src) => {
+        setSpeechType(src.speech_type);
+        if (src.side) setSide(src.side);
+        if (src.judge_type) setJudgeType(src.judge_type);
+        if (src.topic) setTopic(src.topic);
+        setTitle(`Re-record: ${src.title}`);
+      })
+      .catch(() => setContextError("Could not load source session context — form left blank."))
+      .finally(() => setContextLoading(false));
+  }, [userId, isRerecordMode, sourceSpeechId]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!userId) return;
     setError(""); setSubmitting(true);
     try {
+      const payload: Record<string, unknown> = {
+        user_id:     userId,
+        title:       title || `${speechType.replace("_", " ")} — Practice Rep`,
+        speech_type: speechType,
+        side:        side || null,
+        judge_type:  judgeType || null,
+        topic:       topic || null,
+      };
+      if (isRerecordMode && sourceSpeechId) payload.parent_speech_id = sourceSpeechId;
+      if (isRerecordMode && sourceDrillId)  payload.source_drill_id  = sourceDrillId;
+
       const s = await apiFetch<Speech>("/speeches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id:     userId,
-          title:       title || `${speechType.replace("_", " ")} — Practice Rep`,
-          speech_type: speechType,
-          side:        side || null,
-          judge_type:  judgeType || null,
-          topic:       topic || null,
-        }),
+        body: JSON.stringify(payload),
       });
       router.push(`/speech/${s.id}`);
     } catch (err: unknown) {
@@ -234,6 +272,23 @@ export default function SessionPage() {
                         More context → more precise judge feedback
                       </p>
                     </div>
+
+                    {/* Re-record mode banner */}
+                    {isRerecordMode && (
+                      <div className="mb-5 flex items-start gap-2 rounded-lg border border-ok/20 bg-ok/5 px-3 py-2.5">
+                        <RefreshCw size={12} className="mt-0.5 shrink-0 text-ok" />
+                        <div>
+                          <p className="text-xs font-semibold text-ok">Re-record mode</p>
+                          <p className="mt-0.5 text-xs text-ink-subtle">
+                            {contextLoading
+                              ? "Loading your original session context…"
+                              : contextError
+                              ? contextError
+                              : "RoundLab will compare this report to the original and show your improvement."}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 

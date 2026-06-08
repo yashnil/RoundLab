@@ -282,7 +282,7 @@ export default function DashboardPage() {
             {loading
               ? <DashboardMissionPanelSkeleton />
               : progress
-              ? <DashboardMissionPanel progress={progress} />
+              ? <DashboardMissionPanel progress={progress} latestSpeech={speeches[0] ?? null} />
               : null}
           </motion.div>
 
@@ -384,7 +384,7 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* Recommended Next Practice card */}
+          {/* Assigned Drill Queue */}
           {!loading && progress && progress.incomplete_drills.length > 0 && (
             <motion.div variants={staggerChild}>
               <Card className="border-lav/20 bg-lav/5">
@@ -393,7 +393,7 @@ export default function DashboardPage() {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <Zap size={14} className="text-lav" />
-                        <p className="text-eyebrow text-lav">Recommended Next Practice</p>
+                        <p className="text-eyebrow text-lav">Next Drill</p>
                       </div>
                       <p className="text-sm font-semibold text-ink">{progress.incomplete_drills[0].title}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -401,21 +401,35 @@ export default function DashboardPage() {
                           {SKILL_LABELS[progress.incomplete_drills[0].skill_target]?.label || progress.incomplete_drills[0].skill_target}
                         </Badge>
                         <Badge variant="default" className="capitalize">{progress.incomplete_drills[0].difficulty}</Badge>
-                        <span className="text-xs text-ink-subtle">From: {progress.incomplete_drills[0].speech_title}</span>
+                        <span className="text-xs text-ink-subtle capitalize">{progress.incomplete_drills[0].status.replace("_", " ")}</span>
+                        <span className="text-xs text-ink-faint">From: {progress.incomplete_drills[0].speech_title}</span>
                       </div>
                     </div>
                     <Button asChild size="sm" className="shrink-0 gap-1.5">
-                      <Link href={`/speech/${progress.incomplete_drills[0].speech_id}`}>
-                        Practice Now
+                      <Link href={`/drills/${progress.incomplete_drills[0].id}`}>
+                        Open workspace
                         <ArrowRight size={11} />
                       </Link>
                     </Button>
                   </div>
 
                   {progress.incomplete_drills.length > 1 && (
-                    <p className="text-xs text-ink-subtle">
-                      +{progress.incomplete_drills.length - 1} more drill{progress.incomplete_drills.length - 1 !== 1 ? "s" : ""} to practice
-                    </p>
+                    <div className="flex flex-col gap-1.5 border-t border-lav/10 pt-3">
+                      <p className="text-xs font-medium text-ink-subtle">Also assigned:</p>
+                      {progress.incomplete_drills.slice(1, 4).map((d) => (
+                        <Link
+                          key={d.id}
+                          href={`/drills/${d.id}`}
+                          className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs text-ink-muted transition-colors hover:bg-lav/5 hover:text-ink"
+                        >
+                          <span className="truncate">{d.title}</span>
+                          <span className="shrink-0 capitalize text-ink-faint">{d.status.replace("_", " ")}</span>
+                        </Link>
+                      ))}
+                      {progress.incomplete_drills.length > 4 && (
+                        <p className="text-xs text-ink-faint">+{progress.incomplete_drills.length - 4} more</p>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>

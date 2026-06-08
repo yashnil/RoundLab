@@ -23,6 +23,8 @@ export const SAMPLE_SPEECH_V1: Speech = {
   status: "done",
   created_at: "2026-06-01T10:00:00Z",
   updated_at: "2026-06-01T10:02:00Z",
+  parent_speech_id: null,
+  source_drill_id: null,
 };
 
 export const SAMPLE_TRANSCRIPT_V1: Transcript = {

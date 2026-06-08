@@ -139,6 +139,27 @@ export interface Speech {
   status: SpeechStatus;
   created_at: string;
   updated_at: string;
+  /** Set when this speech was recorded to improve upon an earlier one. */
+  parent_speech_id: string | null;
+  /** The drill that motivated this re-record (used for improvement comparison). */
+  source_drill_id: string | null;
+}
+
+/** Deterministic improvement comparison between a re-recorded speech and its parent. */
+export interface SpeechComparisonResult {
+  has_parent: boolean;
+  parent_speech_id: string | null;
+  source_drill_id: string | null;
+  source_drill_skill: string | null;
+  original_overall_score: number | null;
+  new_overall_score: number | null;
+  overall_delta: number | null;
+  original_skill_score: number | null;
+  new_skill_score: number | null;
+  skill_delta: number | null;
+  summary: string;
+  still_needs_work: string | null;
+  next_action: string;
 }
 
 export type DrillStatus = "assigned" | "attempted" | "completed";

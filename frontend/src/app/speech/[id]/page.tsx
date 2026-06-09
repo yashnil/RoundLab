@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Check, ChevronDown, ChevronUp, FileText,
   Mic, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target, Copy,
+  ShieldAlert, Sparkles,
 } from "lucide-react";
 import { useCopy } from "@/lib/useCopy";
 import AppNav from "@/components/AppNav";
@@ -35,7 +36,7 @@ import CoachMarginNote from "@/components/CoachMarginNote";
 import EvidenceSupportPanel from "@/components/EvidenceSupportPanel";
 import FeedbackRating from "@/components/FeedbackRating";
 import ConfusionReport from "@/components/ConfusionReport";
-import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue } from "@/lib/debateHelpers";
+import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue, deriveEvidenceRiskSummary } from "@/lib/debateHelpers";
 import type { ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
 import type { DebateIssue, ClaimEvidenceCheck, EvidenceCheckResult, EvidenceDocument } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
@@ -493,6 +494,9 @@ export default function SpeechPage() {
   const [checkingEvidence, setCheckingEvidence] = useState(false);
   const [checkingIndex, setCheckingIndex] = useState<number>(-1);
   const [evidenceCheckErr, setEvidenceCheckErr] = useState("");
+  const [genEvidenceDrills, setGenEvidenceDrills] = useState(false);
+  const [evidenceDrillErr, setEvidenceDrillErr] = useState("");
+  const [evidenceDrillsDone, setEvidenceDrillsDone] = useState(false);
 
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
@@ -1025,6 +1029,42 @@ export default function SpeechPage() {
     setFreshResults(results);
     setCheckingIndex(-1);
     setCheckingEvidence(false);
+  }
+
+  async function generateEvidenceDrills() {
+    if (!userId) return;
+    setGenEvidenceDrills(true);
+    setEvidenceDrillErr("");
+    setEvidenceDrillsDone(false);
+    try {
+      const newDrills = await apiFetch<Drill[]>(
+        `/speeches/${speechId}/evidence-drills?user_id=${encodeURIComponent(userId)}`,
+        { method: "POST" },
+      );
+      if (newDrills.length > 0) {
+        setDrills((prev) => {
+          const existingIds = new Set(prev.map((d) => d.id));
+          return [...prev, ...newDrills.filter((d) => !existingIds.has(d.id))];
+        });
+      }
+      setEvidenceDrillsDone(true);
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : "";
+      console.error("generateEvidenceDrills:", raw);
+      const isConstraintErr =
+        raw.toLowerCase().includes("constraint") ||
+        raw.toLowerCase().includes("violates") ||
+        raw.toLowerCase().includes("order");
+      setEvidenceDrillErr(
+        isConstraintErr
+          ? "Evidence drill could not be saved — drill order was invalid. Refresh and try again."
+          : raw
+          ? `Evidence drill could not be saved: ${raw}`
+          : "Evidence drill could not be saved. Please try again.",
+      );
+    } finally {
+      setGenEvidenceDrills(false);
+    }
   }
 
   // ── States ─────────────────────────────────────────────────────────────────
@@ -2187,6 +2227,63 @@ export default function SpeechPage() {
                           );
                         }
                         return null;
+                      })()}
+
+                      {/* Evidence Risk Summary + drill CTA */}
+                      {(() => {
+                        const checksForSummary = freshResults.length > 0
+                          ? freshResults.map((r) => ({
+                              id: "",
+                              speech_id: speechId,
+                              user_id: userId ?? "",
+                              argument_label: r.argument_label,
+                              claim_text: r.claim_text,
+                              evidence_text_from_speech: r.evidence_text_from_speech,
+                              matched_card_id: r.matched_card?.id ?? null,
+                              support_level: r.support_level,
+                              explanation: r.explanation,
+                              created_at: new Date().toISOString(),
+                            }))
+                          : savedChecks;
+                        if (checksForSummary.length === 0) return null;
+                        const risk = deriveEvidenceRiskSummary(checksForSummary);
+                        const hasProblems = risk.unsupported_count + risk.partial_count + risk.unverifiable_count > 0;
+                        if (!hasProblems) return null;
+                        return (
+                          <div className="rounded-xl border border-warn/20 bg-warn/5 px-4 py-4 flex flex-col gap-3">
+                            <div className="flex items-start gap-2.5">
+                              <ShieldAlert size={14} className="mt-0.5 shrink-0 text-warn" />
+                              <div className="flex flex-col gap-1 min-w-0">
+                                <p className="text-sm font-semibold text-ink">Evidence Risk Summary</p>
+                                <p className="text-xs text-ink-subtle leading-relaxed">{risk.summary}</p>
+                                <p className="text-xs text-ink-muted leading-relaxed">{risk.recommended_action}</p>
+                              </div>
+                            </div>
+                            {evidenceDrillErr && (
+                              <p className="text-xs text-danger">{evidenceDrillErr}</p>
+                            )}
+                            {evidenceDrillsDone ? (
+                              <p className="text-xs text-ok flex items-center gap-1.5">
+                                <Check size={11} />
+                                Evidence drills added to your drill queue below.
+                              </p>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="self-start h-7 text-xs gap-1.5"
+                                onClick={generateEvidenceDrills}
+                                disabled={genEvidenceDrills}
+                              >
+                                {genEvidenceDrills ? (
+                                  <><RefreshCw size={11} className="animate-spin" />Generating…</>
+                                ) : (
+                                  <><Sparkles size={11} />Generate evidence drill</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        );
                       })()}
 
                       <EvidenceSupportPanel

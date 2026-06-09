@@ -19,7 +19,9 @@ import {
   mapIssueToDrillType,
   normalizeIssueType,
   normalizeSeverity,
+  deriveEvidenceRiskSummary,
 } from "../lib/debateHelpers";
+import type { ClaimEvidenceCheck } from "../types";
 
 // ── deriveLowestSkill ──────────────────────────────────────────────────────────
 
@@ -611,5 +613,95 @@ describe("compareSpeeches", () => {
     const sameScore = { ...NEW_FEEDBACK, overall_score: 62 };
     const result = compareSpeeches(ORIG_FEEDBACK, sameScore, null);
     expect(result.summary.toLowerCase()).toContain("steady");
+  });
+});
+
+// ── deriveEvidenceRiskSummary ─────────────────────────────────────────────────
+
+function makeCheck(support_level: string, id = "check-1"): ClaimEvidenceCheck {
+  return {
+    id,
+    speech_id: "speech-1",
+    user_id: "user-1",
+    argument_label: "C1: Test",
+    claim_text: "Test claim",
+    evidence_text_from_speech: "Test evidence",
+    matched_card_id: null,
+    support_level: support_level as ClaimEvidenceCheck["support_level"],
+    explanation: "Test explanation",
+    created_at: "2026-06-09T00:00:00Z",
+  };
+}
+
+describe("deriveEvidenceRiskSummary", () => {
+  it("returns empty state when no checks", () => {
+    const result = deriveEvidenceRiskSummary([]);
+    expect(result.total_checked).toBe(0);
+    expect(result.highest_risk_level).toBeNull();
+    expect(result.summary).toContain("No evidence checks");
+  });
+
+  it("correctly counts supported checks", () => {
+    const checks = [makeCheck("supported", "c1"), makeCheck("supported", "c2")];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.supported_count).toBe(2);
+    expect(result.unsupported_count).toBe(0);
+    expect(result.partial_count).toBe(0);
+    expect(result.unverifiable_count).toBe(0);
+    expect(result.highest_risk_level).toBeNull();
+  });
+
+  it("identifies unsupported as highest risk", () => {
+    const checks = [
+      makeCheck("supported", "c1"),
+      makeCheck("partially_supported", "c2"),
+      makeCheck("unsupported", "c3"),
+    ];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.highest_risk_level).toBe("unsupported");
+    expect(result.unsupported_count).toBe(1);
+    expect(result.partial_count).toBe(1);
+    expect(result.supported_count).toBe(1);
+  });
+
+  it("summary mentions unsupported count when present", () => {
+    const checks = [makeCheck("unsupported", "c1"), makeCheck("supported", "c2")];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.summary).toMatch(/1.*not supported|not supported.*1/i);
+  });
+
+  it("summary mentions partial count when no unsupported", () => {
+    const checks = [makeCheck("partially_supported", "c1"), makeCheck("supported", "c2")];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.summary).toMatch(/partially supported|partial/i);
+  });
+
+  it("summary mentions unverifiable when only unverifiable", () => {
+    const checks = [makeCheck("unverifiable", "c1")];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.summary).toMatch(/no matching card|unverifiable/i);
+    expect(result.highest_risk_level).toBe("unverifiable");
+  });
+
+  it("all supported yields null highest_risk_level", () => {
+    const checks = [makeCheck("supported", "c1"), makeCheck("supported", "c2")];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.highest_risk_level).toBeNull();
+    expect(result.summary).toMatch(/supported/i);
+  });
+
+  it("recommended_action is non-empty for every case", () => {
+    for (const level of ["supported", "partially_supported", "unsupported", "unverifiable"] as const) {
+      const result = deriveEvidenceRiskSummary([makeCheck(level)]);
+      expect(result.recommended_action.length).toBeGreaterThan(0);
+    }
+    const emptyResult = deriveEvidenceRiskSummary([]);
+    expect(emptyResult.recommended_action.length).toBeGreaterThan(0);
+  });
+
+  it("total_checked equals input length", () => {
+    const checks = [makeCheck("supported", "c1"), makeCheck("unsupported", "c2"), makeCheck("unverifiable", "c3")];
+    const result = deriveEvidenceRiskSummary(checks);
+    expect(result.total_checked).toBe(3);
   });
 });

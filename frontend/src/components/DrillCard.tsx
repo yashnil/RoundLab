@@ -15,15 +15,20 @@ import type { Drill, DrillAttempt, DrillStatus } from "@/types";
 // ── Skill target → display label + badge variant ──────────────────────────────
 
 const SKILL_LABELS: Record<string, { label: string; variant: "indigo" | "green" | "amber" | "red" | "blue" | "violet" | "orange" | "default" }> = {
-  weighing:         { label: "Impact Weighing",    variant: "indigo"  },
-  warranting:       { label: "Warranting",         variant: "blue"    },
-  drops:            { label: "Drop Prevention",    variant: "red"     },
-  extensions:       { label: "Extensions",         variant: "green"   },
-  evidence:         { label: "Evidence Use",       variant: "amber"   },
-  clash:            { label: "Clash",              variant: "violet"  },
-  judge_adaptation: { label: "Judge Adaptation",   variant: "orange"  },
-  collapse:         { label: "Collapse Strategy",  variant: "indigo"  },
-  line_by_line:     { label: "Line-by-Line",       variant: "blue"    },
+  weighing:             { label: "Impact Weighing",    variant: "indigo"  },
+  warranting:           { label: "Warranting",         variant: "blue"    },
+  drops:                { label: "Drop Prevention",    variant: "red"     },
+  extensions:           { label: "Extensions",         variant: "green"   },
+  evidence:             { label: "Evidence Use",       variant: "amber"   },
+  clash:                { label: "Clash",              variant: "violet"  },
+  judge_adaptation:     { label: "Judge Adaptation",   variant: "orange"  },
+  collapse:             { label: "Collapse Strategy",  variant: "indigo"  },
+  line_by_line:         { label: "Line-by-Line",       variant: "blue"    },
+  // Evidence-specific skill targets
+  evidence_alignment:   { label: "Evidence Alignment", variant: "amber"   },
+  claim_precision:      { label: "Claim Precision",    variant: "red"     },
+  evidence_attribution: { label: "Evidence Attribution", variant: "blue"  },
+  card_warranting:      { label: "Card Warranting",    variant: "violet"  },
 };
 
 const DIFFICULTY_BADGE: Record<string, { label: string; variant: "green" | "amber" | "red" }> = {

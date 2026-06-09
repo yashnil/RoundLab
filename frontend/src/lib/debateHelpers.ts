@@ -4,7 +4,7 @@
  * All functions are side-effect-free and depend only on their arguments.
  */
 
-import type { SkillAverages, DebateIssueType, DebateIssue, SpeechStatus, ProgressSummary, Speech, FeedbackReport, FeedbackScores, SpeechComparisonResult, ArgumentItem } from "@/types";
+import type { SkillAverages, DebateIssueType, DebateIssue, SpeechStatus, ProgressSummary, Speech, FeedbackReport, FeedbackScores, SpeechComparisonResult, ArgumentItem, ClaimEvidenceCheck, EvidenceSupportLevel } from "@/types";
 
 // ── Skill analysis ─────────────────────────────────────────────────────────────
 
@@ -492,6 +492,114 @@ export function compareSpeeches(
     summary,
     still_needs_work: stillNeedsWork,
     next_action: nextAction,
+  };
+}
+
+// ── Evidence risk summary ──────────────────────────────────────────────────────
+
+export interface EvidenceRiskSummary {
+  total_checked: number;
+  supported_count: number;
+  partial_count: number;
+  unsupported_count: number;
+  unverifiable_count: number;
+  /** The worst level present, or null if nothing checked. */
+  highest_risk_level: EvidenceSupportLevel | null;
+  summary: string;
+  recommended_action: string;
+}
+
+const RISK_ORDER: Record<EvidenceSupportLevel, number> = {
+  unsupported: 0,
+  partially_supported: 1,
+  unverifiable: 2,
+  supported: 3,
+};
+
+/**
+ * Derives an evidence risk summary from a list of ClaimEvidenceCheck results.
+ * Pure function — safe to unit-test without React.
+ */
+export function deriveEvidenceRiskSummary(
+  checks: ClaimEvidenceCheck[],
+): EvidenceRiskSummary {
+  const total_checked = checks.length;
+  if (total_checked === 0) {
+    return {
+      total_checked: 0,
+      supported_count: 0,
+      partial_count: 0,
+      unsupported_count: 0,
+      unverifiable_count: 0,
+      highest_risk_level: null,
+      summary: "No evidence checks have been run yet.",
+      recommended_action: "Run evidence check to verify your claims against your library.",
+    };
+  }
+
+  let supported_count = 0;
+  let partial_count = 0;
+  let unsupported_count = 0;
+  let unverifiable_count = 0;
+  let highestRisk: EvidenceSupportLevel = "supported";
+
+  for (const check of checks) {
+    const level = (check.support_level ?? "unverifiable") as EvidenceSupportLevel;
+    if ((RISK_ORDER[level] ?? 3) < (RISK_ORDER[highestRisk] ?? 3)) {
+      highestRisk = level;
+    }
+    if (level === "supported") supported_count++;
+    else if (level === "partially_supported") partial_count++;
+    else if (level === "unsupported") unsupported_count++;
+    else unverifiable_count++;
+  }
+
+  const highest_risk_level: EvidenceSupportLevel | null =
+    highestRisk === "supported" && unsupported_count + partial_count + unverifiable_count === 0
+      ? null
+      : highestRisk;
+
+  // Build summary sentence
+  const problems = unsupported_count + partial_count + unverifiable_count;
+  let summary: string;
+  let recommended_action: string;
+
+  if (unsupported_count > 0) {
+    summary = `${unsupported_count} of ${total_checked} claim${total_checked !== 1 ? "s" : ""} ${unsupported_count !== 1 ? "are" : "is"} not supported by your uploaded cards.`;
+    recommended_action = "Generate an evidence drill to practice restating claims to match what your cards actually prove.";
+  } else if (partial_count > 0) {
+    summary = `${partial_count} of ${total_checked} claim${total_checked !== 1 ? "s" : ""} ${partial_count !== 1 ? "are" : "is"} only partially supported — your card is relevant but doesn't fully prove the claim.`;
+    recommended_action = "Practice evidence alignment: narrow your in-round claim language to match what the card can establish.";
+  } else if (unverifiable_count > 0) {
+    summary = `${unverifiable_count} of ${total_checked} claim${total_checked !== 1 ? "s" : ""} had no matching card in your library.`;
+    recommended_action = "Upload case files for these arguments, then re-run the evidence check.";
+  } else {
+    summary = `All ${total_checked} checked claim${total_checked !== 1 ? "s" : ""} are supported by your uploaded evidence.`;
+    recommended_action = "Evidence is in good shape — focus on warrant and impact work.";
+  }
+
+  if (problems === 0) {
+    return {
+      total_checked,
+      supported_count,
+      partial_count,
+      unsupported_count,
+      unverifiable_count,
+      highest_risk_level,
+      summary,
+      recommended_action,
+    };
+  }
+
+  return {
+    total_checked,
+    supported_count,
+    partial_count,
+    unsupported_count,
+    unverifiable_count,
+    highest_risk_level,
+    summary,
+    recommended_action,
   };
 }
 

@@ -7,8 +7,9 @@ DELETE /documents/{id}?user_id=... — delete document and cascade
 
 POST /documents/search             — full-text / lexical search over evidence library
 
-POST /speeches/{speech_id}/evidence-check — run claim→card support check for one argument
+POST /speeches/{speech_id}/evidence-check  — run claim→card support check for one argument
 GET  /speeches/{speech_id}/evidence-checks — list all checks for a speech
+POST /speeches/{speech_id}/evidence-drills — generate evidence-specific drills (deterministic)
 
 All endpoints are additive — they do not touch any existing speech/drill/feedback routes.
 """
@@ -29,6 +30,7 @@ from app.models.document import (
     SearchResultItem,
 )
 from app.services.document_parsing import DocumentParseError, parse_document
+from app.services.evidence_drill_generation import generate_evidence_drills
 from app.services.evidence_extraction import ExtractedCard, extract_evidence_cards
 from app.services.evidence_support_check import SupportCheckResult, check_claim_support
 from app.services.supabase_client import get_supabase
@@ -412,3 +414,139 @@ async def get_evidence_checks(
         return result.data or []
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to fetch evidence checks.") from exc
+
+
+# ── Evidence drills ────────────────────────────────────────────────────────────
+
+@router.post(
+    "/speeches/{speech_id}/evidence-drills",
+    response_model=list[dict],
+    status_code=201,
+)
+async def generate_evidence_drills_endpoint(
+    speech_id: str,
+    user_id: str = Query(...),
+) -> list[dict]:
+    """Generate 1–3 evidence-specific drills from saved evidence checks.
+
+    Uses deterministic templates — no LLM call required.
+    Does NOT delete existing standard drills. Deduplicates via source_weakness.
+    Returns the newly inserted drill rows.
+    """
+    sb = get_supabase()
+
+    # Verify speech ownership
+    speech_result = (
+        sb.table("speeches")
+        .select("id, user_id")
+        .eq("id", speech_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not speech_result.data:
+        raise HTTPException(status_code=404, detail="Speech not found.")
+
+    # Fetch existing evidence checks
+    checks_result = (
+        sb.table("claim_evidence_checks")
+        .select("*")
+        .eq("speech_id", speech_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    checks_data = checks_result.data or []
+    if not checks_data:
+        raise HTTPException(
+            status_code=422,
+            detail="No evidence checks found for this speech. Run evidence check first.",
+        )
+    checks = [ClaimEvidenceCheckRow(**row) for row in checks_data]
+
+    # One query: fetch source_weakness + order for dedup and offset computation.
+    # Avoids a second round-trip and eliminates edge cases from two separate queries.
+    existing_drills_result = (
+        sb.table("drills")
+        .select("source_weakness, order")
+        .eq("speech_id", speech_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    existing_rows = existing_drills_result.data or []
+
+    existing_sw: set[str] = {
+        row["source_weakness"]
+        for row in existing_rows
+        if row.get("source_weakness")
+    }
+
+    # Compute next_order robustly:
+    # - collect only integer order values (guards against None, str, or negative rows)
+    # - default to 0 if none found
+    # - enforce floor of 1 so the CHECK (order >= 1) constraint is never violated
+    valid_orders = [
+        row["order"]
+        for row in existing_rows
+        if isinstance(row.get("order"), int) and row["order"] >= 1
+    ]
+    max_order = max(valid_orders) if valid_orders else 0
+    next_order = max(1, max_order + 1)
+
+    logger.info(
+        "evidence_drills: existing_drills=%d max_order=%d next_order=%d | speech_id=%s",
+        len(existing_rows),
+        max_order,
+        next_order,
+        speech_id,
+    )
+
+    # Generate drills
+    drill_templates = generate_evidence_drills(checks, existing_source_weaknesses=existing_sw)
+    if not drill_templates:
+        return []
+
+    rows = []
+    for i, tmpl in enumerate(drill_templates):
+        rows.append({
+            "speech_id": speech_id,
+            "user_id": user_id,
+            "title": tmpl["title"],
+            "description": tmpl["description"],
+            "skill_target": tmpl["skill_target"],
+            "prompt": tmpl["prompt"],
+            "order": next_order + i,
+            "instructions": tmpl["instructions"],
+            "success_criteria": tmpl["success_criteria"],
+            "source_weakness": tmpl["source_weakness"],
+            "difficulty": tmpl["difficulty"],
+            "status": "assigned",
+            "time_limit_seconds": tmpl["time_limit_seconds"],
+        })
+
+    logger.info(
+        "evidence_drills: inserting %d rows | speech_id=%s | orders=%s | skill_targets=%s",
+        len(rows),
+        speech_id,
+        [r["order"] for r in rows],
+        [r["skill_target"] for r in rows],
+    )
+
+    try:
+        result = sb.table("drills").insert(rows).execute()
+        logger.info(
+            "evidence_drills: inserted %d drills | speech_id=%s", len(rows), speech_id
+        )
+        return result.data or rows
+    except Exception as exc:
+        exc_str = str(exc)
+        logger.error(
+            "evidence_drills: insert failed | exc_type=%s | exc=%s | speech_id=%s | sample_order=%s",
+            type(exc).__name__,
+            exc_str,
+            speech_id,
+            rows[0].get("order") if rows else None,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save evidence drills: {exc_str}",
+        ) from exc

@@ -256,7 +256,7 @@ export default function ReportVerdictPanel({
           <div className="flex min-w-0 flex-col gap-1.5">
             <p className="text-heading text-ink">{grade}</p>
             {feedback.summary && (
-              <p className="text-sm leading-relaxed text-ink-subtle line-clamp-3">
+              <p className="text-sm leading-relaxed text-ink-subtle">
                 {feedback.summary}
               </p>
             )}

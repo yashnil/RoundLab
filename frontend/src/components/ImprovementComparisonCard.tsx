@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Minus, ArrowRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowRight, Mic } from "lucide-react";
 import type { SpeechComparisonResult } from "@/types";
 
 interface Props {
@@ -100,7 +100,40 @@ export default function ImprovementComparisonCard({ comparison }: Props) {
                 suffix="/20"
               />
             )}
+            {comparison.original_delivery_score !== null &&
+             comparison.original_delivery_score !== undefined &&
+             comparison.new_delivery_score !== null &&
+             comparison.new_delivery_score !== undefined && (
+              <ScoreRow
+                label="Delivery score"
+                before={comparison.original_delivery_score}
+                after={comparison.new_delivery_score}
+                delta={comparison.delivery_score_delta ?? null}
+                suffix="/100"
+              />
+            )}
+            {comparison.original_filler_count !== null &&
+             comparison.original_filler_count !== undefined &&
+             comparison.new_filler_count !== null &&
+             comparison.new_filler_count !== undefined && (
+              <ScoreRow
+                label="Filler words"
+                before={comparison.original_filler_count}
+                after={comparison.new_filler_count}
+                delta={comparison.filler_delta !== undefined && comparison.filler_delta !== null ? -(comparison.filler_delta) : null}
+              />
+            )}
           </div>
+
+          {/* Delivery improvement note */}
+          {comparison.filler_delta !== null && comparison.filler_delta !== undefined && comparison.filler_delta < 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-ok/15 bg-ok/8 px-3 py-2">
+              <Mic size={11} className="text-ok shrink-0" />
+              <p className="text-xs text-ink">
+                Delivery improved: filler words dropped by {Math.abs(comparison.filler_delta)}.
+              </p>
+            </div>
+          )}
 
           {/* Coach summary */}
           <div className="rounded-lg border border-ok/15 bg-ok/8 px-3 py-2.5">

@@ -6,6 +6,7 @@ POST /speeches/{id}/analyze returns the job_id to the client.
 
 Steps (with progress milestones):
   10 %  transcribing
+  25 %  delivery_analysis  (non-fatal: failure does not block the pipeline)
   35 %  extracting_flow
   60 %  generating_feedback
   82 %  generating_drills
@@ -139,6 +140,40 @@ async def run_speech_analysis_pipeline(
                 "transcript_too_short",
             )
             return
+
+        # ── Step 1.5: Delivery analysis (non-fatal) ──────────────────────────
+        update_job_progress(sb, job_id, "delivery_analysis", 25)
+        try:
+            from app.services.delivery_analysis import analyze_delivery
+
+            dm_res = (
+                sb.table("delivery_metrics")
+                .select("id")
+                .eq("speech_id", speech_id)
+                .limit(1)
+                .execute()
+            )
+            if not dm_res.data:
+                dur = speech.get("duration_seconds")
+                dm = analyze_delivery(transcript_text, duration_seconds=dur)
+                sb.table("delivery_metrics").insert({
+                    "speech_id": speech_id,
+                    "user_id": user_id,
+                    **dm.model_dump(),
+                }).execute()
+                logger.info(
+                    "analysis_pipeline: delivery metrics saved | score=%d | speech_id=%s",
+                    dm.delivery_score, speech_id,
+                )
+            else:
+                logger.info(
+                    "analysis_pipeline: delivery metrics exist, skipping | speech_id=%s", speech_id
+                )
+        except Exception as exc:
+            logger.warning(
+                "analysis_pipeline: delivery analysis failed (non-fatal) | %s | speech_id=%s",
+                type(exc).__name__, speech_id,
+            )
 
         # ── Step 2: Argument extraction ──────────────────────────────────────
         update_job_progress(sb, job_id, "extracting_flow", 35)
@@ -339,6 +374,40 @@ async def run_speech_analysis_pipeline(
                 drill_items = []
 
             if drill_items:
+                # Attempt to append one delivery drill if delivery metrics exist and no delivery drill yet
+                try:
+                    from app.services.drill_generation import make_delivery_drill
+                    dm_check = (
+                        sb.table("delivery_metrics")
+                        .select("clarity_flags_json, words_per_minute, filler_word_count, word_count")
+                        .eq("speech_id", speech_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    already_has_delivery = any(
+                        getattr(d, "skill_target", "").startswith(("pacing", "filler", "clarity", "concise", "pause"))
+                        for d in drill_items
+                    )
+                    if dm_check.data and not already_has_delivery:
+                        dm_row = dm_check.data[0]
+                        delivery_drill = make_delivery_drill(
+                            clarity_flags=dm_row.get("clarity_flags_json") or [],
+                            wpm=dm_row.get("words_per_minute"),
+                            filler_count=dm_row.get("filler_word_count") or 0,
+                            word_count=dm_row.get("word_count") or 1,
+                        )
+                        if delivery_drill:
+                            drill_items.append(delivery_drill)
+                            logger.info(
+                                "analysis_pipeline: delivery drill appended | skill=%s | speech_id=%s",
+                                delivery_drill.skill_target, speech_id,
+                            )
+                except Exception as exc:
+                    logger.warning(
+                        "analysis_pipeline: delivery drill generation failed (non-fatal) | %s | speech_id=%s",
+                        type(exc).__name__, speech_id,
+                    )
+
                 try:
                     sb.table("drills").delete().eq("speech_id", speech_id).execute()
                     rows = []

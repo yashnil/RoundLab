@@ -29,7 +29,8 @@ import { getSpeechStatusConfig } from "@/lib/debateHelpers";
 import DashboardMissionPanel, { DashboardMissionPanelSkeleton } from "@/components/DashboardMissionPanel";
 import DashboardCockpitBand from "@/components/DashboardCockpitBand";
 import FirstRunCommandCenter from "@/components/FirstRunCommandCenter";
-import type { Speech, ProgressSummary, PilotSummary } from "@/types";
+import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary } from "@/types";
+import { deriveDeliveryFocus, deliveryScoreColor, getPacingBandDisplay } from "@/lib/deliveryHelpers";
 
 const TYPE_LABEL: Record<string, string> = {
   constructive: "Constructive", rebuttal: "Rebuttal", summary: "Summary",
@@ -189,15 +190,16 @@ function SpeechSkeleton() {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [userId,       setUserId]       = useState<string | null>(null);
-  const [speeches,     setSpeeches]     = useState<Speech[]>([]);
-  const [progress,     setProgress]     = useState<ProgressSummary | null>(null);
-  const [pilotSummary, setPilotSummary] = useState<PilotSummary | null>(null);
-  const [loading,      setLoading]      = useState(true);
-  const [err,          setErr]          = useState("");
-  const [del,          setDel]          = useState<Speech | null>(null);
-  const [deleting,     setDeleting]     = useState(false);
-  const [deleteErr,    setDeleteErr]    = useState("");
+  const [userId,        setUserId]       = useState<string | null>(null);
+  const [speeches,      setSpeeches]     = useState<Speech[]>([]);
+  const [progress,      setProgress]     = useState<ProgressSummary | null>(null);
+  const [pilotSummary,  setPilotSummary] = useState<PilotSummary | null>(null);
+  const [latestDelivery, setLatestDelivery] = useState<DeliveryMetrics | null>(null);
+  const [loading,       setLoading]      = useState(true);
+  const [err,           setErr]          = useState("");
+  const [del,           setDel]          = useState<Speech | null>(null);
+  const [deleting,      setDeleting]     = useState(false);
+  const [deleteErr,     setDeleteErr]    = useState("");
 
   useEffect(() => {
     createClient().auth.getUser()
@@ -219,6 +221,13 @@ export default function DashboardPage() {
           const pilotData = await apiFetch<PilotSummary>(`/users/${data.user.id}/pilot-summary`);
           setPilotSummary(pilotData);
         } catch { /* non-critical */ }
+
+        // Delivery metrics for the latest speech — best-effort
+        if (speechesData.length > 0) {
+          apiFetch<DeliveryMetrics>(`/speeches/${speechesData[0].id}/delivery-metrics?user_id=${data.user.id}`)
+            .then(setLatestDelivery)
+            .catch(() => {});
+        }
       })
       .catch(() => setErr("Could not load your data. Please refresh and try again."))
       .finally(() => setLoading(false));
@@ -271,6 +280,58 @@ export default function DashboardPage() {
               ? <DashboardMissionPanel progress={progress} latestSpeech={speeches[0] ?? null} />
               : null}
           </motion.div>
+
+          {/* ── Delivery Focus Card — shows when latest speech has delivery metrics ── */}
+          {!loading && latestDelivery && (() => {
+            const focus = deriveDeliveryFocus(latestDelivery);
+            const scoreColor = deliveryScoreColor(latestDelivery.delivery_score);
+            const pacingDisplay = getPacingBandDisplay(latestDelivery.pacing_band);
+            if (!focus && !latestDelivery.delivery_score) return null;
+            return (
+              <motion.div variants={staggerChild}>
+                <Card className="border-hairline bg-surface-1">
+                  <CardContent className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-lav/10">
+                        <Mic size={13} className="text-lav" />
+                      </div>
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="section-stamp">Delivery focus</span>
+                          {latestDelivery.delivery_score !== null && latestDelivery.delivery_score !== undefined && (
+                            <span className={`text-xs font-semibold tabular-nums ${scoreColor}`}>
+                              {latestDelivery.delivery_score}/100
+                            </span>
+                          )}
+                          <span className={`text-[10px] font-medium ${pacingDisplay.colorClass}`}>
+                            {pacingDisplay.label}
+                            {latestDelivery.words_per_minute !== null && latestDelivery.words_per_minute !== undefined
+                              ? ` · ${Math.round(latestDelivery.words_per_minute)} WPM` : ""}
+                          </span>
+                        </div>
+                        {focus && (
+                          <p className="text-xs font-medium text-ink">{focus}</p>
+                        )}
+                        {latestDelivery.filler_word_count !== null && latestDelivery.filler_word_count !== undefined && latestDelivery.filler_word_count > 0 && (
+                          <p className="text-[11px] text-ink-faint">
+                            {latestDelivery.filler_word_count} filler words detected in latest speech
+                          </p>
+                        )}
+                      </div>
+                      {speeches[0] && (
+                        <Link
+                          href={`/speech/${speeches[0].id}`}
+                          className="shrink-0 text-[10px] text-lav font-medium hover:underline"
+                        >
+                          View report →
+                        </Link>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })()}
 
           {/* Badges — shown separately below the mission panel */}
           {!loading && progress && progress.badges.length > 0 && (

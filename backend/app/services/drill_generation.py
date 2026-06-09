@@ -80,6 +80,11 @@ Available skill_target values:
 - judge_adaptation: calibrating language, speed, complexity for judge type
 - collapse: choosing which arguments to collapse to in summary/final focus
 - line_by_line: systematic response to opponent's speech structure
+- pacing_control: reducing speaking rate to ensure warrants land clearly for judges
+- filler_reduction: eliminating filler words (um, uh, like, you know) that reduce judge confidence
+- clarity_delivery: breaking long sentences into judge-flowable units
+- concise_warranting: expressing claim + warrant + impact in fewer, clearer words
+- pause_control: using deliberate pauses after claims and before impacts
 
 Each drill's prompt should describe a concrete speech scenario the debater can practice with.
 Instructions should be a numbered list of 3-5 clear steps.
@@ -172,3 +177,115 @@ Now generate exactly 3 drills. Each must target a different skill area. Ground t
         drills = drills[:3]
 
     return drills
+
+
+# Delivery skill targets eligible for a deterministic drill (no LLM needed)
+_DELIVERY_SKILL_PRIORITY = [
+    "pacing_control",
+    "filler_reduction",
+    "clarity_delivery",
+    "concise_warranting",
+    "pause_control",
+]
+
+
+def make_delivery_drill(clarity_flags: list[str], wpm: Optional[float], filler_count: int, word_count: int) -> Optional[_DrillItem]:
+    """Return one deterministic delivery drill based on the most critical flag.
+
+    Returns None if no delivery issue is significant enough to warrant a drill.
+    No LLM call — this is fully deterministic.
+    """
+    filler_rate = filler_count / max(word_count, 1)
+
+    if "too_fast" in clarity_flags and wpm is not None and wpm > 185:
+        return _DrillItem(
+            title="Pacing Control — Warrant Slowdown",
+            skill_target="pacing_control",
+            description=(
+                f"You're speaking at approximately {int(wpm)} WPM. "
+                "Fast pacing can obscure warrants and make it harder for judges to flow."
+            ),
+            prompt=(
+                "Take the warrant section of your longest contention. "
+                "Re-deliver it at 140–160 WPM. Pause for one full second after the claim, "
+                "and again before the impact. Record yourself and count your pace."
+            ),
+            instructions=(
+                "1. Identify your longest contention's warrant sentence.\n"
+                "2. Mark natural pause points: after the claim, after the warrant, before the impact.\n"
+                "3. Practice delivering that section three times with deliberate pauses.\n"
+                "4. Record yourself. Aim for 140–160 WPM in that section.\n"
+                "5. Check: can you hear each argument landing clearly?"
+            ),
+            success_criteria=[
+                "Warrant section delivered at 140–165 WPM",
+                "Clear 1-second pause after claim and before impact",
+                "All words fully articulated — no blending",
+            ],
+            source_weakness="Speaking rate above 185 WPM may obscure warrants for judges",
+            difficulty="beginner",
+            time_limit_seconds=90,
+        )
+
+    if "many_fillers" in clarity_flags and filler_rate > 0.05:
+        top_filler = "um"
+        return _DrillItem(
+            title="Filler Reduction — Clean Delivery Rep",
+            skill_target="filler_reduction",
+            description=(
+                f"Your speech contained a high rate of filler words ({filler_count} detected). "
+                "Filler words reduce judge confidence and can interrupt the flow of your argument."
+            ),
+            prompt=(
+                "Give your opening contention again from memory. "
+                f"Every time you say 'um,' 'uh,' 'like,' or 'you know,' stop and restart the sentence. "
+                "Complete the contention with zero filler words."
+            ),
+            instructions=(
+                "1. Choose one contention (claim + warrant + evidence + impact).\n"
+                "2. Practice it once at normal speed — count your filler words.\n"
+                "3. Do it again: if you say a filler word, pause and restart the sentence.\n"
+                "4. Repeat until you complete the contention with zero fillers.\n"
+                "5. Record your clean rep and confirm you're filler-free."
+            ),
+            success_criteria=[
+                "Full contention delivered with zero filler words",
+                "Natural pauses used instead of fillers at hesitation points",
+                "No restarts needed in the final recorded rep",
+            ],
+            source_weakness=f"High filler word rate ({filler_count} fillers detected) reduces judge confidence",
+            difficulty="beginner",
+            time_limit_seconds=90,
+        )
+
+    if "long_sentences" in clarity_flags:
+        return _DrillItem(
+            title="Clarity Drill — Break Long Sentences",
+            skill_target="clarity_delivery",
+            description=(
+                "Several sentences in your speech were very long, making them hard for judges to flow. "
+                "Shorter, judge-flowable sentences help arguments land more clearly."
+            ),
+            prompt=(
+                "Find your longest sentence in the speech. "
+                "Rewrite it as two or three shorter sentences (under 20 words each). "
+                "Each sentence should carry one idea: claim, warrant, or impact."
+            ),
+            instructions=(
+                "1. Identify the longest sentence in your speech transcript.\n"
+                "2. Count the words — it is probably over 30 words.\n"
+                "3. Split it into 2–3 sentences, each with one idea.\n"
+                "4. Say the new version aloud. It should sound natural and flowable.\n"
+                "5. Deliver the section with the new sentences in a full run-through."
+            ),
+            success_criteria=[
+                "No sentence longer than 25 words in the rewritten section",
+                "Each new sentence expresses exactly one idea",
+                "The rewritten section sounds natural and judge-flowable",
+            ],
+            source_weakness="Long sentences reduce clarity and make arguments hard to flow",
+            difficulty="beginner",
+            time_limit_seconds=120,
+        )
+
+    return None

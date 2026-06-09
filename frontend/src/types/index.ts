@@ -166,9 +166,52 @@ export interface SpeechComparisonResult {
   original_skill_score: number | null;
   new_skill_score: number | null;
   skill_delta: number | null;
+  // Delivery deltas — only present when both speeches have delivery metrics
+  original_delivery_score?: number | null;
+  new_delivery_score?: number | null;
+  delivery_score_delta?: number | null;
+  original_wpm?: number | null;
+  new_wpm?: number | null;
+  wpm_delta?: number | null;
+  original_filler_count?: number | null;
+  new_filler_count?: number | null;
+  filler_delta?: number | null;
   summary: string;
   still_needs_work: string | null;
   next_action: string;
+}
+
+export type PacingBand = "too_slow" | "steady" | "too_fast" | "unknown";
+
+export interface DeliveryTimelineSegment {
+  segment_index: number;
+  approx_start_seconds: number | null;
+  approx_end_seconds: number | null;
+  word_count: number;
+  filler_count: number;
+  repeated_phrase_hits: number;
+  excerpt: string;
+  flags: string[];
+}
+
+export interface DeliveryMetrics {
+  id?: string;
+  speech_id: string;
+  user_id: string;
+  word_count: number | null;
+  duration_seconds: number | null;
+  words_per_minute: number | null;
+  filler_word_count: number | null;
+  filler_words_json: Record<string, number> | null;
+  repeated_phrases_json: Array<{ phrase: string; count: number }> | null;
+  long_sentence_count: number | null;
+  average_sentence_words: number | null;
+  delivery_score: number | null;
+  pacing_band: PacingBand | null;
+  clarity_flags_json: string[] | null;
+  timeline_json: DeliveryTimelineSegment[] | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type DrillStatus = "assigned" | "attempted" | "completed";

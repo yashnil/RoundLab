@@ -310,6 +310,16 @@ class SpeechComparisonResponse(BaseModel):
     original_skill_score: Optional[int] = None
     new_skill_score: Optional[int] = None
     skill_delta: Optional[int] = None
+    # Delivery deltas — optional, only present when both speeches have delivery metrics
+    original_delivery_score: Optional[int] = None
+    new_delivery_score: Optional[int] = None
+    delivery_score_delta: Optional[int] = None
+    original_wpm: Optional[float] = None
+    new_wpm: Optional[float] = None
+    wpm_delta: Optional[float] = None
+    original_filler_count: Optional[int] = None
+    new_filler_count: Optional[int] = None
+    filler_delta: Optional[int] = None
     summary: str
     still_needs_work: Optional[str] = None
     next_action: str
@@ -460,6 +470,53 @@ async def get_speech_comparison(speech_id: str, user_id: str = Query(...)) -> Sp
     new_weaknesses: list = (new_fb or {}).get("weaknesses") or []
     still_needs_work = new_weaknesses[0] if new_weaknesses else None
 
+    # Fetch delivery metric deltas — best-effort, non-blocking
+    orig_delivery_score: int | None = None
+    new_delivery_score: int | None = None
+    delivery_score_delta: int | None = None
+    orig_wpm: float | None = None
+    new_wpm: float | None = None
+    wpm_delta: float | None = None
+    orig_filler_count: int | None = None
+    new_filler_count: int | None = None
+    filler_delta: int | None = None
+
+    try:
+        dm_new_res = (
+            supabase.table("delivery_metrics")
+            .select("delivery_score, words_per_minute, filler_word_count")
+            .eq("speech_id", speech_id)
+            .limit(1)
+            .execute()
+        )
+        if dm_new_res.data:
+            dm_new = dm_new_res.data[0]
+            new_delivery_score = dm_new.get("delivery_score")
+            new_wpm = dm_new.get("words_per_minute")
+            new_filler_count = dm_new.get("filler_word_count")
+
+        dm_orig_res = (
+            supabase.table("delivery_metrics")
+            .select("delivery_score, words_per_minute, filler_word_count")
+            .eq("speech_id", parent_speech_id)
+            .limit(1)
+            .execute()
+        )
+        if dm_orig_res.data:
+            dm_orig = dm_orig_res.data[0]
+            orig_delivery_score = dm_orig.get("delivery_score")
+            orig_wpm = dm_orig.get("words_per_minute")
+            orig_filler_count = dm_orig.get("filler_word_count")
+
+        if orig_delivery_score is not None and new_delivery_score is not None:
+            delivery_score_delta = new_delivery_score - orig_delivery_score
+        if orig_wpm is not None and new_wpm is not None:
+            wpm_delta = round(new_wpm - orig_wpm, 1)
+        if orig_filler_count is not None and new_filler_count is not None:
+            filler_delta = new_filler_count - orig_filler_count
+    except Exception:
+        pass
+
     return SpeechComparisonResponse(
         has_parent=True,
         parent_speech_id=parent_speech_id,
@@ -471,7 +528,145 @@ async def get_speech_comparison(speech_id: str, user_id: str = Query(...)) -> Sp
         original_skill_score=orig_skill_score,
         new_skill_score=new_skill_score,
         skill_delta=skill_delta,
+        original_delivery_score=orig_delivery_score,
+        new_delivery_score=new_delivery_score,
+        delivery_score_delta=delivery_score_delta,
+        original_wpm=orig_wpm,
+        new_wpm=new_wpm,
+        wpm_delta=wpm_delta,
+        original_filler_count=orig_filler_count,
+        new_filler_count=new_filler_count,
+        filler_delta=filler_delta,
         summary=_build_comparison_summary(overall_delta, source_drill_skill, skill_delta),
         still_needs_work=still_needs_work,
         next_action=_derive_next_action(overall_delta),
     )
+
+
+# ── Delivery metrics ───────────────────────────────────────────────────────────
+
+class DeliveryMetricsRow(BaseModel):
+    id: Optional[str] = None
+    speech_id: str
+    user_id: str
+    word_count: Optional[int] = None
+    duration_seconds: Optional[int] = None
+    words_per_minute: Optional[float] = None
+    filler_word_count: Optional[int] = None
+    filler_words_json: Optional[dict] = None
+    repeated_phrases_json: Optional[list] = None
+    long_sentence_count: Optional[int] = None
+    average_sentence_words: Optional[float] = None
+    delivery_score: Optional[int] = None
+    pacing_band: Optional[str] = None
+    clarity_flags_json: Optional[list] = None
+    timeline_json: Optional[list] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+@router.get("/{speech_id}/delivery-metrics", response_model=DeliveryMetricsRow)
+async def get_delivery_metrics(
+    speech_id: str,
+    user_id: str = Query(...),
+) -> DeliveryMetricsRow:
+    """Fetch delivery metrics for a speech. Returns 404 if not yet computed."""
+    supabase = get_supabase()
+
+    # Verify ownership
+    try:
+        sp = (
+            supabase.table("speeches")
+            .select("id")
+            .eq("id", speech_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch speech") from exc
+    if not sp.data:
+        raise HTTPException(status_code=404, detail="Speech not found")
+
+    try:
+        res = (
+            supabase.table("delivery_metrics")
+            .select("*")
+            .eq("speech_id", speech_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch delivery metrics") from exc
+
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Delivery metrics not yet available")
+
+    return DeliveryMetricsRow(**res.data[0])
+
+
+@router.post("/{speech_id}/delivery-metrics/recompute", response_model=DeliveryMetricsRow)
+async def recompute_delivery_metrics(
+    speech_id: str,
+    user_id: str = Query(...),
+) -> DeliveryMetricsRow:
+    """Recompute delivery metrics from the stored transcript and speech duration."""
+    from app.services.delivery_analysis import analyze_delivery
+
+    supabase = get_supabase()
+
+    # Verify ownership and fetch speech
+    try:
+        sp_res = (
+            supabase.table("speeches")
+            .select("id, duration_seconds")
+            .eq("id", speech_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch speech") from exc
+    if not sp_res.data:
+        raise HTTPException(status_code=404, detail="Speech not found")
+
+    speech = sp_res.data[0]
+
+    # Fetch transcript
+    try:
+        tx_res = (
+            supabase.table("transcripts")
+            .select("text")
+            .eq("speech_id", speech_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch transcript") from exc
+    if not tx_res.data:
+        raise HTTPException(status_code=404, detail="Transcript not yet available")
+
+    transcript_text = tx_res.data[0]["text"]
+    duration = speech.get("duration_seconds")
+
+    try:
+        dm = analyze_delivery(transcript_text, duration_seconds=duration)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Delivery analysis failed") from exc
+
+    payload = {
+        "speech_id": speech_id,
+        "user_id": user_id,
+        **dm.model_dump(),
+    }
+
+    try:
+        result = (
+            supabase.table("delivery_metrics")
+            .upsert(payload, on_conflict="speech_id")
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to save delivery metrics") from exc
+
+    return DeliveryMetricsRow(**result.data[0])

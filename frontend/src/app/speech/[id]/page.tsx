@@ -39,9 +39,10 @@ import FeedbackRating from "@/components/FeedbackRating";
 import { AnalysisProgressCard } from "@/components/AnalysisProgressCard";
 import FlowEditPanel from "@/components/FlowEditPanel";
 import ConfusionReport from "@/components/ConfusionReport";
+import DeliveryCoachPanel, { DeliveryCoachPanelEmpty } from "@/components/DeliveryCoachPanel";
 import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue, deriveEvidenceRiskSummary } from "@/lib/debateHelpers";
 import { initEditArgs, isFlowCorrectedAndNeedsRegen } from "@/lib/flowEditHelpers";
-import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
+import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, DeliveryMetrics, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
 import type { DebateIssue, ClaimEvidenceCheck, EvidenceCheckResult, EvidenceDocument } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
 
@@ -538,6 +539,10 @@ export default function SpeechPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [regenErr, setRegenErr] = useState("");
 
+  // Delivery metrics
+  const [deliveryMetrics, setDeliveryMetrics] = useState<DeliveryMetrics | null>(null);
+  const [deliveryLoaded, setDeliveryLoaded] = useState(false);
+
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
   const stream  = useRef<MediaStream | null>(null);
@@ -592,6 +597,11 @@ export default function SpeechPage() {
           setHasLibrary((docs as EvidenceDocument[]).some((d) => d.status === "parsed"));
           if ((checks as ClaimEvidenceCheck[]).length > 0) setSavedChecks(checks as ClaimEvidenceCheck[]);
         });
+
+        // Delivery metrics — best-effort, non-blocking
+        apiFetch<DeliveryMetrics>(`/speeches/${speechId}/delivery-metrics?user_id=${uid}`)
+          .then((dm) => { setDeliveryMetrics(dm); setDeliveryLoaded(true); })
+          .catch(() => { setDeliveryLoaded(true); });
 
         // Recovery: check for in-progress or recently-failed analysis jobs
         apiFetch<AnalysisJob[]>(`/speeches/${speechId}/jobs?user_id=${uid}`)
@@ -1688,13 +1698,31 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
+                {/* Delivery Coach Panel — visible after coaching report is done */}
+                {feedback && !analyzingUnified && deliveryLoaded && (
+                  <WorkspaceCard key="delivery-coach">
+                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                      <StepHeader n={5} title="Delivery Coach" done={!!deliveryMetrics} aside={
+                        deliveryMetrics?.delivery_score !== null && deliveryMetrics?.delivery_score !== undefined ? (
+                          <Badge variant="indigo">{deliveryMetrics.delivery_score}/100 delivery</Badge>
+                        ) : undefined
+                      } />
+                      {deliveryMetrics ? (
+                        <DeliveryCoachPanel metrics={deliveryMetrics} />
+                      ) : (
+                        <DeliveryCoachPanelEmpty />
+                      )}
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
                 {/* Recommended Practice / Drills */}
                 {drills.length > 0 ? (
                   <WorkspaceCard key="drills-done">
                     {/* id="drills" is the anchor target for ReportVerdictPanel and PracticeLoopCTA #drills hrefs */}
                     <CardContent id="drills" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
                       <StepHeader
-                        n={5}
+                        n={6}
                         title="Recommended Practice"
                         done
                         aside={
@@ -2322,7 +2350,25 @@ export default function SpeechPage() {
                   )
                 )}
 
-                {/* Step 5: Drills */}
+                {/* Delivery Coach Panel (second render path) */}
+                {feedback && !analyzingUnified && deliveryLoaded && (
+                  <WorkspaceCard key="delivery-coach-2">
+                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                      <StepHeader n={5} title="Delivery Coach" done={!!deliveryMetrics} aside={
+                        deliveryMetrics?.delivery_score !== null && deliveryMetrics?.delivery_score !== undefined ? (
+                          <Badge variant="indigo">{deliveryMetrics.delivery_score}/100 delivery</Badge>
+                        ) : undefined
+                      } />
+                      {deliveryMetrics ? (
+                        <DeliveryCoachPanel metrics={deliveryMetrics} />
+                      ) : (
+                        <DeliveryCoachPanelEmpty />
+                      )}
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
+                {/* Step 6: Drills */}
                 {feedback && (
                   genDrills ? (
                     <motion.div key="drills-loading" {...fadeUp(0)}>
@@ -2332,7 +2378,7 @@ export default function SpeechPage() {
                     <WorkspaceCard key="drills-done">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
                         <StepHeader
-                          n={5}
+                          n={6}
                           title="Practice Drills"
                           done
                           aside={
@@ -2383,7 +2429,7 @@ export default function SpeechPage() {
                   ) : (
                     <WorkspaceCard key="drills-empty">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={5} title="Practice Drills" done={false} />
+                        <StepHeader n={6} title="Practice Drills" done={false} />
                         <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-ink">Create personalized drills</p>

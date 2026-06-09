@@ -100,6 +100,35 @@ _SKILL_GUIDANCE: dict[str, str] = {
         "A strong attempt flows through the opponent's case point by point, leaves no gaps, and "
         "uses signposting ('on their first argument...', 'on their second contention...')."
     ),
+    "pacing_control": (
+        "Evaluate whether the debater reduced their speaking rate to a judge-friendly pace (140–165 WPM). "
+        "Count filler words as indicators of rushed delivery. A strong attempt uses deliberate pauses "
+        "after the claim and before the impact. A weak attempt still rushes through the warrant section."
+    ),
+    "filler_reduction": (
+        "Count filler words in the transcript: um, uh, like, you know, basically, actually. "
+        "A strong attempt has zero or near-zero fillers — any filler indicates the drill target was not met. "
+        "Evaluate whether the debater paused naturally at hesitation points instead of using fillers. "
+        "A weak attempt still has multiple fillers scattered throughout."
+    ),
+    "clarity_delivery": (
+        "Evaluate whether sentences are short and judge-flowable (under 25 words each). "
+        "A strong attempt breaks complex arguments into bite-sized sentences: one idea per sentence. "
+        "A weak attempt still has long run-on sentences that blend multiple ideas. "
+        "Score based on whether you could flow this argument in real time."
+    ),
+    "concise_warranting": (
+        "Evaluate whether the warrant was expressed clearly in as few words as possible — "
+        "no bloat, no repetition, no tangents. A strong attempt states: Claim (1 sentence) → "
+        "Warrant mechanism (1-2 sentences) → Impact (1 sentence). "
+        "A weak attempt restates the claim multiple times or buries the warrant in filler."
+    ),
+    "pause_control": (
+        "Evaluate whether the debater used deliberate silence instead of fillers. "
+        "Count any instance of 'um', 'uh', 'like', or 'you know' as a pause-control failure. "
+        "A strong attempt uses natural, comfortable pauses at argument boundaries. "
+        "A weak attempt fills all pauses with filler words."
+    ),
 }
 
 _DEFAULT_SKILL_GUIDANCE = (

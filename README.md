@@ -2,328 +2,267 @@
 
 **AI flow coach for novice and JV Public Forum debaters.**
 
-RoundLab helps debaters practice and improve through AI-powered coaching. Record a speech, get judge-style feedback, and complete personalized drills that target your specific weaknesses.
+RoundLab is a full-stack practice platform that closes the coaching gap for students without consistent access to a coach. Record a speech, receive judge-style feedback, complete skill-targeted drills, and track measurable improvement across sessions.
 
 ---
 
-## What RoundLab Does
+## Table of Contents
 
-1. **Record or Upload** — Capture a 45-90 second PF speech (constructive, rebuttal, summary, final focus, crossfire)
-2. **Transcribe** — Automatic speech-to-text via OpenAI Whisper
-3. **Extract Flow** — AI identifies every claim, warrant, evidence, and impact in your speech
-4. **Generate Coaching Report** — Judge-style feedback with scores, priorities, strengths, weaknesses, and actionable recommendations
-5. **Create Drills** — Three personalized practice exercises targeting your skill gaps (warranting, weighing, drops, clash, judge adaptation)
-6. **Track Progress** — Dashboard with XP, levels, badges, skill averages, and drill completion
-7. **Team Mode** — Coaches can create teams, invite students, and monitor practice progress
-8. **Evidence Library** *(Phase 1)* — Upload case files, extract evidence cards, and verify whether speech claims are supported by your own uploaded evidence
-
----
-
-## Stack
-
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui · Motion/React |
-| **Backend** | FastAPI · Python 3.12 · Pydantic v2 |
-| **Auth & DB** | Supabase (Auth, PostgreSQL, Storage) |
-| **AI** | OpenAI GPT-4o (reasoning) · Whisper (transcription) · LangGraph (workflow orchestration) |
-| **Styling** | oklch color system · Dark/light mode · Accessible UI components |
-
----
-
-## Features
-
-### Core Workflow
-- ✅ Audio recording (browser MediaRecorder) or file upload (MP3, WAV, M4A, WebM, OGG, MP4)
-- ✅ Whisper transcription with word count validation
-- ✅ Structured argument extraction (claim → warrant → evidence → impact)
-- ✅ Judge-style feedback with 5-dimension scoring (clash, weighing, extensions, drops, judge adaptation)
-- ✅ Personalized drill generation (3 drills per speech, skill-targeted)
-- ✅ Drill attempts with re-recording and progress tracking
-
-### Gamification (Practice-Focused)
-- ✅ **Drill-First XP System**: Rewards practice and completion, not just recording
-  - +5 XP per flow generated
-  - +10 XP per feedback report
-  - +15 XP per drill assigned
-  - +10 XP per feedback rating
-  - +50 XP per first drill attempt (biggest reward!)
-  - +20 XP per repeat drill attempt
-  - +25 XP bonus for completing full practice loop (feedback + drills + attempts)
-  - **No XP for speech upload/transcription** — level up by completing drills and practice attempts
-- ✅ Level progression (Level 1: 0-99 XP, Level 2: 100-249, Level 3: 250-499, Level 4: 500-899, Level 5: 900-1399, Level 6+: 1400+ [+300 per level])
-- ✅ **Practice-Focused Badges**: First Feedback, First Drill Attempt, Practice Habit (3 attempts), Full Practice Loop, Feedback Analyst (3 reports), Team Player
-- ✅ Skill averages dashboard (clash, weighing, extensions, drops, judge adaptation)
-
-### PF Rubric Calibration (Speech-Type-Specific Scoring)
-- ✅ **Expert-Grounded Rubrics**: Different scoring dimensions for each PF speech type
-  - **Constructive**: Case Structure (20) · Warranting (25) · Evidence Use (20) · Impact Development (20) · Clarity (15)
-  - **Rebuttal**: Clash/Refutation (30) · Coverage (20) · Response Quality (20) · Evidence Comparison (15) · Strategic Framing (15)
-  - **Summary**: Extension Quality (25) · Collapse Strategy (20) · Frontlining (20) · Weighing (25) · Judge Clarity (10)
-  - **Final Focus**: Ballot Story/Voters (30) · Comparative Weighing (25) · Crystallization (20) · Consistency (15) · Judge Adaptation (10)
-- ✅ **Speech-Type Awareness**: Constructive speeches are not penalized for missing clash or extensions; Rebuttal emphasizes direct refutation; Summary focuses on extensions and weighing; Final Focus prioritizes voters and crystallization
-- ✅ **Calibrated Scoring**: 90-100 = Tournament-Ready · 80-89 = Strong · 70-79 = Solid · 60-69 = Developing · 50-59 = Flawed but Complete · 40-49 = Major Issues · 30-39 = Severely Underdeveloped · <30 = Incomplete
-- ✅ **Novice/JV Calibration**: Complete constructives with evidence and clear advocacy score 50-60 even with weak warrants (not 30); 30-39 reserved for severely underdeveloped or incoherent speeches
-- ✅ **Topic-Aware Examples**: Coach Diagnosis uses the student's actual speech topic and claims in before/after improvement examples (e.g., Section 230 examples for tech policy speeches)
-
-### Evidence Library (Phase 1)
-- ✅ **Document upload** — Upload PDF, DOCX, TXT, or MD case files (max 20 MB)
-- ✅ **Automatic text extraction** — PDF via PyMuPDF; DOCX via python-docx; TXT/MD native
-- ✅ **Evidence card extraction** — Heuristic detection of tag, author, year, source, and card text
-- ✅ **No invented citations** — Missing author/year/source fields are stored as `null` and flagged (`attribution_complete: false`); RoundLab never fabricates citations
-- ✅ **Full-text search** — PostgreSQL `tsvector` FTS index with `ilike` fallback searches your evidence library by keyword
-- ✅ **Claim support checking** — For any speech argument, RoundLab searches your library and uses the LLM to classify evidence support as `supported`, `partially_supported`, `unsupported`, or `unverifiable`
-- ✅ **Evidence Library page** — Upload, browse, search, and delete documents at `/evidence`
-- ✅ **EvidenceSupportPanel** — Standalone React component ready to drop into the speech report page
-
-**Safety rules:**
-- Evidence checking requires documents to be uploaded — it is never run on speeches without a library
-- The LLM is instructed to use only provided card text and must return `unverifiable` if no card matches
-- No case generation — RoundLab checks existing evidence, it does not write new cards
-
-**Current limitations (Phase 1):**
-- Scanned image PDFs (no embedded text layer) are not supported — text extraction requires a searchable PDF
-- `.doc` (legacy Word) is not supported; convert to `.docx` or `.txt`
-- pgvector semantic search is not yet enabled — search uses full-text and keyword overlap
-- Evidence checking is not wired into the live speech report pipeline yet (Phase 2)
-
-### Authentication
-- ✅ Supabase Auth with PKCE OAuth flow
-- ✅ Google sign-in
-- ✅ Session persistence and automatic token refresh
-
-### Team Features
-- ✅ **Multi-Team Hub**: Users can join multiple teams (student or coach role)
-- ✅ Create team (auto-generates 6-character invite code)
-- ✅ Join team (enter invite code from coach)
-- ✅ **Coach Dashboard**: View all students' progress in one place
-  - Speech count, drills assigned, drill attempts
-  - Last practice date for each student
-  - Aggregate team stats (total members, speeches, drills, attempts)
-- ✅ **Invite Workflow**: Copy invite code or full invite message to share with students
-- ✅ **Privacy**: Coaches see progress metadata, not audio recordings or full transcripts
-
-### UI/UX
-- ✅ **Theme System**: Full dark/light mode with CSS custom properties (oklch color space)
-  - Dark mode: `--color-canvas: oklch(0.065 0.002 264)`, `--color-ink: oklch(0.975 0.001 264)`
-  - Light mode: `--color-canvas: oklch(0.985 0.001 264)`, `--color-ink: oklch(0.095 0.002 264)`
-  - Toggle persists via localStorage, transforms entire app
-- ✅ **Personalized Homepage**: Adapts based on login state (shows name, level, quick actions)
-- ✅ **Team Hub**: Multi-team management, coach dashboard, student progress tracking
-- ✅ **Smart Speech Workspace**: Reorders sections when session is complete (Coaching Report → Drills → Flow → Transcript)
-- ✅ Responsive design (mobile-first, tested on phone/tablet/desktop)
-- ✅ Motion animations (stagger, fade-up, card hover, AnimatePresence transitions)
-- ✅ **Coaching Report Format**: Summary hero card, "Fix These First" priority cards, judge ballot, coach diagnosis with before/after examples, action checklist
-- ✅ Flow visualization with color-coded argument cards (offense, defense, weighing, response, unclear)
-- ✅ Coach diagnosis cards with targeted examples, disclaimers, and expandable before/after comparisons
-- ✅ Accessible buttons (size-sm: h-8, size-default: h-9, size-lg: h-10)
+1. [Overview](#overview)
+2. [Product Philosophy](#product-philosophy)
+3. [Feature Matrix](#feature-matrix)
+4. [System Architecture](#system-architecture)
+5. [AI Analysis Pipeline](#ai-analysis-pipeline)
+6. [Tech Stack](#tech-stack)
+7. [Database Schema](#database-schema)
+8. [Project Structure](#project-structure)
+9. [Setup](#setup)
+10. [Environment Variables](#environment-variables)
+11. [Running Tests](#running-tests)
+12. [API Reference](#api-reference)
+13. [Frontend Pages and Components](#frontend-pages-and-components)
+14. [Evaluation Harness](#evaluation-harness)
+15. [Delivery Coach](#delivery-coach)
+16. [Evidence Library](#evidence-library)
+17. [Gamification](#gamification)
+18. [Team Features](#team-features)
+19. [First-Run Onboarding and Demo Mode](#first-run-onboarding-and-demo-mode)
+20. [Async Analysis Jobs](#async-analysis-jobs)
+21. [Pilot Testing Protocol](#pilot-testing-protocol)
+22. [Analytics Events](#analytics-events)
+23. [Current Limitations](#current-limitations)
+24. [Roadmap](#roadmap)
+25. [Deployment](#deployment)
+26. [Screenshots](#screenshots)
+27. [Contributing](#contributing)
+28. [License](#license)
+29. [Status](#status)
 
 ---
 
-## Getting Started
+## Overview
 
-### Prerequisites
+RoundLab processes PF debate speeches through a seven-step AI pipeline and returns four artifacts: a structured argument flow, a judge-style coaching report scored against PF rubrics, three personalized practice drills, and a delivery analysis with a pacing timeline. Students can re-record after completing a drill and view a side-by-side improvement comparison.
 
-- **Node.js** 22+
-- **Python** 3.12+
-- **Supabase** project (or local Supabase setup)
-- **OpenAI API key** (for Whisper + GPT-4o)
+**Core workflow:**
 
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yashnilmohanty/RoundLab.git
-cd RoundLab
-```
-
-### 2. Backend Setup
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-Create `.env` file in `backend/`:
-
-```bash
-# Supabase
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-key
-
-# OpenAI
-OPENAI_API_KEY=sk-...
-
-# Optional
-ENVIRONMENT=development
-LOG_LEVEL=INFO
-```
-
-Run the server:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-API runs at `http://localhost:8000`  
-Health check: `GET http://localhost:8000/health`
-
-### 3. Frontend Setup
-
-```bash
-cd frontend
-npm install
-```
-
-Create `.env.local` file in `frontend/`:
-
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-Run the dev server:
-
-```bash
-npm run dev
-```
-
-Opens at `http://localhost:3000`
-
-### 4. Database Setup
-
-Apply all migrations in order via the **Supabase Dashboard → SQL Editor**, or via CLI:
-
-```bash
-# If using Supabase CLI (after supabase link)
-supabase db push
-```
-
-**Manual migration order:**
-```
-supabase/migrations/20260524000000_initial_schema.sql       # Core tables
-supabase/migrations/20260601000000_add_drill_fields.sql     # Drill metadata
-supabase/migrations/20260602000000_add_teams.sql            # Team features
-supabase/migrations/20260602100000_add_feedback_rating.sql  # Feedback ratings
-supabase/migrations/20260604000000_add_xp_ledger.sql        # XP + scoring version
-supabase/migrations/20260606000000_add_drill_time_limit.sql # Drill time_limit_seconds
-supabase/migrations/20260607000000_add_rerecord_fields.sql  # Re-record tracking
-supabase/migrations/20260608100000_add_evidence_tables.sql  # Evidence-Aware Coach Phase 1
-```
-
-**Storage buckets:** Create the following buckets in Supabase Dashboard → Storage:
-- `audio` — public read access, for speech recordings
-- `documents` — private, for uploaded case/evidence files (Evidence Library)
-
-**New columns added in Pass 4/5 (already in migrations):**
-| Table | Column | Type | Notes |
-|-------|--------|------|-------|
-| `speeches` | `duration_seconds` | `integer` | Set from recording timer or HTMLAudioElement |
-| `drills` | `time_limit_seconds` | `integer CHECK(30–300)` | LLM-generated, NULL for older drills |
-| `argument_maps` | `arguments.id` | (JSONB field) | e.g. `"arg_1"`, assigned in app layer |
-| `feedback_reports` | `raw_feedback.structured_issues` | (JSONB field) | Present in v2+ reports only |
+1. Record or upload a 45–90 second PF speech (constructive, rebuttal, summary, final focus, crossfire)
+2. Whisper transcribes the audio
+3. The pipeline extracts every claim, warrant, evidence citation, and impact
+4. A coaching report scores the speech on five rubric dimensions with actionable priorities
+5. Three drills are generated, each targeting a detected skill gap
+6. A delivery analysis measures pacing, filler words, and phrase repetition
+7. Students complete drills, re-record, and review the improvement delta
 
 ---
 
-## API Endpoints
+## Product Philosophy
 
-### Speeches
-- `POST /speeches` — Create new speech session
-- `GET /speeches?user_id={id}` — List user's speeches
-- `GET /speeches/{speech_id}` — Get speech details
-- `PATCH /speeches/{speech_id}` — Update speech
-- `DELETE /speeches/{speech_id}` — Delete speech
-- `POST /speeches/{speech_id}/reset-audio` — Delete audio and reset workflow
+RoundLab is built for **practice**, not case generation.
 
-### AI Pipeline
-- `POST /speeches/{speech_id}/transcribe` — Run Whisper transcription
-- `POST /speeches/{speech_id}/extract-arguments` — Generate argument flow
-- `POST /speeches/{speech_id}/generate-feedback` — Generate coaching report
-- `POST /speeches/{speech_id}/generate-drills` — Create personalized drills
+The app is designed to feel like a coach, not a shortcut. Every feature decision centers on one question: does this help the student improve their debate skills through deliberate repetition? The XP system rewards drill completion over speech uploads. The feedback format mirrors a ballot. The drills mirror what a coach would actually assign.
 
-### Drills
-- `GET /speeches/{speech_id}/drills` — List drills for speech
-- `PATCH /drills/{drill_id}` — Update drill status
-- `POST /drills/{drill_id}/attempts` — Record drill attempt
-
-### Users
-- `GET /users/{user_id}/progress` — Gamification dashboard (XP, level, badges, skill averages, incomplete drills)
-
-### Teams
-- `POST /teams` — Create team
-- `POST /teams/join` — Join team with invite code
-- `GET /teams/users/{user_id}` — List user's teams
-- `GET /teams/{team_id}/dashboard` — Coach view (student progress)
-
-### Evidence Library (Phase 1)
-- `POST /documents` — Register uploaded document and trigger parsing
-- `GET /documents?user_id={id}` — List user's documents
-- `GET /documents/{doc_id}?user_id={id}` — Get document with chunks and evidence cards
-- `DELETE /documents/{doc_id}?user_id={id}` — Delete document and cascade
-- `POST /documents/search` — Full-text search over evidence library
-- `POST /speeches/{speech_id}/evidence-check` — Check if a speech claim is supported by uploaded evidence
-- `GET /speeches/{speech_id}/evidence-checks?user_id={id}` — List saved evidence checks for a speech
+RoundLab does not write cases, generate arguments on demand, or fabricate evidence. It evaluates speeches the student already gave and helps them deliver those arguments better.
 
 ---
 
-## Running Tests and Checks
+## Feature Matrix
 
-### Backend (pytest)
-```bash
-cd backend
-source .venv/bin/activate
-pytest                       # all tests
-pytest tests/ -q             # quiet output
-pytest tests/test_schema_validation.py -v    # schema tests
-pytest tests/test_persistence_payloads.py -v # persistence tests
-```
-
-### Frontend (TypeScript + build)
-```bash
-cd frontend
-npm run build                # production build + typecheck
-npx tsc --noEmit             # typecheck only  (use ./node_modules/.bin/tsc if npx resolves wrong)
-```
-
-### Frontend unit tests (Jest)
-```bash
-cd frontend
-npm test                     # runs src/__tests__/**/*.test.ts
-```
-
-### Lint
-```bash
-cd frontend
-npm run lint
-```
+| Feature | Status | Description |
+|---|---|---|
+| Audio recording (browser MediaRecorder) | Implemented | Records directly in-browser; falls back to file upload |
+| File upload | Implemented | MP3, WAV, M4A, WebM, OGG, MP4 (max 50 MB) |
+| Whisper transcription | Implemented | Word count validated; word count too low triggers warning |
+| Argument flow extraction | Implemented | Claim, warrant, evidence, impact per argument |
+| PF rubric-calibrated scoring | Implemented | Five dimensions, speech-type-specific weights |
+| Judge-style coaching report | Implemented | Priority cards, ballot summary, before/after diagnosis |
+| Personalized drill generation | Implemented | Three drills per speech; skill-targeted; time limit set by LLM |
+| Drill attempt re-recording | Implemented | Records over parent speech; comparison view available |
+| Delivery analysis | Implemented | Pacing, filler words, repeated phrases, 5-segment timeline |
+| Delivery Coach panel | Implemented | Score, pacing band, filler breakdown, expandable timeline |
+| Evidence Library | Implemented (Phase 1) | Upload PDF/DOCX/TXT, extract evidence cards, search by keyword |
+| Evidence support checking | Implemented (Phase 1) | LLM classifies whether uploaded evidence supports a claim |
+| Async background pipeline | Implemented | Jobs run in background; frontend polls for progress |
+| Team management | Implemented | Create/join teams; coach dashboard with student progress |
+| Gamification | Implemented | XP ledger, levels, badges, skill averages |
+| Progress dashboard | Implemented | XP bar, level, incomplete drills, skill trends |
+| Pilot analytics | Implemented | product_events table, drill_ratings, output_feedback, /pilot page |
+| First-run onboarding | Implemented | Command center for zero-speech state; contextual help panels |
+| Demo mode | Implemented | /demo page with static sample data; no login required |
+| Judge lens comparison | Implemented | Rerun feedback with different judge type; side-by-side delta |
+| Re-record comparison | Implemented | Improvement delta across score, delivery score, filler count |
+| Flow editing | Implemented | Users can correct extracted arguments before locking report |
+| Dark/light mode | Implemented | Full oklch theme system; toggles persist via localStorage |
+| PWA manifest | Implemented | Installable on mobile; viewport and safe-area configured |
 
 ---
 
-## Deployment
+## System Architecture
 
-### Backend (Render, Railway, Fly.io, etc.)
+```mermaid
+graph TB
+    subgraph Browser["Browser / PWA"]
+        FE["Next.js 15 App Router\nTypeScript + Tailwind CSS v4"]
+    end
+    subgraph APILayer["FastAPI Service — Python 3.12"]
+        ROUTER["REST Routes\n+ Pydantic v2 validation"]
+        JOBS["Background Jobs\nanalysis_jobs table polling"]
+        PIPELINE["Analysis Pipeline\nLangGraph orchestration"]
+        DELIVERY["Delivery Analysis\ndeterministic — no LLM"]
+    end
+    subgraph SupabaseCluster["Supabase"]
+        AUTH["Auth\nPKCE + Google OAuth"]
+        DB[("PostgreSQL\n19 tables + RLS")]
+        STORE["Storage\naudio bucket + documents bucket"]
+    end
+    subgraph OpenAI["OpenAI APIs"]
+        WHISPER["whisper-1\nTranscription"]
+        GPT["gpt-4o-mini\nStructured reasoning"]
+    end
 
-Set environment variables:
-- `SUPABASE_URL`
-- `SUPABASE_KEY`
-- `OPENAI_API_KEY`
-- `ENVIRONMENT=production`
-
-Start command:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    FE -->|"JWT session"| AUTH
+    FE -->|"REST + JSON"| ROUTER
+    FE -->|"signed upload URL"| STORE
+    ROUTER --> DB
+    ROUTER --> JOBS
+    JOBS --> PIPELINE
+    PIPELINE -->|"audio bytes"| WHISPER
+    PIPELINE -->|"structured prompt"| GPT
+    PIPELINE --> DELIVERY
+    PIPELINE --> DB
+    AUTH --> DB
 ```
 
-### Frontend (Vercel recommended)
+All AI calls go through the backend service. The frontend never holds the OpenAI key. The Supabase service role key lives only in the backend environment and must never be exposed to the frontend.
 
-1. Connect GitHub repo to Vercel
-2. Set environment variables:
-   - `NEXT_PUBLIC_API_URL` (your backend URL)
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-3. Deploy
+---
+
+## AI Analysis Pipeline
+
+The pipeline is orchestrated by LangGraph and runs as a background job. Progress is written to the `analysis_jobs` table; the frontend polls for updates via the jobs API.
+
+```mermaid
+flowchart TD
+    START([Audio uploaded to Supabase Storage])
+    S1["Step 1 — Transcription\nwhisper-1 · 10% progress"]
+    S15["Step 1.5 — Delivery Analysis\ndeterministic · non-fatal · 25% progress"]
+    S2["Step 2 — Argument Extraction\ngpt-4o-mini structured output · 40% progress"]
+    S3["Step 3 — Debate Signal Detection\ngpt-4o-mini · 55% progress"]
+    S4["Step 4 — Feedback Generation\ngpt-4o-mini PF rubric · 70% progress"]
+    S5["Step 5 — Drill Generation\ngpt-4o-mini + deterministic delivery drills · 85% progress"]
+    S6["Step 6 — Evidence Support Check\noptional — only if user has uploaded evidence · 95% progress"]
+    DONE([Status → feedback_ready · 100% progress])
+
+    START --> S1 --> S15 --> S2 --> S3 --> S4 --> S5 --> S6 --> DONE
+```
+
+**Key design decisions:**
+
+- **Delivery analysis is non-fatal.** If it fails, the pipeline continues and the coaching report is unaffected.
+- **Argument extraction uses structured output.** The LLM returns a typed Pydantic schema — no free-form parsing.
+- **Debate signal detection runs separately** from argument extraction so signals can inform feedback without contaminating flow structure.
+- **Drill generation is two-pass.** The LLM generates up to three debate-skill drills; then a deterministic pass appends a delivery drill if clarity flags are present. Only one delivery drill is added per speech and only if no delivery-skill drill already exists.
+- **Evidence support checking is gated.** It runs only when the user has at least one document uploaded and fails silently if the document library is empty.
+
+### Argument extraction schema
+
+Each argument in the flow is stored as a structured object:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Application-assigned identifier (e.g. `arg_1`) |
+| `claim` | string | The specific assertion made |
+| `warrant` | string or null | The logical mechanism that supports the claim |
+| `evidence` | string or null | Citation or data referenced |
+| `impact` | string or null | Consequence or significance |
+| `argument_type` | enum | `offense`, `defense`, `weighing`, `response`, `unclear` |
+
+### Feedback scoring dimensions (constructive example)
+
+| Dimension | Max points |
+|---|---|
+| Case Structure | 20 |
+| Warranting | 25 |
+| Evidence Use | 20 |
+| Impact Development | 20 |
+| Clarity | 15 |
+
+Weights shift per speech type. Rebuttal emphasizes clash and coverage. Summary focuses on extensions and weighing. Final Focus prioritizes ballot story and crystallization.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Version |
+|---|---|---|
+| Frontend framework | Next.js (App Router) | 15.x |
+| Frontend language | TypeScript | 5.x |
+| Styling | Tailwind CSS | v4 |
+| UI primitives | Radix UI / shadcn | latest |
+| Animation | Motion (formerly Framer Motion) | latest |
+| Backend framework | FastAPI | 0.136.x |
+| Backend language | Python | 3.12 |
+| Schema validation | Pydantic | v2 |
+| AI orchestration | LangGraph | latest |
+| Transcription | OpenAI Whisper (whisper-1) | API |
+| Reasoning | OpenAI gpt-4o-mini | API |
+| Auth | Supabase Auth (PKCE + Google OAuth) | latest |
+| Database | Supabase PostgreSQL | 15.x |
+| File storage | Supabase Storage | latest |
+| PDF parsing | PyMuPDF | 1.23+ |
+| DOCX parsing | python-docx | 1.1+ |
+| Frontend tests | Jest + ts-jest | latest |
+| Backend tests | pytest | latest |
+
+---
+
+## Database Schema
+
+RoundLab uses 19 tables in Supabase PostgreSQL. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
+
+```mermaid
+erDiagram
+    profiles ||--o{ speeches : "records"
+    speeches ||--o| transcripts : "has one"
+    speeches ||--o| argument_maps : "has one"
+    speeches ||--o| feedback_reports : "has one"
+    speeches ||--o{ drills : "generates"
+    speeches ||--o| delivery_metrics : "has one"
+    speeches ||--o{ analysis_jobs : "tracks"
+    drills ||--o{ drill_attempts : "has"
+    drills ||--o{ drill_ratings : "rated by"
+    profiles ||--o{ team_members : "joins"
+    teams ||--o{ team_members : "contains"
+    profiles ||--o{ documents : "uploads"
+    documents ||--o{ document_chunks : "splits into"
+    document_chunks ||--o{ evidence_cards : "extracts"
+    speeches ||--o{ claim_evidence_checks : "checked against"
+    profiles ||--o{ product_events : "logs"
+    profiles ||--o{ output_feedback : "submits"
+    profiles ||--o{ user_xp_events : "earns"
+```
+
+| Table | Purpose |
+|---|---|
+| `profiles` | One row per authenticated user; mirrors `auth.users` |
+| `speeches` | Core entity; one row per recorded or uploaded speech |
+| `transcripts` | Whisper output text and word count |
+| `argument_maps` | Structured argument flow extracted by the pipeline |
+| `feedback_reports` | Judge-style coaching report with scores and priorities |
+| `drills` | Personalized practice exercises generated per speech |
+| `drill_attempts` | User responses and re-recordings for drills |
+| `drill_ratings` | User helpfulness ratings (helpful / somewhat / not_helpful) per drill |
+| `delivery_metrics` | Pacing, filler words, repeated phrases, delivery score, timeline |
+| `analysis_jobs` | Background pipeline progress tracking (status, step, progress_pct) |
+| `teams` | Coach-created teams with 6-character invite code |
+| `team_members` | User-team membership with role (student or coach) |
+| `documents` | Uploaded case/evidence files (PDF, DOCX, TXT, MD) |
+| `document_chunks` | Text chunks split from documents for search |
+| `evidence_cards` | Extracted tag, author, year, source, and card text |
+| `claim_evidence_checks` | LLM support classification for a claim against an evidence card |
+| `product_events` | Internal analytics events (best-effort, never blocks user flows) |
+| `output_feedback` | User confusion reports on AI outputs |
+| `user_xp_events` | XP ledger; one row per XP-earning action |
 
 ---
 
@@ -333,120 +272,373 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 RoundLab/
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                  # Next.js App Router pages
-│   │   │   ├── dashboard/        # Progress dashboard
-│   │   │   ├── session/          # Create new speech
-│   │   │   ├── speech/[id]/      # Speech workspace
-│   │   │   ├── team/             # Team management
-│   │   │   └── login/            # Supabase Auth
-│   │   ├── components/           # UI components
-│   │   │   ├── ui/               # shadcn primitives
-│   │   │   ├── AppNav.tsx        # Navigation with theme toggle
-│   │   │   ├── ArgumentCard.tsx  # Flow visualization
-│   │   │   ├── DrillCard.tsx     # Drill display
-│   │   │   ├── ScoreCard.tsx     # Feedback score ring
+│   │   ├── app/                     # Next.js App Router pages
+│   │   │   ├── page.tsx             # Homepage / landing
+│   │   │   ├── dashboard/           # Progress dashboard
+│   │   │   ├── session/             # Create new speech session
+│   │   │   ├── speech/[id]/         # Speech workspace (flow, report, drills)
+│   │   │   ├── team/                # Team management + coach dashboard
+│   │   │   ├── evidence/            # Evidence Library
+│   │   │   ├── drills/              # Standalone drills view
+│   │   │   ├── demo/                # Public demo (no login required)
+│   │   │   ├── evals/               # Eval quality dashboard
+│   │   │   ├── pilot/               # Pilot analytics (current user only)
+│   │   │   ├── learn/               # Onboarding reference
+│   │   │   └── login/               # Supabase Auth
+│   │   ├── components/              # React components
+│   │   │   ├── ui/                  # Radix-based primitives
+│   │   │   ├── AppNav.tsx           # Navigation with theme toggle
+│   │   │   ├── ArgumentCard.tsx     # Flow visualization card
+│   │   │   ├── ArgumentChain.tsx    # Multi-arg chain component
+│   │   │   ├── DeliveryCoachPanel.tsx # Delivery score, timeline, filler breakdown
+│   │   │   ├── DrillCard.tsx        # Drill display with attempt recorder
+│   │   │   ├── EvidenceSupportPanel.tsx # Evidence claim check results
+│   │   │   ├── FirstRunCommandCenter.tsx # Zero-speech onboarding state
+│   │   │   ├── FlowBoard.tsx        # Horizontal flow sheet carousel
+│   │   │   ├── FlowTable.tsx        # Classic vertical flow table
+│   │   │   ├── ImprovementComparisonCard.tsx # Re-record delta view
+│   │   │   ├── ScoreCard.tsx        # Feedback score ring + breakdown
 │   │   │   └── ...
 │   │   ├── lib/
-│   │   │   ├── api.ts            # Backend fetch wrapper
-│   │   │   ├── supabase.ts       # Supabase client (PKCE OAuth)
-│   │   │   ├── motion.ts         # Animation presets
-│   │   │   └── utils.ts
-│   │   └── types/                # TypeScript interfaces
-│   └── tailwind.config.ts        # Tailwind v4 config
+│   │   │   ├── api.ts               # Backend fetch wrapper
+│   │   │   ├── analytics.ts         # logEvent() — fire-and-forget event logger
+│   │   │   ├── deliveryHelpers.ts   # Pacing band display, score color, WPM format
+│   │   │   ├── firstRunHelpers.ts   # deriveFirstRunState() — 9-state machine
+│   │   │   ├── supabase.ts          # Supabase client (PKCE OAuth)
+│   │   │   └── motion.ts            # Animation presets
+│   │   ├── types/
+│   │   │   └── index.ts             # All TypeScript interfaces
+│   │   └── __tests__/               # Jest unit tests
+│   ├── public/
+│   │   └── manifest.json            # PWA manifest
+│   └── tailwind.config.ts
 ├── backend/
 │   └── app/
-│       ├── main.py               # FastAPI app + CORS
-│       ├── config.py             # Pydantic settings
-│       ├── api/                  # Route handlers
-│       │   ├── speeches.py
-│       │   ├── drills.py
-│       │   ├── teams.py
-│       │   └── users.py
-│       ├── models/               # Pydantic schemas
+│       ├── main.py                  # FastAPI app + CORS configuration
+│       ├── config.py                # Pydantic settings (reads .env)
+│       ├── api/                     # Route handlers
+│       │   ├── speeches.py          # Speech CRUD + pipeline triggers + delivery endpoints
+│       │   ├── drills.py            # Drill management + attempt recording
+│       │   ├── users.py             # Progress summary + XP + badges
+│       │   ├── teams.py             # Team create/join/dashboard
+│       │   ├── documents.py         # Evidence library endpoints
+│       │   ├── jobs.py              # Analysis job polling
+│       │   ├── pilot.py             # Pilot metrics
+│       │   └── output_feedback.py   # Confusion reports
+│       ├── models/                  # Pydantic response schemas
 │       ├── services/
-│       │   ├── supabase_client.py
-│       │   ├── openai_client.py
-│       │   └── ...
-│       └── pipeline/             # LangGraph workflow
-│           ├── graph.py
-│           ├── nodes.py
-│           └── prompts/
-└── docs/                         # Product requirements, rubric, samples
+│       │   ├── analysis_pipeline.py # LangGraph orchestration (7 steps)
+│       │   ├── delivery_analysis.py # Deterministic pacing + filler analysis
+│       │   ├── argument_extraction.py
+│       │   ├── debate_signal_detection.py
+│       │   ├── feedback_generation.py
+│       │   ├── drill_generation.py  # LLM drills + make_delivery_drill()
+│       │   ├── evidence_extraction.py
+│       │   ├── evidence_support_check.py
+│       │   ├── drill_attempt_scoring.py
+│       │   ├── deterministic_scoring.py
+│       │   ├── xp_ledger.py
+│       │   └── supabase_client.py
+│       └── tests/                   # pytest suite (592 tests)
+├── evals/                           # Labeled eval fixtures + runner
+│   ├── fixtures/                    # JSON fixture files
+│   ├── run_evals.py
+│   └── results/                     # latest.json + timestamped archives
+├── supabase/
+│   └── migrations/                  # 19 ordered SQL migration files
+└── docs/                            # Product requirements, rubric, samples
 ```
 
 ---
 
-## Testing
+## Setup
 
-### Backend Tests
+### Prerequisites
+
+- Node.js 22+
+- Python 3.12+
+- A Supabase project (cloud or local via `supabase start`)
+- An OpenAI API key with access to Whisper and gpt-4o-mini
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create `backend/.env`:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-service-role-key
+OPENAI_API_KEY=sk-...
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+CORS_ORIGINS=http://localhost:3000
+```
+
+> **Security:** `SUPABASE_KEY` is the service role key. It bypasses row-level security. It must never be exposed to the browser or committed to version control.
+
+Start the server:
+
+```bash
+uvicorn app.main:app --reload
+# API: http://localhost:8000
+# Health: GET http://localhost:8000/health
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+```
+
+Create `frontend/.env.local`:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+```bash
+npm run dev
+# Opens at http://localhost:3000
+```
+
+### Database Setup
+
+Apply migrations in the order listed below. Use the Supabase Dashboard SQL Editor or the CLI after `supabase link`:
+
+```bash
+supabase db push
+```
+
+Manual order if applying individually:
+
+```
+20260524000000_initial_schema.sql          # Core tables
+20260601000000_add_drill_fields.sql        # Drill metadata
+20260602000000_add_teams.sql               # Teams + team_members
+20260602100000_add_feedback_rating.sql     # Feedback rating fields
+20260604000000_add_xp_ledger.sql           # XP events + scoring version
+20260606000000_add_drill_time_limit.sql    # time_limit_seconds on drills
+20260607000000_add_rerecord_fields.sql     # parent_speech_id + parent_drill_id
+20260608100000_add_evidence_tables.sql     # Evidence Library Phase 1
+20260608110000_fix_document_storage_policies.sql
+20260609000000_add_pilot_tables.sql        # product_events, drill_ratings, output_feedback
+20260609100000_expand_drill_order_constraint.sql
+20260609200000_relax_drills_order_check.sql
+20260609300000_add_analysis_jobs.sql       # analysis_jobs table
+20260609400000_add_argument_map_correction.sql
+20260609500000_add_delivery_metrics.sql    # delivery_metrics table
+```
+
+**Storage buckets** — create these in Supabase Dashboard under Storage:
+
+| Bucket | Access | Purpose |
+|---|---|---|
+| `audio` | Public read | Speech recording playback |
+| `documents` | Private | Uploaded case/evidence files |
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_KEY` | Yes | Service role key — backend only, never expose to browser |
+| `OPENAI_API_KEY` | Yes | OpenAI key with Whisper + gpt-4o-mini access |
+| `ENVIRONMENT` | No | `development` or `production` (enables dev-only routes) |
+| `LOG_LEVEL` | No | Default: `INFO` |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins; default: `http://localhost:3000` |
+
+### Frontend (`frontend/.env.local`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | Yes | Backend base URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Anon key — safe for browser |
+
+---
+
+## Running Tests
+
+### Backend (pytest)
+
 ```bash
 cd backend
 source .venv/bin/activate
-pytest
+pytest                                      # all 592 tests
+pytest tests/ -q                            # quiet output
+pytest tests/test_delivery_analysis.py -v  # delivery tests only
+pytest tests/test_schema_validation.py -v  # schema tests
 ```
 
-71/71 tests passing (as of 2026-06-03).
+### Frontend (Jest)
 
-### Frontend Build Check
 ```bash
 cd frontend
-npm run build
+npm test                                    # all 201 tests
+npm test -- --testPathPattern delivery      # filter by name
+npm test -- --watch                         # watch mode
 ```
 
-All pages compile successfully.
+### Type checking
+
+```bash
+cd frontend
+npx tsc --noEmit                            # type check without emitting
+```
+
+### Production build
+
+```bash
+cd frontend
+npm run build                               # full Next.js build
+```
+
+### Evaluation harness
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m evals.run_evals --mock            # no API cost
+python -m evals.run_evals                   # real LLM calls
+python -m evals.run_evals --fixture good_constructive
+```
 
 ---
 
-## Deployment Safety
+## API Reference
 
-### Pre-Deployment Checklist
-- [ ] Backend tests pass (`pytest`)
-- [ ] Frontend builds without errors (`npm run build`)
-- [ ] Environment variables configured in production
-- [ ] Supabase migrations applied
-- [ ] Audio storage bucket configured (`audio` bucket with public read)
-- [ ] CORS origins updated for production domain
+### Health
 
-### Known Deployment Considerations
-- **Audio uploads**: Ensure Supabase storage `audio` bucket has public read access for playback
-- **OpenAI API**: Monitor usage and set billing alerts (Whisper + GPT-4o calls)
-- **Session persistence**: Supabase Auth tokens persist via localStorage and cookies
-- **Theme toggle**: Persists in localStorage, safe for SSR (checked on mount)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Service health check |
+
+### Speeches
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/speeches` | Create a new speech session |
+| GET | `/speeches?user_id={id}` | List speeches for a user |
+| GET | `/speeches/{id}` | Get speech detail |
+| PATCH | `/speeches/{id}` | Update speech metadata |
+| DELETE | `/speeches/{id}` | Delete speech and cascade |
+| POST | `/speeches/{id}/reset-audio` | Delete audio and reset pipeline |
+| POST | `/speeches/{id}/transcribe` | Trigger Whisper transcription |
+| POST | `/speeches/{id}/extract-arguments` | Trigger argument extraction |
+| POST | `/speeches/{id}/generate-feedback` | Trigger feedback generation |
+| POST | `/speeches/{id}/generate-drills` | Trigger drill generation |
+| POST | `/speeches/{id}/analyze` | Trigger full async pipeline |
+| GET | `/speeches/{id}/comparison?user_id={id}` | Re-record improvement comparison |
+| POST | `/speeches/{id}/evidence-check` | Check claim against evidence library |
+| GET | `/speeches/{id}/evidence-checks?user_id={id}` | List saved evidence checks |
+| GET | `/speeches/{id}/delivery-metrics` | Get delivery metrics for speech |
+| POST | `/speeches/{id}/delivery-metrics/recompute` | Recompute delivery from stored transcript |
+
+### Drills
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/speeches/{id}/drills` | List drills for a speech |
+| PATCH | `/drills/{id}` | Update drill status |
+| POST | `/drills/{id}/attempts` | Record a drill attempt |
+
+### Users
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/users/{id}/progress` | XP, level, badges, skill averages, incomplete drills |
+| POST | `/users/{id}/events` | Record a product analytics event |
+
+### Teams
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/teams` | Create a team |
+| POST | `/teams/join` | Join team by invite code |
+| GET | `/teams/users/{id}` | List teams for a user |
+| GET | `/teams/{id}/dashboard` | Coach view with student progress |
+
+### Documents (Evidence Library)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/documents` | Register uploaded document and trigger parsing |
+| GET | `/documents?user_id={id}` | List documents |
+| GET | `/documents/{id}?user_id={id}` | Document with chunks and evidence cards |
+| DELETE | `/documents/{id}?user_id={id}` | Delete document and cascade |
+| POST | `/documents/search` | Full-text search over evidence library |
+
+### Jobs
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/jobs/{id}` | Get analysis job status and progress |
+
+### Pilot
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/pilot/summary?user_id={id}` | Per-user pilot metrics |
+
+### Output Feedback
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/output-feedback` | Submit confusion report on AI output |
 
 ---
 
-## Limitations & Known Issues
+## Frontend Pages and Components
 
-### Current Limitations
-- **Audio formats**: Limited to MP3, WAV, M4A, WebM, OGG, MP4 (max 50MB)
-- **Speech length**: Optimized for 45-90 second speeches (PF format)
-- **AI accuracy**: Flow extraction and feedback quality depend on audio clarity and speech structure
-- **Team management**: No leave team or remove member functionality yet (coaches must manually manage)
-- **Drill attempts**: Currently manual status tracking (no automated verification)
-- **Mobile recording**: Browser MediaRecorder support varies (upload recommended for iOS Safari)
+### Pages
 
-### Roadmap Considerations
-- Real-time collaboration (live team practice sessions)
-- Case library and opponent research tracking
-- Tournament prep mode (bracket simulation, judge adaptation profiles)
-- Advanced analytics (trend analysis, peer comparison)
-- Integration with Tabroom.com for tournament results
-- Drill verification (AI checks if drill attempt matches prompt)
-- Video upload support (for crossfire and body language feedback)
+| Route | Description |
+|---|---|
+| `/` | Homepage; adapts based on auth state and progress |
+| `/dashboard` | Progress dashboard with XP, level, drills, delivery focus card |
+| `/session` | Create a new speech session |
+| `/speech/[id]` | Full speech workspace: flow, coaching report, delivery, drills |
+| `/team` | Team management and coach dashboard |
+| `/evidence` | Evidence Library: upload, browse, search documents |
+| `/drills` | Standalone drills view |
+| `/demo` | Public demo with static sample data; no login required |
+| `/evals` | Eval quality dashboard (reads static fixture data) |
+| `/pilot` | Pilot metrics for current user |
+| `/learn` | Onboarding reference material |
+| `/login` | Supabase Auth with Google OAuth |
 
----
+### Key components
 
-## Product Philosophy
-
-**Make the app feel like coaching, not cheating.**
-
-RoundLab is built for **practice**, not case generation. The core loop is:
-1. Record a speech you're already prepared to give
-2. Get judge-style feedback on delivery and argumentation
-3. Complete targeted drills to fix specific weaknesses
-4. Re-record to track improvement
-
-This is **not** an AI case writer. It's a **practice partner** that gives you feedback and drills, just like a coach would.
+| Component | Description |
+|---|---|
+| `DeliveryCoachPanel` | Delivery score ring, pacing band, filler breakdown, expandable 5-segment timeline |
+| `FlowBoard` | Horizontal scrolling flow sheet with snap carousel |
+| `FlowTable` | Vertical flow table with argument type color coding |
+| `ArgumentChain` | Inline claim-warrant-evidence-impact chain display |
+| `ScoreCard` | Score ring with dimension breakdown |
+| `ImprovementComparisonCard` | Before/after delta for score, delivery score, and filler count |
+| `FirstRunCommandCenter` | Onboarding state machine for zero-speech users |
+| `EvidenceSupportPanel` | Evidence check results with support level labels |
+| `AnalysisProgressCard` | Job polling progress bar and step labels |
+| `DrillCard` | Drill display with attempt recorder and rating |
+| `PilotChecklist` | Live pilot loop checklist with completion flags |
+| `SkillTrendCard` | Per-dimension improvement trend vs. previous speech |
+| `JudgeLensComparison` | Side-by-side feedback delta when judge type changes |
+| `CoachMarginNote` | Inline coach observation card |
+| `DashboardCockpitBand` | Stats band across the top of the dashboard |
 
 ---
 
@@ -457,107 +649,279 @@ RoundLab includes a labeled evaluation system to measure whether AI outputs are 
 ### Running evals
 
 ```bash
-# From the backend/ directory:
+cd backend
+source .venv/bin/activate
 
-# Fast — no API cost, tests eval machinery only
+# No API cost — tests eval machinery only
 python -m evals.run_evals --mock
 
-# Fast — run only 3 fixtures
-python -m evals.run_evals --mock --limit 3
-
-# Real LLM — accurate, uses OpenAI API
+# Real LLM calls — accurate results
 python -m evals.run_evals
 
-# Single fixture by ID
+# Single fixture
 python -m evals.run_evals --fixture good_constructive
+
+# Limit to first N fixtures
+python -m evals.run_evals --mock --limit 3
 ```
 
-Results are written to `backend/evals/results/latest.json` and a timestamped archive.
+Results write to `backend/evals/results/latest.json` and a timestamped archive.
 
 ### Fixtures
 
-Labeled speech fixtures live in `backend/evals/fixtures/`. Each JSON file contains:
-
-| Field | Description |
-|-------|-------------|
-| `id` | Unique fixture identifier |
-| `speech_type` | constructive · rebuttal · summary · final_focus |
-| `transcript` | Full speech text (used directly — no audio needed) |
-| `expected_issues` | Ground-truth debate issues with severity and `required` flag |
-| `expected_argument_components` | Expected claim/warrant/evidence/impact components |
-| `expected_drill_types` | Expected skill targets for generated drills |
-| `notes` | Explanation of what this fixture tests |
-
-**Current fixtures (8):**
-
-| ID | Type | Primary issue |
-|----|------|---------------|
+| ID | Speech type | Primary test focus |
+|---|---|---|
 | `good_constructive` | constructive | No explicit impact weighing |
 | `missing_warrant_constructive` | constructive | No logical mechanisms |
-| `weak_evidence_constructive` | constructive | Vague/unnamed sources |
+| `weak_evidence_constructive` | constructive | Vague or unnamed sources |
 | `no_weighing_summary` | summary | Extensions without impact comparison |
 | `dropped_argument_rebuttal` | rebuttal | Ignores opponent C2 entirely |
-| `new_argument_final_focus` | final_focus | New evidence in final focus |
+| `new_argument_final_focus` | final_focus | New evidence introduced in final focus |
 | `no_clash_rebuttal` | rebuttal | Only restates own case |
 | `strong_delivery_weak_logic` | constructive | Circular arguments, no evidence |
 
-### Adding a new fixture
+A fixture passes if issue F1 is at least 0.5, argument coverage is at least 0.5, and all `required` issues are detected.
 
-1. Create `backend/evals/fixtures/<your_id>.json`
-2. Follow the `EvalSpeechFixture` schema in `backend/evals/models.py`
-3. Set `required: true` for issues that MUST be detected for the sample to pass
-4. Run `python -m evals.run_evals --mock --fixture <your_id>` to verify the fixture loads
+On the current internal fixture suite, real evals have previously reached 8/8 passing with F1 around 0.850.
 
-### Metrics
+### Eval metrics
 
 | Metric | Description |
-|--------|-------------|
+|---|---|
 | Issue Precision | Fraction of detected issues that were expected |
 | Issue Recall | Fraction of expected issues that were detected |
 | Issue F1 | Harmonic mean of precision and recall |
 | Argument Coverage | Fraction of expected argument components found |
 | Drill Relevance | Fraction of expected skill targets in generated drills |
-| Hallucinated Evidence | Arguments with vague/unnamed source attributions |
+| Hallucinated Evidence | Arguments with vague or unnamed source attributions |
 
-A sample passes if: issue F1 ≥ 0.5, argument coverage ≥ 0.5, and all `required` issues are detected.
+### Adding a fixture
 
-### Eval dashboard
-
-Visit `/evals` in the running app to see the eval quality dashboard (reads static fixture data).
-To update with latest results, copy `backend/evals/results/latest.json` into `frontend/src/lib/eval_results_fixture.ts`.
-
-### Demo page
-
-Visit `/demo` to see a complete polished RoundLab example using static sample data — no login, no recording required.
+1. Create `backend/evals/fixtures/<id>.json` following the `EvalSpeechFixture` schema in `backend/evals/models.py`
+2. Set `required: true` on issues that must be detected for the fixture to pass
+3. Run `python -m evals.run_evals --mock --fixture <id>` to verify the file loads
 
 ---
 
-## Contributing
+## Delivery Coach
 
-Pull requests welcome. For major changes, open an issue first.
+Delivery analysis is fully deterministic — no LLM, no external API. It derives metrics from the transcript text and optional duration.
+
+### Metrics computed
+
+| Metric | Method |
+|---|---|
+| Words per minute | word count / (duration / 60) |
+| Pacing band | too_slow (<110 WPM), steady (110–180), too_fast (>180), unknown |
+| Filler word count | Multi-word fillers detected first to prevent double-counting |
+| Filler breakdown | Per-word count dictionary |
+| Repeated phrases | 2–4 word n-grams appearing 3+ times (common phrases excluded) |
+| Long sentences | Sentences exceeding 30 words |
+| Delivery score | 100 minus stacked penalties for pacing, fillers, repetition, long sentences, short speech; clamped 0–100 |
+| Clarity flags | `too_fast`, `too_slow`, `many_fillers`, `moderate_fillers`, `long_sentences`, `repetitive_wording` |
+
+### 5-segment timeline
+
+The transcript is divided into five equal-word chunks with approximate timestamps. Each segment reports filler count, repeated phrase hits, and flags, letting students see whether their pacing or filler use degrades as the speech progresses.
+
+### Delivery drills
+
+`make_delivery_drill()` in `drill_generation.py` generates one deterministic drill per speech based on priority:
+
+1. `too_fast` flag + WPM > 185 → pacing_control drill
+2. `many_fillers` flag + filler rate > 5% → filler_reduction drill
+3. `long_sentences` flag → clarity_delivery drill
+
+Only one delivery drill is appended, and only if no delivery-targeted drill was already generated by the LLM pass.
 
 ---
 
-## Pilot Readiness
+## Evidence Library
 
-RoundLab is designed to run a 5–10 student pilot using the following protocol.
+Evidence Library is a Phase 1 implementation. Full LLM-powered evidence comparison is planned for Phase 2.
 
-### Recommended Pilot Protocol
+### How it works
 
-1. Ask each student to record one PF speech (any type).
-2. Ask them to open their flow report and review judge-style feedback.
-3. Ask them to complete one recommended drill.
-4. Ask them to re-record the speech.
-5. Ask them to view the improvement comparison report.
-6. Ask them to rate the feedback usefulness.
+1. Student uploads a PDF, DOCX, TXT, or MD case file (max 20 MB)
+2. Text is extracted (PDF via PyMuPDF; DOCX via python-docx; TXT/MD native)
+3. The pipeline detects evidence card boundaries and extracts tag, author, year, source, and card text
+4. Cards are stored with `attribution_complete: false` if author, year, or source is missing — RoundLab never fabricates citations
+5. The student can search the library by keyword or run evidence support checks on specific speech claims
 
-### Analytics Events Tracked Internally
+### Support levels
 
-| Event | When |
+| Level | Meaning |
+|---|---|
+| `supported` | An uploaded card directly supports the claim |
+| `partially_supported` | An uploaded card is related but does not fully support the claim |
+| `unsupported` | No uploaded card supports the claim |
+| `unverifiable` | No relevant card was found in the library |
+
+### Limitations (Phase 1)
+
+- Scanned image PDFs without an embedded text layer are not supported
+- `.doc` (legacy Word format) is not supported; convert to `.docx` or `.txt`
+- Search uses PostgreSQL full-text (`tsvector`) with `ilike` fallback; pgvector semantic search is not yet enabled
+- Evidence checking is triggered manually per claim; it is not run automatically during the pipeline
+
+---
+
+## Gamification
+
+XP is awarded only for practice actions, not for passive uploads. The XP system is designed to reinforce the practice loop.
+
+### XP values
+
+| Action | XP |
+|---|---|
+| Flow generated | +5 |
+| Feedback report generated | +10 |
+| Drill assigned | +15 |
+| Feedback rating submitted | +10 |
+| First drill attempt | +50 |
+| Repeat drill attempt | +20 |
+| Full practice loop completed (feedback + drills + attempts) | +25 bonus |
+| Speech upload or transcription | 0 |
+
+### Level thresholds
+
+| Level | XP range |
+|---|---|
+| 1 | 0–99 |
+| 2 | 100–249 |
+| 3 | 250–499 |
+| 4 | 500–899 |
+| 5 | 900–1399 |
+| 6+ | 1400+ (300 per level) |
+
+### Badges
+
+| Badge | Condition |
+|---|---|
+| First Feedback | First feedback report received |
+| First Drill Attempt | First drill attempt recorded |
+| Practice Habit | 3 drill attempts completed |
+| Full Practice Loop | Completed feedback + drills + attempts in one session |
+| Feedback Analyst | 3 feedback reports rated |
+| Team Player | Joined a team |
+
+---
+
+## Team Features
+
+- Coaches create a team and receive a 6-character invite code
+- Students join by entering the invite code
+- One user can belong to multiple teams with different roles in each
+- The coach dashboard shows per-student speech count, drills assigned, drill attempts, and last practice date
+- Coaches see progress metadata only; audio recordings and full transcripts are not exposed
+
+---
+
+## First-Run Onboarding and Demo Mode
+
+### First-run state machine
+
+`deriveFirstRunState()` in `frontend/src/lib/firstRunHelpers.ts` returns one of nine states based on `ProgressSummary`, `PilotSummary`, and the speech list:
+
+| State | Condition |
+|---|---|
+| `no_activity` | No speeches recorded |
+| `speech_recorded` | Speech uploaded, not yet analyzed |
+| `flow_ready` | Argument flow extracted |
+| `feedback_ready` | Feedback report complete |
+| `drills_assigned` | Drills generated |
+| `drill_attempted` | At least one drill attempt saved |
+| `rerecorded` | Re-recording exists |
+| `comparison_viewed` | Improvement comparison viewed |
+| `active_user` | 3+ feedback reports and 3+ drill attempts |
+
+The `active_user` threshold gates the transition from onboarding to the full dashboard experience.
+
+### FirstRunCommandCenter
+
+When a user has zero speeches, the dashboard renders `FirstRunCommandCenter` instead of the normal progress cards. It shows a mission brief, step-by-step guide, and CTA to record a first speech.
+
+### Contextual help panels
+
+The speech report page embeds collapsible help panels at three points:
+- **What is a flow?** — adjacent to the flow section
+- **Why does warranting matter?** — adjacent to the coaching report
+- **What does the judge lens change?** — adjacent to the judge lens selector
+
+### Demo mode
+
+The `/demo` page is publicly accessible without login. It renders a complete sample speech report using static fixture data (`SAMPLE_ARGUMENT_MAP_V1`, `SAMPLE_SPEECH_V2`, `SAMPLE_FEEDBACK_V2`, `SAMPLE_DRILLS_V2`). All content is labeled as demo data. No authenticated user data is used or mixed in.
+
+---
+
+## Async Analysis Jobs
+
+The full analysis pipeline runs as a background job to avoid blocking the HTTP response.
+
+### Flow
+
+1. Frontend calls `POST /speeches/{id}/analyze`
+2. Backend creates an `analysis_jobs` row with `status: pending` and returns the job ID immediately
+3. The pipeline runs in a background thread, writing progress (step name, progress_pct) to the `analysis_jobs` row after each step
+4. Frontend polls `GET /jobs/{id}` every 2 seconds and renders `AnalysisProgressCard` with the current step and percentage
+5. On `status: complete`, the frontend fetches the full speech report
+6. On `status: failed`, the frontend shows a recovery UI with a retry button
+
+### Job statuses
+
+| Status | Meaning |
+|---|---|
+| `pending` | Queued, not yet started |
+| `running` | Pipeline in progress |
+| `complete` | All steps succeeded |
+| `failed` | Pipeline encountered a fatal error |
+
+---
+
+## Pilot Testing Protocol
+
+RoundLab is designed for a 5–10 student pilot. The recommended session flow is:
+
+1. Student records one PF speech (any speech type)
+2. Student opens the flow report and reviews the judge-style coaching report
+3. Student completes one recommended drill
+4. Student re-records the speech
+5. Student views the improvement comparison
+6. Student rates the feedback helpfulness
+
+### Pilot checklist flags
+
+| Flag | Meaning |
+|---|---|
+| `return_for_second_speech` | Student recorded 2+ speeches |
+| `completed_one_drill` | At least one drill marked completed |
+| `rerecord_count` | Speeches recorded over a parent speech |
+| `comparison_count` | Times the improvement comparison was viewed |
+| `feedback_rating_count` | Number of feedback reports rated |
+
+### Pilot dashboard
+
+Navigate to `/pilot` to see per-user pilot metrics, skill trends, common issues from feedback reports, and the full pilot checklist with live completion state.
+
+The pilot dashboard shows only the current user's data. No cross-user data is exposed.
+
+### Feedback and confusion reporting
+
+Feedback reports support three helpfulness ratings: `helpful`, `somewhat`, `not_helpful`. Users submit from the speech report page; an optional short comment is accepted.
+
+Any AI output surface has a "Report confusing output" control. Users can flag: incorrect issue, generic feedback, evidence mismatch, confusing wording, technical bug, or other. Feedback is stored in `output_feedback` for pilot learning, not public support.
+
+---
+
+## Analytics Events
+
+All events are stored in `product_events`. Logging is fire-and-forget and never blocks user flows.
+
+| Event | When fired |
 |---|---|
 | `speech_created` | User creates a new speech session |
-| `rerecord_started` | User creates a speech with a parent speech (re-record) |
-| `speech_analyzed` | Feedback report generation completes successfully |
+| `rerecord_started` | User creates a speech with a parent speech |
+| `speech_analyzed` | Feedback report generation completes |
 | `feedback_viewed` | User fetches a feedback report |
 | `feedback_rated` | User submits a feedback helpfulness rating |
 | `drill_attempt_saved` | User saves a drill attempt |
@@ -565,68 +929,117 @@ RoundLab is designed to run a 5–10 student pilot using the following protocol.
 | `drill_rated` | User submits a drill helpfulness rating |
 | `comparison_viewed` | User views a speech improvement comparison |
 
-All events are stored in the `product_events` table (user-scoped, best-effort).
-Failures never break user flows. No external analytics service required.
+---
 
-### Feedback Ratings
+## Current Limitations
 
-Feedback reports support three helpfulness ratings: `helpful`, `somewhat`, `not_helpful`.
+### Audio and transcription
+- Audio formats supported: MP3, WAV, M4A, WebM, OGG, MP4 (max 50 MB)
+- Optimized for 45–90 second PF speeches; very short speeches receive lower scores by design
+- Audio quality directly affects transcript accuracy and downstream AI output quality
+- Browser MediaRecorder support varies by platform; file upload is recommended for iOS Safari
 
-Users submit ratings from the speech report page. A short optional comment is supported.
-Ratings are stored in `feedback_reports.helpful_rating` and `helpful_comment`.
+### Evidence Library (Phase 1)
+- Scanned image PDFs (no embedded text layer) are not supported
+- `.doc` (legacy Word format) is not supported; use `.docx` or `.txt`
+- Search is keyword-based; pgvector semantic search is not yet enabled
+- Evidence checking is triggered manually, not run automatically during the pipeline
 
-Drill ratings (`helpful`, `somewhat`, `not_helpful`) are stored in the `drill_ratings` table.
-One rating per user per drill (upserts on re-submit).
+### AI accuracy
+- Argument extraction can misclassify argument types for highly conversational or off-structure speech
+- Debate signal detection has known gaps: new-argument detection in final focus, no-clash rebuttal detection, and false-positive suppression for generic content
+- Evidence support classification may return `unverifiable` for claims that use paraphrased evidence
 
-### Confusion Reporting
+### Teams
+- No leave-team or remove-member functionality yet; coaches must manage membership manually
+- The pilot dashboard shows only the current user's data, not a team-wide aggregate view
 
-Any AI output surface (speech report, drill feedback, evidence check) has a small
-"Report confusing output" control. Users can flag:
+### Gamification
+- Streak bonuses are defined in the XP rules but are not yet automatically awarded
 
-- Incorrect issue
-- Generic feedback
-- Evidence mismatch
-- Confusing wording
-- Technical bug
-- Other
+### Delivery analysis
+- Delivery analysis requires the transcript to exist; it cannot be computed from audio alone
+- WPM computation requires `duration_seconds` to be set on the speech record; without it, pacing band returns `unknown`
+- Delivery metrics are computed once at pipeline time; manual recomputation is available via `POST /speeches/{id}/delivery-metrics/recompute`
 
-Feedback is stored in `output_feedback` for pilot learning, not public support.
+---
 
-### Pilot Dashboard
+## Roadmap
 
-Navigate to `/pilot` (dev-only) to see per-user pilot metrics:
-
-- Activity counts (speeches, drills, attempts, re-records, ratings)
-- Pilot loop flags (returned for second speech, completed drill, viewed comparison, rated feedback)
-- Full pilot checklist with live completion state
-- Skill trends (per-dimension improvement vs. previous speech)
-- Common issues from feedback reports
-- Drop-off point analysis
-
-**Security note:** The pilot dashboard shows only the current user's data.
-No cross-user data or transcripts are exposed.
-
-### Pilot Metrics Tracked
-
-| Metric | Meaning |
+| Item | Notes |
 |---|---|
-| `return_for_second_speech` | Student recorded 2+ speeches |
-| `completed_one_drill` | At least one drill marked completed |
-| `rerecord_count` | Speeches recorded over a parent speech |
-| `comparison_count` | Times the improvement comparison was viewed |
-| `feedback_rating_count` | Number of feedback reports rated |
-| `average_feedback_rating` | Weighted helpfulness score (1.0 = all helpful) |
-| `drill_rating_count` | Number of drills rated |
-| `average_drill_rating` | Weighted drill helpfulness score |
-| `skill_trends` | Per-dimension trend vs. previous feedback report |
-| `common_issues` | Most frequent top_3_priorities across all feedback reports |
+| pgvector semantic search for evidence | Phase 2 evidence |
+| Automatic evidence checking in pipeline | Phase 2 evidence |
+| AI drill verification | Check whether the student's attempt actually addresses the drill prompt |
+| Streak bonuses | Auto-award XP for consecutive-day practice |
+| Team-wide pilot dashboard | Aggregate metrics across all students in a team |
+| Tournament prep mode | Judge adaptation profiles; round simulation |
+| Tabroom.com integration | Pull tournament results to contextualize practice gaps |
+| Advanced skill trend analytics | Peer comparison; long-range regression charts |
+| Video upload support | Crossfire analysis; body language feedback |
+| Real-time collaboration | Live team practice sessions |
 
-### Current Limitations
+---
 
-- Pilot dashboard is current-user-only (no team-wide aggregate view yet).
-- Streak bonuses are defined in XP rules but not yet auto-awarded.
-- `comparison_count` is derived from the `product_events` table; requires events to be present.
-- Evidence checking is not live-wired into the main speech report pipeline yet.
+## Deployment
+
+### Backend (Render, Railway, Fly.io, or equivalent)
+
+Set environment variables:
+
+```
+SUPABASE_URL
+SUPABASE_KEY       # service role key — keep secret
+OPENAI_API_KEY
+ENVIRONMENT=production
+CORS_ORIGINS=https://your-frontend-domain.com
+```
+
+Start command:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+### Frontend (Vercel recommended)
+
+1. Connect the GitHub repository to Vercel
+2. Set the root directory to `frontend`
+3. Set environment variables:
+   - `NEXT_PUBLIC_API_URL` (your deployed backend URL)
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Deploy
+
+### Pre-deployment checklist
+
+- [ ] All backend tests pass (`pytest`)
+- [ ] Frontend builds without errors (`npm run build`)
+- [ ] TypeScript check clean (`npx tsc --noEmit`)
+- [ ] All environment variables set in production
+- [ ] Supabase migrations applied in order
+- [ ] `audio` storage bucket created with public read access
+- [ ] `documents` storage bucket created with private access
+- [ ] CORS origins updated for production domain
+- [ ] OpenAI billing alerts configured
+
+---
+
+## Screenshots
+
+Screenshots will be added when assets are available in a hosted environment.
+
+---
+
+## Contributing
+
+Pull requests are welcome. For major changes, open an issue first to discuss the approach.
+
+When contributing:
+- Run `pytest` before submitting a backend change
+- Run `npm test && npm run build` before submitting a frontend change
+- Do not add new AI-generated content surfaces that could be used for case generation
+- Follow the existing Pydantic schema pattern for all new API responses
 
 ---
 
@@ -636,7 +1049,13 @@ MIT
 
 ---
 
-## Contact
+## Status
 
-Built by [@yashnilmohanty](https://github.com/yashnilmohanty)  
-For questions or feedback: yashnilmohanty@gmail.com
+RoundLab is in active development, pre-production. It is not yet deployed to a public production environment.
+
+- Backend test suite: **592 tests passing**
+- Frontend test suite: **201 tests passing**
+- TypeScript: **clean**
+- Next.js build: **passing**
+
+Built by [@yashnilmohanty](https://github.com/yashnilmohanty) — yashnilmohanty@gmail.com

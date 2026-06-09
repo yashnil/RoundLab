@@ -4,7 +4,7 @@
  * All functions are side-effect-free and depend only on their arguments.
  */
 
-import type { SkillAverages, DebateIssueType, DebateIssue, SpeechStatus, ProgressSummary, Speech, FeedbackReport, FeedbackScores, SpeechComparisonResult } from "@/types";
+import type { SkillAverages, DebateIssueType, DebateIssue, SpeechStatus, ProgressSummary, Speech, FeedbackReport, FeedbackScores, SpeechComparisonResult, ArgumentItem } from "@/types";
 
 // ── Skill analysis ─────────────────────────────────────────────────────────────
 
@@ -493,4 +493,41 @@ export function compareSpeeches(
     still_needs_work: stillNeedsWork,
     next_action: nextAction,
   };
+}
+
+// ── Argument display label derivation ─────────────────────────────────────────
+
+const TYPE_LABEL_PREFIX: Record<string, string> = {
+  offense: "ARG", defense: "DEF", weighing: "WGH", response: "RSP", unclear: "ARG",
+};
+
+/**
+ * Derives a structured display label from an ArgumentItem.
+ * Parses existing `label` for known prefixes (C1, NC2, A1, etc.).
+ * Returns { prefix, ordinal, title } where structuredLabel = "${prefix} · Arg ${ordinal}".
+ *
+ * Examples:
+ *   "C1 - Economic Growth" → { prefix: "C1", ordinal: 1, title: "Economic Growth" }
+ *   "Economic Growth" (offense, first offense arg) → { prefix: "ARG", ordinal: 1, title: "Economic Growth" }
+ */
+export function deriveArgumentDisplayLabel(
+  arg: ArgumentItem,
+  _index: number,
+  allArgs: ArgumentItem[],
+): { prefix: string; ordinal: number; title: string } {
+  const match = arg.label.match(/^([A-Za-z]+\d*)\s*[-–—·:]\s*/);
+  if (match) {
+    const raw = match[1].toUpperCase();
+    const title = arg.label.slice(match[0].length).trim() || arg.label;
+    const samePrefix = allArgs.filter((a) => {
+      const m = a.label.match(/^([A-Za-z]+\d*)\s*[-–—·:]\s*/);
+      return m ? m[1].toUpperCase() === raw : false;
+    });
+    const ordinal = samePrefix.indexOf(arg) + 1;
+    return { prefix: raw, ordinal: Math.max(1, ordinal), title };
+  }
+  const typeKey = TYPE_LABEL_PREFIX[arg.argument_type] ?? "ARG";
+  const sameType = allArgs.filter((a) => (TYPE_LABEL_PREFIX[a.argument_type] ?? "ARG") === typeKey);
+  const ordinal = sameType.indexOf(arg) + 1;
+  return { prefix: typeKey, ordinal: Math.max(1, ordinal), title: arg.label };
 }

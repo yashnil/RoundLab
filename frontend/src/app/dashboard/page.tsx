@@ -27,33 +27,8 @@ import { apiFetch } from "@/lib/api";
 import { staggerParent, staggerChild, cardHover } from "@/lib/motion";
 import { getSpeechStatusConfig } from "@/lib/debateHelpers";
 import DashboardMissionPanel, { DashboardMissionPanelSkeleton } from "@/components/DashboardMissionPanel";
-import TrainingLoopMap, { DEFAULT_LOOP_NODES } from "@/components/TrainingLoopMap";
-import type { LoopNodeDef, LoopNodeStatus } from "@/components/TrainingLoopMap";
+import DashboardCockpitBand from "@/components/DashboardCockpitBand";
 import type { Speech, ProgressSummary, PilotSummary } from "@/types";
-
-// ── Derive TrainingLoopMap nodes from real progress data ───────────────────────
-
-function deriveLoopNodes(progress: ProgressSummary): LoopNodeDef[] {
-  const speechDone   = progress.speech_count > 0;
-  const feedbackDone = progress.feedback_ready_count > 0;
-  const drillDone    = progress.drill_attempts_count > 0;
-  const rerecordDone = progress.speech_count > 1; // second speech implies re-record
-  const allComplete  = speechDone && feedbackDone && drillDone && rerecordDone;
-
-  const statuses: LoopNodeStatus[] = allComplete
-    ? ["complete", "complete", "complete", "complete", "complete"]
-    : !speechDone
-    ? ["current",  "waiting",  "waiting",  "waiting",  "waiting"]
-    : !feedbackDone
-    ? ["complete", "current",  "waiting",  "waiting",  "waiting"]
-    : !drillDone
-    ? ["complete", "complete", "current",  "waiting",  "waiting"]
-    : !rerecordDone
-    ? ["complete", "complete", "complete", "current",  "waiting"]
-    : ["complete", "complete", "complete", "complete", "current"];
-
-  return DEFAULT_LOOP_NODES.map((node, i) => ({ ...node, status: statuses[i] }));
-}
 
 const TYPE_LABEL: Record<string, string> = {
   constructive: "Constructive", rebuttal: "Rebuttal", summary: "Summary",
@@ -275,18 +250,15 @@ export default function DashboardPage() {
       <AppNav />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-7"
+          className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-7"
           variants={staggerParent(0.07, 0.05)}
           initial="hidden"
           animate="show"
         >
-          {/* ── Training loop map ─────────────────────────────────── */}
+          {/* ── Cockpit band — practice loop position + stat pills ───── */}
           {!loading && progress && (
             <motion.div variants={staggerChild}>
-              <div className="rounded-xl border border-hairline bg-surface-1 px-5 py-4">
-                <span className="section-stamp mb-3 block">Your practice loop</span>
-                <TrainingLoopMap nodes={deriveLoopNodes(progress)} />
-              </div>
+              <DashboardCockpitBand progress={progress} />
             </motion.div>
           )}
 

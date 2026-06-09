@@ -107,7 +107,7 @@ export default function PilotPage() {
       <AppNav />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-8 sm:px-6"
+          className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6"
           variants={staggerParent(0.07, 0.05)}
           initial="hidden"
           animate="show"

@@ -13,6 +13,7 @@ import PipelineShowcase from "@/components/PipelineShowcase";
 import HeroDebateConsole from "@/components/HeroDebateConsole";
 import ArgumentHealthMatrix from "@/components/ArgumentHealthMatrix";
 import JudgeLensComparison from "@/components/JudgeLensComparison";
+import RoundLabJourneyRail from "@/components/RoundLabJourneyRail";
 import { useInViewOnce } from "@/hooks/useInViewOnce";
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
@@ -353,7 +354,7 @@ export default function LandingPage() {
             {...fadeUpInView(0)}
             className="mb-10 flex flex-col items-center gap-2 text-center"
           >
-            <p className="text-eyebrow text-ink-subtle">In practice</p>
+            <p className="section-stamp">In practice</p>
             <h2 className="text-headline text-ink">Watch a speech become a flow</h2>
             <p className="max-w-2xl text-sm leading-relaxed text-ink-subtle">
               RoundLab transcribes your speech, extracts claim-warrant-evidence-impact structure,
@@ -399,7 +400,7 @@ export default function LandingPage() {
             {...fadeUpInView(0)}
             className="mb-10 flex flex-col gap-2"
           >
-            <p className="text-eyebrow text-ink-subtle">Under the hood</p>
+            <p className="section-stamp">Under the hood</p>
             <h2 className="text-headline text-ink">Built like a coach, not a chatbot</h2>
             <p className="max-w-lg text-sm leading-relaxed text-ink-subtle">
               RoundLab understands debate structure — not just text. It finds the missing warrant before a flow judge does.
@@ -448,16 +449,21 @@ export default function LandingPage() {
 
       {/* ── How it works ────────────────────────────────────────────────── */}
       <section id="how" className="mx-auto max-w-4xl px-6 py-20">
-        <div className="mb-10 flex flex-col gap-2">
-          <p className="text-eyebrow text-ink-subtle">How it works</p>
+        <div className="mb-8 flex flex-col gap-2">
+          <span className="section-stamp">How it works</span>
           <h2 className="text-headline text-ink">Speech becomes debate intelligence</h2>
           <p className="max-w-md text-sm leading-relaxed text-ink-subtle">
             Every practice rep runs the same pipeline — automatically, in under a minute.
           </p>
         </div>
 
+        {/* Practice loop rail — visual connector between steps */}
+        <div className="mb-8 px-2">
+          <RoundLabJourneyRail activeIndex={4} showLabels className="max-w-lg" />
+        </div>
+
         <motion.div
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
           variants={staggerParent(0.07)}
           initial="hidden"
           whileInView="show"
@@ -605,7 +611,7 @@ export default function LandingPage() {
       <section id="features" className="border-t border-hairline bg-surface-1">
         <div className="mx-auto max-w-4xl px-6 py-20">
           <div className="mb-10 flex flex-col gap-2">
-            <p className="text-eyebrow text-ink-subtle">Features</p>
+            <p className="section-stamp">Features</p>
             <h2 className="text-headline text-ink">Built for competitive PF</h2>
           </div>
 
@@ -706,7 +712,7 @@ export default function LandingPage() {
       {/* ── Drills ──────────────────────────────────────────────────────── */}
       <section id="drills" className="mx-auto max-w-4xl px-6 py-20">
         <div className="mb-10 flex flex-col gap-2">
-          <p className="text-eyebrow text-ink-subtle">Practice Drills</p>
+          <p className="section-stamp">Practice Drills</p>
           <h2 className="text-headline text-ink">Targeted coaching, not generic advice</h2>
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -744,7 +750,7 @@ export default function LandingPage() {
       <section id="roadmap" className="border-t border-hairline bg-surface-1">
         <div className="mx-auto max-w-4xl px-6 py-20">
           <div className="mb-10 flex flex-col gap-2">
-            <p className="text-eyebrow text-ink-subtle">Roadmap</p>
+            <p className="section-stamp">Roadmap</p>
             <h2 className="text-headline text-ink">What&apos;s coming</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

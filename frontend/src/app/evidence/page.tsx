@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText, Upload, Search, Trash2, ChevronDown, ChevronUp,
-  AlertCircle, CheckCircle2, X, BookOpen,
+  AlertCircle, CheckCircle2, X,
 } from "lucide-react";
 import PageShell from "@/components/PageShell";
 import SectionHeader from "@/components/SectionHeader";
+import { EmptyEvidenceGlyph } from "@/components/EmptyStateGlyphs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase";
@@ -89,7 +89,7 @@ function CardItem({ card }: { card: EvidenceCard }) {
       : "Evidence card";
 
   return (
-    <div className="rounded-lg border border-hairline bg-surface-2 text-sm">
+    <div className="case-file-card text-sm">
       {/* Compact header — always visible */}
       <div className="flex items-start justify-between gap-3 px-3 py-2.5">
         <div className="flex flex-col gap-1 min-w-0 flex-1">
@@ -165,27 +165,37 @@ function DocumentCard({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-4">
+    <div className="overflow-hidden rounded-[3px] border border-hairline bg-surface-1">
+      {/* File tab header */}
+      <div className="flex items-center gap-2 border-b border-hairline bg-surface-2 px-3 py-1.5">
+        <span className="file-tab capitalize">{doc.doc_type}</span>
+        <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
+        <span className="flex-1" />
+        {doc.page_count && (
+          <span className="text-[10px] text-ink-faint"
+            style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
+            {doc.page_count}pp
+          </span>
+        )}
+        {doc.file_size_bytes && (
+          <span className="text-[10px] text-ink-faint"
+            style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
+            {fileSizeLabel(doc.file_size_bytes)}
+          </span>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="p-3.5">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2">
-              <FileText size={16} className="text-ink-subtle" />
+          <div className="flex items-start gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-hairline bg-surface-2">
+              <FileText size={14} className="text-ink-faint" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-ink">{doc.filename}</p>
-              <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
-                {doc.page_count && (
-                  <span className="text-xs text-ink-subtle">{doc.page_count} pages</span>
-                )}
-                {doc.file_size_bytes && (
-                  <span className="text-xs text-ink-subtle">{fileSizeLabel(doc.file_size_bytes)}</span>
-                )}
-                <span className="text-xs text-ink-subtle capitalize">{doc.doc_type}</span>
-              </div>
+              <p className="truncate text-sm font-semibold text-ink">{doc.filename}</p>
               {doc.error_message && (
-                <p className="mt-1 text-xs text-danger">{doc.error_message}</p>
+                <p className="mt-0.5 text-xs text-danger">{doc.error_message}</p>
               )}
             </div>
           </div>
@@ -216,13 +226,14 @@ function DocumentCard({
         {expanded && cards.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-ink-subtle">
-                {cards.length} extracted card{cards.length !== 1 ? "s" : ""}
-              </p>
+              <span className="section-stamp">
+                Extracted cards
+                <span className="rep-badge ml-2">{cards.length}</span>
+              </span>
               {cards.filter(c => !c.attribution_complete).length > 0 && (
                 <span className="inline-flex items-center gap-1 text-xs text-amber-600">
                   <AlertCircle size={10} />
-                  {cards.filter(c => !c.attribution_complete).length} with incomplete attribution
+                  {cards.filter(c => !c.attribution_complete).length} incomplete attribution
                 </span>
               )}
             </div>
@@ -234,8 +245,8 @@ function DocumentCard({
         {expanded && cards.length === 0 && (
           <p className="mt-3 text-xs text-ink-subtle">No evidence cards extracted from this document.</p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -248,7 +259,7 @@ function SearchResultCard({ item }: { item: SearchResultItem }) {
     : item.chunk.heading ?? null;
 
   return (
-    <div className="rounded-xl border border-hairline bg-surface p-3 text-sm">
+    <div className="case-file-card p-3 text-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {/* Source document */}
@@ -477,7 +488,7 @@ export default function EvidencePage() {
   const parsedCount = documents.filter((d) => d.status === "parsed").length;
 
   return (
-    <PageShell maxWidth="5xl">
+    <PageShell maxWidth="7xl">
       <div className="flex flex-col gap-8">
 
         {/* Header */}
@@ -488,10 +499,10 @@ export default function EvidencePage() {
 
         {/* Upload panel */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Upload a document</h2>
-          <div className="rounded-xl border border-hairline bg-surface p-5 flex flex-col gap-4">
+          <span className="section-stamp mb-3 block">Upload document</span>
+          <div className="rounded-[3px] border border-hairline bg-surface-1 p-4 flex flex-col gap-4">
             {/* Drop zone */}
-            <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-hairline-strong p-8 text-center hover:border-lav/40 hover:bg-lav/[0.03] transition-all">
+            <label className="file-tray flex cursor-pointer flex-col items-center gap-3 p-8 text-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-surface-2">
                 <Upload size={16} className="text-ink-subtle" />
               </div>
@@ -561,7 +572,7 @@ export default function EvidencePage() {
         {/* Search */}
         {parsedCount > 0 && (
           <section>
-            <h2 className="mb-3 text-sm font-semibold text-ink">Search your evidence</h2>
+            <span className="section-stamp mb-3 block">Search evidence</span>
             <form onSubmit={handleSearch} className="flex gap-2">
               <Input
                 value={searchQuery}
@@ -598,11 +609,14 @@ export default function EvidencePage() {
         {/* Documents list */}
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink">
-              Your documents{documents.length > 0 ? ` (${documents.length})` : ""}
-            </h2>
+            <div className="flex items-center gap-2">
+              <span className="section-stamp">Case files</span>
+              {documents.length > 0 && (
+                <span className="rep-badge">{documents.length}</span>
+              )}
+            </div>
             {parsedCount > 0 && (
-              <span className="text-xs text-ink-subtle">{parsedCount} ready</span>
+              <span className="section-stamp">{parsedCount} ready</span>
             )}
           </div>
 
@@ -611,14 +625,12 @@ export default function EvidencePage() {
               {[1, 2].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
             </div>
           ) : documents.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-hairline p-10 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-surface-2">
-                <BookOpen size={16} className="text-ink-subtle" />
-              </div>
+            <div className="flex flex-col items-center gap-4 rounded-[3px] border border-dashed border-hairline px-8 py-10 text-center">
+              <EmptyEvidenceGlyph className="h-10 w-12 text-ink-faint opacity-60" />
               <div>
-                <p className="text-sm font-medium text-ink">No documents yet</p>
+                <p className="text-sm font-semibold text-ink">No case files yet</p>
                 <p className="text-xs text-ink-subtle mt-0.5">
-                  Upload a case file or evidence packet above to get started.
+                  Upload a case file or evidence packet above. RoundLab will extract evidence cards you can cite.
                 </p>
               </div>
             </div>

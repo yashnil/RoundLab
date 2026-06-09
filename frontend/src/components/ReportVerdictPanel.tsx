@@ -273,6 +273,23 @@ export default function ReportVerdictPanel({
             priorities={feedback.raw_feedback?.top_3_priorities}
           />
         </div>
+
+        {/* Additional priorities (2 and 3) — surface below the top issue */}
+        {(feedback.raw_feedback?.top_3_priorities?.length ?? 0) > 1 && (
+          <div className="mt-2 flex flex-col gap-1">
+            {(feedback.raw_feedback?.top_3_priorities ?? []).slice(1).map((p, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-2 rounded-lg border border-hairline bg-surface-2 px-3 py-2"
+              >
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-hairline text-[9px] font-bold tabular-nums text-ink-faint">
+                  {i + 2}
+                </span>
+                <p className="line-clamp-2 text-[11px] leading-relaxed text-ink-subtle">{p}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Right: Metadata + Judge Lens + CTAs ───────────────────────────── */}

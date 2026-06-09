@@ -13,10 +13,9 @@ import WorkflowStepper from "@/components/WorkflowStepper";
 import RecordingStudio from "@/components/RecordingStudio";
 import UploadDropzone from "@/components/UploadDropzone";
 import TranscriptPanel from "@/components/TranscriptPanel";
-import ArgumentCard from "@/components/ArgumentCard";
 import JudgeModeSelector, { type JudgeViewMode } from "@/components/JudgeModeSelector";
 import ReportVerdictPanel from "@/components/ReportVerdictPanel";
-import ScoreCard from "@/components/ScoreCard";
+import FlowBoard from "@/components/FlowBoard";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import LoadingCard from "@/components/LoadingCard";
 import DeleteDialog from "@/components/DeleteDialog";
@@ -263,165 +262,7 @@ function WorkspaceCard({ children, glow }: { children: React.ReactNode; glow?: b
   );
 }
 
-// ── Biggest Issue Helper ────────────────────────────────────────────────────────
 
-const ISSUE_WHY: Record<string, { why: string; next: string }> = {
-  warrant:   { why: "Without a warrant, a judge can't evaluate WHY your claim is true. The argument can be conceded without ever being answered.", next: "Add a 'because' sentence after every claim linking it to the impact." },
-  evidence:  { why: "Unsupported claims are vulnerable to evidence comparison turns. A flow judge may not evaluate them.", next: "Cite your source, then explain what it proves and why it matters." },
-  impact:    { why: "Without a clear impact, you give the judge nothing to weigh. Even strong claims can be lost if they don't cash out a real harm.", next: "State who is affected, how severely, and on what timeframe." },
-  weighing:  { why: "Judges need explicit impact comparison to vote for your side — they won't weigh for you.", next: "Directly compare magnitude, probability, or timeframe against their impact." },
-  drop:      { why: "A conceded argument is a conceded ballot story. Judges are often told 'drop = true.'", next: "Extend dropped arguments in every subsequent speech with full warrant and impact." },
-  extension: { why: "Bare extensions don't carry weight. You need to extend the claim, warrant, AND impact.", next: "Always extend: 'Extend [argument] — [warrant] means [impact].'"},
-  clash:     { why: "Without clash, you let the opponent's offense stand. You're debating past each other rather than winning the round.", next: "Directly address opponent claims before presenting your offense." },
-};
-
-function getBiggestIssueContext(priorities: string[]): { why: string; next: string } | null {
-  if (!priorities || priorities.length === 0) return null;
-  const text = priorities[0].toLowerCase();
-  for (const [key, val] of Object.entries(ISSUE_WHY)) {
-    if (text.includes(key)) return val;
-  }
-  return null;
-}
-
-function BiggestIssueCard({
-  priorities,
-  argMap,
-  structuredIssues,
-}: {
-  priorities: string[];
-  argMap?: ArgumentMap | null;
-  structuredIssues?: import("@/types").DebateIssue[];
-}) {
-  // Prefer structured issues (v2+ reports)
-  const topStructuredIssue = structuredIssues?.find((i) => i.severity === "high")
-    ?? structuredIssues?.[0];
-
-  if (!topStructuredIssue && (!priorities || priorities.length === 0)) return null;
-
-  // If we have a structured issue, use it directly
-  if (topStructuredIssue) {
-    const affectedFromStructured = topStructuredIssue.affected_argument_labels.slice(0, 3);
-    const severityColor = topStructuredIssue.severity === "high" ? "danger" : "warn";
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: EASE }}
-        className={`rounded-xl border bg-${severityColor}/5 border-${severityColor}/30`}
-        style={{ boxShadow: topStructuredIssue.severity === "high"
-          ? "0 0 32px -10px oklch(0.640 0.215 25 / 0.15)"
-          : "0 0 28px -10px oklch(0.750 0.155 74 / 0.12)"
-        }}
-      >
-        <div className={`flex items-center justify-between gap-2 border-b border-${severityColor}/15 px-4 py-2.5`}>
-          <div className="flex items-center gap-2">
-            <span className={`h-1.5 w-1.5 rounded-full bg-${severityColor} analysis-step-active`} />
-            <p className={`text-eyebrow text-${severityColor}`} style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Biggest Round-Losing Issue</p>
-          </div>
-          <span className={`rounded-full border border-${severityColor}/20 bg-${severityColor}/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-${severityColor}`}>
-            {topStructuredIssue.severity} severity
-          </span>
-        </div>
-        <div className="flex flex-col gap-3 px-4 py-4">
-          <p className="text-sm font-semibold leading-snug text-ink">{topStructuredIssue.title}</p>
-
-          {affectedFromStructured.length > 0 && (
-            <div className={`flex flex-col gap-1.5 rounded-lg border border-${severityColor}/15 bg-${severityColor}/4 px-3 py-2.5`}>
-              <p className={`text-eyebrow text-${severityColor}/70`} style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Found in your flow</p>
-              {affectedFromStructured.map((label, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className={`h-1 w-1 shrink-0 rounded-full bg-${severityColor}/50`} />
-                  <p className="text-xs text-ink-muted">{label}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-1">
-            <span className="section-stamp">Why it costs you rounds</span>
-            <p className="text-sm leading-relaxed text-ink-muted">{topStructuredIssue.why_it_matters}</p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="section-stamp">What to do next</span>
-            <p className="text-sm leading-relaxed text-ink-muted">{topStructuredIssue.recommendation}</p>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // Fallback: heuristic from top_3_priorities strings
-  const ctx = getBiggestIssueContext(priorities);
-
-  // Derive flow evidence — find which arguments have matching issues
-  const issueKeyword = (() => {
-    const text = priorities[0].toLowerCase();
-    if (text.includes("warrant")) return "warrant";
-    if (text.includes("evidence") || text.includes("unsupported")) return "evidence";
-    if (text.includes("impact")) return "impact";
-    if (text.includes("weigh")) return "weigh";
-    if (text.includes("drop")) return "drop";
-    if (text.includes("extension") || text.includes("extend")) return "extension";
-    if (text.includes("clash")) return "clash";
-    return null;
-  })();
-
-  const affectedArgs = argMap?.arguments?.filter((a) => {
-    if (issueKeyword === "warrant")   return !a.warrant || a.issues.some((i) => i.toLowerCase().includes("warrant"));
-    if (issueKeyword === "evidence")  return !a.evidence || a.issues.some((i) => i.toLowerCase().includes("evidence") || i.toLowerCase().includes("unsupported"));
-    if (issueKeyword === "impact")    return !a.impact || a.issues.some((i) => i.toLowerCase().includes("impact"));
-    if (issueKeyword === "weigh")     return a.issues.some((i) => i.toLowerCase().includes("weigh"));
-    if (issueKeyword === "drop")      return a.issues.some((i) => i.toLowerCase().includes("drop"));
-    return a.issues.length > 0;
-  }).slice(0, 3) ?? [];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: EASE }}
-      className="rounded-xl border border-danger/30 bg-danger/5"
-      style={{ boxShadow: "0 0 32px -10px oklch(0.640 0.215 25 / 0.15)" }}
-    >
-      <div className="flex items-center gap-2 border-b border-danger/15 px-4 py-2.5">
-        <span className="h-1.5 w-1.5 rounded-full bg-danger analysis-step-active" />
-        <p className="text-eyebrow text-danger" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Biggest Round-Losing Issue</p>
-      </div>
-      <div className="flex flex-col gap-3 px-4 py-4">
-        <p className="text-sm font-semibold leading-snug text-ink">{priorities[0]}</p>
-
-        {/* Flow evidence — which arguments have this issue */}
-        {affectedArgs.length > 0 && (
-          <div className="flex flex-col gap-1.5 rounded-lg border border-danger/15 bg-danger/4 px-3 py-2.5">
-            <p className="text-eyebrow text-danger/70" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Found in your flow</p>
-            {affectedArgs.map((a, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="h-1 w-1 shrink-0 rounded-full bg-danger/50" />
-                <p className="text-xs text-ink-muted">{a.label}</p>
-                <span className="ml-auto capitalize text-[10px] text-danger/70">{a.argument_type}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {ctx && (
-          <>
-            <div className="flex flex-col gap-1">
-              <span className="section-stamp">Why it costs you rounds</span>
-              <p className="text-sm leading-relaxed text-ink-muted">{ctx.why}</p>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="section-stamp">What to do next</span>
-              <p className="text-sm leading-relaxed text-ink-muted">{ctx.next}</p>
-            </div>
-          </>
-        )}
-      </div>
-    </motion.div>
-  );
-}
 
 // ── Flow Summary Helper ────────────────────────────────────────────────────────
 
@@ -503,6 +344,37 @@ function FlowCoachNote({ args }: { args: Array<{ issues: string[] }> }) {
   const cfg = getCoachNote(issueType);
   if (!cfg) return null;
   return <CoachMarginNote type={cfg.type} note={cfg.note} label="Flow note" />;
+}
+
+const LENS_NOTE_TEXT: Record<JudgeViewMode, string> = {
+  coach: "Coach lens — showing fix actions and drill targets for each argument.",
+  lay:   "Lay lens — highlighting impact clarity, persuasion, and judge comprehension.",
+  flow:  "Flow lens — highlighting dropped arguments, extensions, and warrant depth.",
+  tech:  "Tech lens — highlighting evidence quality, warrant support, and weighing.",
+};
+
+function FlowLensNote({ judgeMode }: { judgeMode: JudgeViewMode }) {
+  const isDetailLens = judgeMode === "flow" || judgeMode === "tech";
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3 text-xs">
+      <p className="text-ink-subtle">{LENS_NOTE_TEXT[judgeMode]}</p>
+      <div className="flex flex-col gap-1 border-t border-lav/10 pt-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+          <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Offense</span> = winning argument</span>
+          <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Defense</span> = answers opponent</span>
+          <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Weighing</span> = impact comparison</span>
+        </div>
+        {isDetailLens && (
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-0.5">
+            <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Claim</span> = what you argue</span>
+            <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Warrant</span> = why it&apos;s true</span>
+            <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Evidence</span> = support</span>
+            <span className="text-ink-faint"><span className="font-semibold text-ink-subtle">Impact</span> = why it matters</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -603,7 +475,7 @@ export default function SpeechPage() {
   const [feedbackRated, setFeedbackRated] = useState(false);
   const [copyRFD, rfdCopied] = useCopy();
 
-  const [flowViewMode, setFlowViewMode] = useState<"coach" | "technical" | "table">("coach");
+  const [showTableView, setShowTableView] = useState(false);
   const [judgeViewMode, setJudgeViewMode] = useState<JudgeViewMode>("coach");
 
   const [delOpen,  setDelOpen]  = useState(false);
@@ -1162,7 +1034,7 @@ export default function SpeechPage() {
       <>
         <AppNav />
         <main className="min-h-screen bg-canvas">
-          <div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-9">
+          <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-9">
             <Skeleton className="h-6 w-48 rounded-lg" />
             <Skeleton className="h-4 w-60 rounded-lg" />
             <Skeleton className="h-8 w-full rounded-full" />
@@ -1180,7 +1052,7 @@ export default function SpeechPage() {
       <>
         <AppNav />
         <main className="min-h-screen bg-canvas">
-          <div className="mx-auto max-w-3xl px-6 py-16">
+          <div className="mx-auto max-w-5xl px-6 py-16">
             <p className="text-sm text-danger">{pageErr || "Speech not found."}</p>
           </div>
         </main>
@@ -1225,7 +1097,7 @@ export default function SpeechPage() {
       <AppNav rightSlot={deleteBtn} />
       <main className="min-h-screen bg-canvas">
         <motion.div
-          className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-9"
+          className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-9"
           variants={staggerParent(0.08, 0.05)}
           initial="hidden"
           animate="show"
@@ -1437,20 +1309,6 @@ export default function SpeechPage() {
                           </Button>
                         </div>
                       )}
-
-                      {/* Summary Card */}
-                      <div className="rounded-xl border border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10 p-5">
-                        <ScoreCard score={getVerifiedOverallScore(feedback)} summary={feedback.summary} />
-                      </div>
-
-                      {/* Biggest Round-Losing Issue */}
-                      {(feedback.raw_feedback?.structured_issues?.length || feedback.raw_feedback?.top_3_priorities?.length) ? (
-                        <BiggestIssueCard
-                          priorities={feedback.raw_feedback?.top_3_priorities ?? []}
-                          argMap={argMap}
-                          structuredIssues={feedback.raw_feedback?.structured_issues}
-                        />
-                      ) : null}
 
                       {/* Coach annotation — below the top structured issue */}
                       <TopIssueCoachNote issues={feedback.raw_feedback?.structured_issues} />
@@ -1701,88 +1559,37 @@ export default function SpeechPage() {
                 {argMap && (
                   <WorkspaceCard key="flow-done">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <StepHeader n={3} title="Flow" done aside={
                           <Badge variant="indigo">
                             {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
                           </Badge>
                         } />
                         <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
-
-                        {/* View Mode Toggle */}
-                        <div className="flex gap-0.5 rounded-lg border border-hairline bg-surface-2 p-0.5">
-                          <button
-                            onClick={() => setFlowViewMode("coach")}
-                            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                              flowViewMode === "coach"
-                                ? "bg-lav text-white"
-                                : "text-ink-subtle hover:text-ink"
-                            }`}
-                          >
-                            Coach View
-                          </button>
-                          <button
-                            onClick={() => setFlowViewMode("technical")}
-                            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                              flowViewMode === "technical"
-                                ? "bg-lav text-white"
-                                : "text-ink-subtle hover:text-ink"
-                            }`}
-                          >
-                            Technical
-                          </button>
-                        </div>
                       </div>
 
                       {/* Flow Summary */}
                       <FlowSummary argMap={argMap} />
 
-                      {/* Flow Explanation */}
-                      <div className="flex flex-col gap-2 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3">
-                        <p className="text-sm leading-relaxed text-ink">
-                          {flowViewMode === "coach" ? (
-                            <><span className="font-semibold">Coach View:</span> Focus on what needs fixing. Click "Show full details" on any card to see the complete argument structure.</>
-                          ) : (
-                            <><span className="font-semibold">Technical Flow:</span> Complete argument breakdown. This is what a judge would flow during your speech.</>
-                          )}
-                        </p>
-                        {/* Badge Legend */}
-                        <div className="flex flex-col gap-1.5 border-t border-lav/10 pt-2 text-xs">
-                          <div className="flex flex-wrap gap-x-4 gap-y-1">
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">High</span> = strong argument</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Med</span> = developing</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Low</span> = needs work</span>
-                          </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1">
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Offense</span> = winning argument</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Defense</span> = answers opponent</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Weighing</span> = impact comparison</span>
-                          </div>
-                        </div>
-                        {flowViewMode === "technical" && (
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-lav/10 pt-2 text-xs">
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Claim</span> = what you argue</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Warrant</span> = why it's true</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Evidence</span> = support</span>
-                            <span className="text-ink-subtle"><span className="font-semibold text-ink">Impact</span> = why it matters</span>
-                          </div>
-                        )}
-                      </div>
+                      {/* Lens note */}
+                      <FlowLensNote judgeMode={judgeViewMode} />
 
                       {argMap.arguments.length === 0 ? (
                         <p className="text-sm text-ink-faint">No arguments extracted.</p>
+                      ) : showTableView ? (
+                        <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
                       ) : (
-                        <motion.div
-                          className="grid grid-cols-1 gap-3 md:grid-cols-2"
-                          variants={staggerParent(0.06)}
-                          initial="hidden"
-                          animate="show"
-                        >
-                          {argMap.arguments.map((a, i) => (
-                            <ArgumentCard key={i} arg={a} index={i} viewMode={flowViewMode as "coach" | "technical"} />
-                          ))}
-                        </motion.div>
+                        <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
                       )}
+
+                      {/* View toggle — demoted, secondary */}
+                      <button
+                        type="button"
+                        onClick={() => setShowTableView((v) => !v)}
+                        className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
+                      >
+                        {showTableView ? "Switch to flow board" : "Switch to table view"}
+                      </button>
                     </CardContent>
                   </WorkspaceCard>
                 )}
@@ -1884,85 +1691,40 @@ export default function SpeechPage() {
                   ) : (
                     <WorkspaceCard key="flow-done">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <StepHeader n={3} title="Flow" done aside={
                             <Badge variant="indigo">
                               {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
                             </Badge>
                           } />
-
-                          {/* View Mode Toggle */}
-                          <div className="flex gap-0.5 rounded-lg border border-hairline bg-surface-2 p-0.5">
-                            {(["coach", "technical", "table"] as const).map((m) => (
-                              <button
-                                key={m}
-                                onClick={() => setFlowViewMode(m)}
-                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                                  flowViewMode === m
-                                    ? "bg-lav text-white"
-                                    : "text-ink-subtle hover:text-ink"
-                                }`}
-                              >
-                                {m === "coach" ? "Coach" : m === "technical" ? "Technical" : "Table"}
-                              </button>
-                            ))}
-                          </div>
+                          <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
                         </div>
 
                         {/* Flow Summary */}
                         <FlowSummary argMap={argMap} />
 
-                        {/* Flow Explanation */}
-                        <div className="flex flex-col gap-2 rounded-lg border border-lav/10 bg-lav/5 px-4 py-3">
-                          <p className="text-sm leading-relaxed text-ink">
-                            {flowViewMode === "coach" ? (
-                              <><span className="font-semibold">Coach View:</span> Focus on what needs fixing. Click "Show full details" on any card to see the complete argument structure.</>
-                            ) : (
-                              <><span className="font-semibold">Technical Flow:</span> Complete argument breakdown. This is what a judge would flow during your speech.</>
-                            )}
-                          </p>
-                          {/* Badge Legend */}
-                          <div className="flex flex-col gap-1.5 border-t border-lav/10 pt-2 text-xs">
-                            <div className="flex flex-wrap gap-x-4 gap-y-1">
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Strong</span> = solid argument</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Developing</span> = needs strengthening</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Needs Work</span> = has issues</span>
-                            </div>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1">
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Offense</span> = winning argument</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Defense</span> = answers opponent</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Weighing</span> = impact comparison</span>
-                            </div>
-                          </div>
-                          {flowViewMode === "technical" && (
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-lav/10 pt-2 text-xs">
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Claim</span> = what you argue</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Warrant</span> = why it's true</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Evidence</span> = support</span>
-                              <span className="text-ink-subtle"><span className="font-semibold text-ink">Impact</span> = why it matters</span>
-                            </div>
-                          )}
-                        </div>
+                        {/* Lens note */}
+                        <FlowLensNote judgeMode={judgeViewMode} />
 
                         {argMap.arguments.length === 0 ? (
                           <p className="py-4 text-center text-sm text-ink-faint">No arguments extracted.</p>
-                        ) : flowViewMode === "table" ? (
+                        ) : showTableView ? (
                           <>
                             <FlowCoachNote args={argMap.arguments} />
                             <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
                           </>
                         ) : (
-                          <motion.div
-                            className="grid grid-cols-1 gap-3 md:grid-cols-2"
-                            variants={staggerParent(0.06)}
-                            initial="hidden"
-                            animate="show"
-                          >
-                            {argMap.arguments.map((a, i) => (
-                              <ArgumentCard key={i} arg={a} index={i} viewMode={flowViewMode as "coach" | "technical"} />
-                            ))}
-                          </motion.div>
+                          <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
                         )}
+
+                        {/* View toggle — demoted, secondary */}
+                        <button
+                          type="button"
+                          onClick={() => setShowTableView((v) => !v)}
+                          className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
+                        >
+                          {showTableView ? "Switch to flow board" : "Switch to table view"}
+                        </button>
 
                         {/* Optional: View speech text */}
                         {transcript && (
@@ -2020,11 +1782,6 @@ export default function SpeechPage() {
                             </Button>
                           </div>
                         )}
-
-                        {/* Summary Card */}
-                        <div className="rounded-xl border border-lav/20 bg-gradient-to-br from-lav/5 to-lav/10 p-5">
-                          <ScoreCard score={getVerifiedOverallScore(feedback)} summary={feedback.summary} />
-                        </div>
 
                         {/* Priority Cards - Top 3 Issues */}
                         {feedback.raw_feedback?.top_3_priorities?.length ? (

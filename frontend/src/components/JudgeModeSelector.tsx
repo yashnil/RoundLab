@@ -17,25 +17,25 @@ const MODES: Record<JudgeViewMode, JudgeModeConfig> = {
   coach: {
     label: "Coach",
     icon: BookOpen,
-    helper: "Skill development & drills",
+    helper: "Fix actions and drill targets",
     emphasis: ["strengths", "weaknesses", "drills"],
   },
   lay: {
     label: "Lay",
     icon: Eye,
-    helper: "Clarity & persuasion",
+    helper: "Clarity, delivery, and persuasion",
     emphasis: ["clarity", "real-world", "persuasion"],
   },
   flow: {
     label: "Flow",
     icon: GitBranch,
-    helper: "Extensions, drops & weighing",
+    helper: "Drops, extensions, and argument depth",
     emphasis: ["extensions", "drops", "weighing"],
   },
   tech: {
     label: "Tech",
     icon: BarChart3,
-    helper: "Conceded offense & precision",
+    helper: "Evidence quality, warrants, and weighing",
     emphasis: ["conceded", "line-by-line", "judge-adaptation"],
   },
 };
@@ -48,7 +48,7 @@ interface JudgeModeSelectorProps {
 export default function JudgeModeSelector({ value, onChange }: JudgeModeSelectorProps) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-eyebrow text-ink-faint">Judge Lens</p>
+      <span className="section-stamp">Judge Lens</span>
       <div className="flex gap-1 rounded-lg border border-hairline bg-surface-2 p-1">
         {(Object.entries(MODES) as [JudgeViewMode, JudgeModeConfig][]).map(([key, config]) => {
           const Icon = config.icon;

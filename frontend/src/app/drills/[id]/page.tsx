@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import CoachMarginNote from "@/components/CoachMarginNote";
+import RoundLabJourneyRail from "@/components/RoundLabJourneyRail";
 import DrillAttemptRecorder from "@/components/DrillAttemptRecorder";
 import DrillRating from "@/components/DrillRating";
 import ConfusionReport from "@/components/ConfusionReport";
@@ -122,12 +123,17 @@ function AttemptCard({ attempt, index, isLatest = false }: { attempt: DrillAttem
       : attempt.response
     : null;
 
+  const scoreAttr =
+    attempt.score !== null && attempt.score >= 70 ? { "data-score-good": true } :
+    attempt.score !== null && attempt.score >= 50 ? { "data-score-warn": true } : {};
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.05, ease: EASE }}
-      className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface-2 p-4"
+      className={isLatest ? "rep-ticket flex flex-col gap-3 p-4" : "flex flex-col gap-3 rounded-lg border border-hairline bg-surface-2 p-4"}
+      {...(isLatest ? scoreAttr : {})}
     >
       {/* Header row */}
       <div className="flex items-center justify-between gap-2">
@@ -354,7 +360,7 @@ export default function DrillPage() {
     <>
       <AppNav />
       <main className="min-h-screen bg-canvas">
-        <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8 sm:px-6">
+        <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6">
 
           {/* ── Back link ─────────────────────────────────────────────── */}
           {drill && (
@@ -505,19 +511,23 @@ export default function DrillPage() {
                   </div>
 
                   {drill.status === "completed" ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-ok/20 bg-ok/5 px-4 py-3">
+                    <div className="flex items-center gap-2 rounded-lg border border-ok/20 bg-ok/5 px-4 py-3">
                       <Check size={14} className="shrink-0 text-ok" />
                       <p className="text-sm font-medium text-ok">Drill completed — great work.</p>
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-hairline bg-surface-1">
+                    <div className="surface-practice">
                       <div className="border-b border-hairline px-4 py-3">
-                        <p className="text-xs font-medium text-ink-subtle">
-                          Record your drill attempt
-                          {tlLabel && <span className="ml-1.5 text-ink-faint">· target: {tlLabel}</span>}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-ink-faint">
-                          Speak your response aloud. You can re-record as many times as you need.
+                        <span className="section-stamp">
+                          Rep room
+                          {tlLabel && (
+                            <span className="ml-2 font-normal normal-case tracking-normal text-ink-faint">
+                              target: {tlLabel}
+                            </span>
+                          )}
+                        </span>
+                        <p className="mt-1 text-[11px] text-ink-faint">
+                          Speak your response aloud. Re-record as many times as you need.
                         </p>
                       </div>
                       <div className="p-4">
@@ -665,11 +675,18 @@ export default function DrillPage() {
                     primaryHref = `/speech/${drill.speech_id}`;
                   }
 
+                  const railIndex = drill.status === "completed" ? 3 : 2;
+
                   return (
                     <motion.div
                       {...fadeUp(0.30)}
-                      className="flex flex-col gap-3 rounded-xl border border-lav/20 bg-lav/5 p-5"
+                      className="mission-brief flex flex-col gap-3 p-5"
                     >
+                      <RoundLabJourneyRail
+                        activeIndex={railIndex}
+                        showLabels
+                        className="mb-1"
+                      />
                       <p className="text-sm font-semibold text-ink">{heading}</p>
                       <p className="text-xs leading-relaxed text-ink-subtle">{body}</p>
                       <div className="flex flex-wrap items-center gap-2">

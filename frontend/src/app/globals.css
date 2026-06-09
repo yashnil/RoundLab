@@ -492,6 +492,101 @@
   .font-display {
     font-family: var(--font-space-grotesk, var(--font-sans));
   }
+
+  /* ── Cockpit band — top indicator strip for dashboard/drill pages ────────── */
+  .cockpit-band {
+    position: relative;
+  }
+  .cockpit-band::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 16%;
+    right: 16%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(0.510 0.156 278 / 0.45) 40%,
+      oklch(0.510 0.156 278 / 0.45) 60%,
+      transparent 100%
+    );
+  }
+
+  /* ── Case file card — debate card with left citation stripe ─────────────── */
+  .case-file-card {
+    border-radius: 0 4px 4px 0;
+    border: 1px solid var(--theme-hairline);
+    border-left: 2px solid oklch(0.510 0.156 278 / 0.30);
+    background: var(--theme-surface-1);
+    transition: border-left-color 150ms ease;
+  }
+  .case-file-card:hover {
+    border-left-color: oklch(0.510 0.156 278 / 0.6);
+  }
+
+  /* ── File tray — upload dropzone with in-tray aesthetic ─────────────────── */
+  .file-tray {
+    border: 1.5px dashed var(--theme-hairline-strong);
+    border-radius: 4px;
+    background: var(--theme-surface-1);
+    transition: border-color 150ms ease, background 150ms ease;
+  }
+  .file-tray:hover {
+    border-color: oklch(0.510 0.156 278 / 0.35);
+    background: oklch(0.510 0.156 278 / 0.02);
+  }
+
+  /* ── Rep ticket — latest drill attempt card ──────────────────────────────── */
+  .rep-ticket {
+    border-radius: 4px;
+    border: 1px solid var(--theme-hairline);
+    border-left: 3px solid oklch(0.510 0.156 278 / 0.5);
+    background: var(--theme-surface-1);
+  }
+  .rep-ticket[data-score-good] {
+    border-left-color: oklch(0.620 0.170 145 / 0.5);
+  }
+  .rep-ticket[data-score-warn] {
+    border-left-color: oklch(0.750 0.155 74 / 0.5);
+  }
+
+  /* ── Flow sheet bg — ruled paper for flow content areas ─────────────────── */
+  .flow-sheet-bg {
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 23px,
+      var(--theme-hairline) 23px,
+      var(--theme-hairline) 24px
+    );
+  }
+
+  /* ── Mission brief — focused header for practice context ────────────────── */
+  .mission-brief {
+    border-radius: 4px;
+    border: 1px solid var(--theme-hairline);
+    border-top: 2px solid oklch(0.510 0.156 278 / 0.40);
+    background: var(--theme-surface-1);
+  }
+
+  /* ── File tab — tab-style header for case file/document sections ─────────── */
+  .file-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 3px 3px 0 0;
+    border: 1px solid var(--theme-hairline);
+    border-bottom: none;
+    padding: 0.25rem 0.625rem;
+    background: var(--theme-surface-2);
+    font-family: var(--font-jetbrains-mono, var(--font-mono));
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--theme-ink-faint);
+  }
 }
 
 /* ── Scrollbar (webkit) — thin, theme-aware ──────────────────────────────────── */

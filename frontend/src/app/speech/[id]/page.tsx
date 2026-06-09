@@ -120,7 +120,8 @@ function StepHeader({ n, title, done, aside }: {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={T.snap}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-hairline-strong text-xs font-bold text-ink-faint"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-hairline-strong text-[11px] font-bold text-ink-faint"
+              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
             >
               {n}
             </motion.span>
@@ -144,7 +145,7 @@ function Collapsible({ label, children, open: defaultOpen = false }: {
         className="flex w-full items-center justify-between py-3 text-left"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="text-eyebrow text-ink-faint">{label}</span>
+        <span className="section-stamp">{label}</span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
           transition={T.fast}
@@ -317,7 +318,7 @@ function BiggestIssueCard({
         <div className={`flex items-center justify-between gap-2 border-b border-${severityColor}/15 px-4 py-2.5`}>
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full bg-${severityColor} analysis-step-active`} />
-            <p className={`text-eyebrow text-${severityColor}`}>Biggest Round-Losing Issue</p>
+            <p className={`text-eyebrow text-${severityColor}`} style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Biggest Round-Losing Issue</p>
           </div>
           <span className={`rounded-full border border-${severityColor}/20 bg-${severityColor}/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-${severityColor}`}>
             {topStructuredIssue.severity} severity
@@ -328,7 +329,7 @@ function BiggestIssueCard({
 
           {affectedFromStructured.length > 0 && (
             <div className={`flex flex-col gap-1.5 rounded-lg border border-${severityColor}/15 bg-${severityColor}/4 px-3 py-2.5`}>
-              <p className={`text-eyebrow text-${severityColor}/70`}>Found in your flow</p>
+              <p className={`text-eyebrow text-${severityColor}/70`} style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Found in your flow</p>
               {affectedFromStructured.map((label, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <span className={`h-1 w-1 shrink-0 rounded-full bg-${severityColor}/50`} />
@@ -339,11 +340,11 @@ function BiggestIssueCard({
           )}
 
           <div className="flex flex-col gap-1">
-            <p className="text-eyebrow text-ink-faint">Why it costs you rounds</p>
+            <span className="section-stamp">Why it costs you rounds</span>
             <p className="text-sm leading-relaxed text-ink-muted">{topStructuredIssue.why_it_matters}</p>
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-eyebrow text-ink-faint">What to do next</p>
+            <span className="section-stamp">What to do next</span>
             <p className="text-sm leading-relaxed text-ink-muted">{topStructuredIssue.recommendation}</p>
           </div>
         </div>
@@ -386,7 +387,7 @@ function BiggestIssueCard({
     >
       <div className="flex items-center gap-2 border-b border-danger/15 px-4 py-2.5">
         <span className="h-1.5 w-1.5 rounded-full bg-danger analysis-step-active" />
-        <p className="text-eyebrow text-danger">Biggest Round-Losing Issue</p>
+        <p className="text-eyebrow text-danger" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Biggest Round-Losing Issue</p>
       </div>
       <div className="flex flex-col gap-3 px-4 py-4">
         <p className="text-sm font-semibold leading-snug text-ink">{priorities[0]}</p>
@@ -394,7 +395,7 @@ function BiggestIssueCard({
         {/* Flow evidence — which arguments have this issue */}
         {affectedArgs.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-lg border border-danger/15 bg-danger/4 px-3 py-2.5">
-            <p className="text-eyebrow text-danger/70">Found in your flow</p>
+            <p className="text-eyebrow text-danger/70" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>Found in your flow</p>
             {affectedArgs.map((a, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className="h-1 w-1 shrink-0 rounded-full bg-danger/50" />
@@ -408,11 +409,11 @@ function BiggestIssueCard({
         {ctx && (
           <>
             <div className="flex flex-col gap-1">
-              <p className="text-eyebrow text-ink-faint">Why it costs you rounds</p>
+              <span className="section-stamp">Why it costs you rounds</span>
               <p className="text-sm leading-relaxed text-ink-muted">{ctx.why}</p>
             </div>
             <div className="flex flex-col gap-1">
-              <p className="text-eyebrow text-ink-faint">What to do next</p>
+              <span className="section-stamp">What to do next</span>
               <p className="text-sm leading-relaxed text-ink-muted">{ctx.next}</p>
             </div>
           </>
@@ -1457,9 +1458,9 @@ export default function SpeechPage() {
                       {/* Priority Cards - Top 3 Issues */}
                       {feedback.raw_feedback?.top_3_priorities?.length ? (
                         <div className="flex flex-col gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-danger" />
-                            <p className="text-eyebrow text-ink-subtle">Round-Losing Issues</p>
+                          <div className="section-stamp" style={{ color: "oklch(0.640 0.215 25 / 0.8)" }}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
+                            Round-Losing Issues
                           </div>
                           <div className="grid grid-cols-1 gap-2">
                             {feedback.raw_feedback.top_3_priorities.map((p, i) => (
@@ -1508,9 +1509,9 @@ export default function SpeechPage() {
 
                       {/* Judge Ballot */}
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-lav" />
-                          <p className="text-eyebrow text-ink-subtle">Judge Ballot</p>
+                        <div className="section-stamp" style={{ color: "oklch(0.510 0.156 278 / 0.8)" }}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-lav flex-shrink-0" />
+                          Judge Ballot
                         </div>
                         <div className="rounded-xl border border-hairline bg-surface-2 p-4">
                           <ScoreBreakdown
@@ -1527,9 +1528,9 @@ export default function SpeechPage() {
                         feedback.raw_feedback?.weighing_diagnostics?.length ||
                         feedback.raw_feedback?.evidence_diagnostics?.length) ? (
                         <div className="flex flex-col gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-ink-subtle" />
-                            <p className="text-eyebrow text-ink-subtle">Coach Diagnosis</p>
+                          <div className="section-stamp">
+                            <span className="h-1.5 w-1.5 rounded-full bg-ink-subtle flex-shrink-0" />
+                            Coach Diagnosis
                           </div>
 
                           {/* Dropped arguments */}
@@ -1568,9 +1569,9 @@ export default function SpeechPage() {
                       {/* Decision Logic (RFD) */}
                       {feedback.raw_feedback?.decision_logic && (
                         <div className="flex flex-col gap-2 rounded-xl border border-lav/20 bg-lav/5 px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-lav" />
-                            <p className="text-eyebrow text-lav">Reason For Decision (RFD)</p>
+                          <div className="section-stamp" style={{ color: "oklch(0.660 0.130 278)" }}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-lav flex-shrink-0" />
+                            Reason For Decision (RFD)
                           </div>
                           <p className="text-sm leading-relaxed text-ink-muted">
                             {feedback.raw_feedback.decision_logic}
@@ -2028,9 +2029,9 @@ export default function SpeechPage() {
                         {/* Priority Cards - Top 3 Issues */}
                         {feedback.raw_feedback?.top_3_priorities?.length ? (
                           <div className="flex flex-col gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-danger" />
-                              <p className="text-eyebrow text-ink-subtle">Round-Losing Issues</p>
+                            <div className="section-stamp" style={{ color: "oklch(0.640 0.215 25 / 0.8)" }}>
+                              <span className="h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
+                              Round-Losing Issues
                             </div>
                             <div className="grid grid-cols-1 gap-2">
                               {feedback.raw_feedback.top_3_priorities.map((p, i) => (

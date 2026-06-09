@@ -66,7 +66,7 @@ export default function FeedbackRating({ speechId, userId, initialRating, onRate
 
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-xs font-medium text-ink-subtle">Was this feedback useful?</p>
+      <span className="section-stamp">Was this feedback useful?</span>
       <div className="flex flex-wrap gap-2">
         {OPTIONS.map(({ value, label, icon: Icon, activeClass }) => (
           <button
@@ -75,7 +75,7 @@ export default function FeedbackRating({ speechId, userId, initialRating, onRate
             disabled={submitting}
             onClick={() => submit(value)}
             className={[
-              "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all",
+              "flex items-center gap-1.5 rounded-[3px] border px-3 py-1.5 text-[11px] font-medium transition-all",
               selected === value
                 ? activeClass
                 : "border-hairline bg-surface-2 text-ink-faint hover:border-lav/30 hover:text-ink",

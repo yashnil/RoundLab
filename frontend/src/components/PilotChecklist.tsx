@@ -62,16 +62,19 @@ export default function PilotChecklist({ progress, pilot }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-ink">Pilot checklist</p>
-        <span className="text-[10px] font-medium text-ink-faint">
-          {completed}/{items.length} complete
+        <span className="section-stamp">Pilot checklist</span>
+        <span
+          className="text-[10px] font-medium text-ink-faint tabular-nums"
+          style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+        >
+          {completed}/{items.length}
         </span>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1 overflow-hidden rounded-full bg-hairline">
+      {/* Progress bar — sharper, debate-scorecard style */}
+      <div className="h-0.5 overflow-hidden rounded-none bg-hairline">
         <div
-          className="h-full rounded-full bg-lav transition-all duration-700"
+          className="h-full bg-lav transition-all duration-700"
           style={{ width: `${(completed / items.length) * 100}%` }}
         />
       </div>

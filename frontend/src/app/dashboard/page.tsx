@@ -283,8 +283,8 @@ export default function DashboardPage() {
           {/* ── Training loop map ─────────────────────────────────── */}
           {!loading && progress && (
             <motion.div variants={staggerChild}>
-              <div className="rounded-2xl border border-hairline bg-surface-1 px-5 py-4">
-                <p className="mb-3 text-eyebrow text-ink-faint">Your practice loop</p>
+              <div className="rounded-xl border border-hairline bg-surface-1 px-5 py-4">
+                <span className="section-stamp mb-3 block">Your practice loop</span>
                 <TrainingLoopMap nodes={deriveLoopNodes(progress)} />
               </div>
             </motion.div>
@@ -303,7 +303,7 @@ export default function DashboardPage() {
           {!loading && progress && progress.badges.length > 0 && (
             <motion.div variants={staggerChild}>
               <div className="flex flex-wrap items-center gap-2 px-1">
-                <p className="text-eyebrow text-ink-faint">Badges:</p>
+                <span className="section-stamp">Badges</span>
                 {progress.badges.slice(0, 6).map((badge) => (
                   <div
                     key={badge.id}
@@ -327,8 +327,8 @@ export default function DashboardPage() {
                 <CardContent className="px-5 py-5">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <BarChart2 size={14} className="text-lav" />
-                      <p className="text-sm font-semibold text-lav">Practice loop progress</p>
+                      <BarChart2 size={13} className="text-lav" />
+                      <span className="section-stamp" style={{ color: "var(--color-lav)" }}>Practice loop progress</span>
                     </div>
                     <Link href="/pilot" className="text-[10px] font-medium text-lav/70 transition-colors hover:text-lav">
                       View full analytics →
@@ -473,9 +473,9 @@ export default function DashboardPage() {
           {!loading && progress && progress.skill_averages && (
             <motion.div variants={staggerChild} className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
-                <p className="text-eyebrow text-ink-subtle">Skill Breakdown</p>
-                <span className="rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink-faint">
-                  avg across {progress.feedback_ready_count} speech{progress.feedback_ready_count !== 1 ? "es" : ""}
+                <span className="section-stamp">Skill Breakdown</span>
+                <span className="rep-badge">
+                  avg · {progress.feedback_ready_count} speech{progress.feedback_ready_count !== 1 ? "es" : ""}
                 </span>
               </div>
               <Card>
@@ -493,11 +493,14 @@ export default function DashboardPage() {
                     return (
                       <div key={skill.key} className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 text-xs font-medium text-ink-subtle">
-                            <span className="text-[11px]" aria-hidden>{skill.icon}</span>
+                          <span className="section-stamp">
+                            <span aria-hidden>{skill.icon}</span>
                             {skill.label}
                           </span>
-                          <span className="text-xs font-bold tabular-nums text-ink">
+                          <span
+                            className="text-xs font-bold tabular-nums text-ink"
+                            style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+                          >
                             {value.toFixed(1)}<span className="font-normal text-ink-faint">/{skill.max}</span>
                           </span>
                         </div>
@@ -537,10 +540,8 @@ export default function DashboardPage() {
           {!loading && pilotSummary?.skill_trends && progress && progress.feedback_ready_count >= 2 && (
             <motion.div variants={staggerChild} className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-eyebrow text-ink-subtle">Skill Trends</p>
-                <span className="rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink-faint">
-                  vs previous speech
-                </span>
+                <span className="section-stamp">Skill Trends</span>
+                <span className="rep-badge">vs previous speech</span>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {[
@@ -587,10 +588,8 @@ export default function DashboardPage() {
             <motion.section variants={staggerChild} className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <p className="text-eyebrow text-ink-subtle">Flow Reports</p>
-                  <span className="rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink-faint">
-                    {speeches.length}
-                  </span>
+                  <span className="section-stamp">Flow Reports</span>
+                  <span className="rep-badge">{speeches.length}</span>
                 </div>
                 <Link href="/session" className="flex items-center gap-1 text-xs font-medium text-lav transition-colors hover:text-lav-hi">
                   <Play size={10} />

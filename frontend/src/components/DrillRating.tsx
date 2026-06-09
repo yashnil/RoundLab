@@ -70,10 +70,8 @@ export default function DrillRating({ drillId, userId, drillAttemptId, initialRa
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2 px-3 py-3">
-      <p className="text-[11px] font-medium text-ink-subtle">
-        Did this drill help you understand what to fix?
-      </p>
+    <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-2 px-3 py-3">
+      <span className="section-stamp">Did this drill help?</span>
       <div className="flex flex-wrap gap-1.5">
         {OPTIONS.map(({ value, label, icon: Icon, activeClass }) => (
           <button
@@ -82,7 +80,7 @@ export default function DrillRating({ drillId, userId, drillAttemptId, initialRa
             disabled={submitting}
             onClick={() => submit(value)}
             className={[
-              "flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-all",
+              "flex items-center gap-1 rounded-[3px] border px-2.5 py-1 text-[10px] font-medium transition-all",
               selected === value
                 ? activeClass
                 : "border-hairline bg-surface-1 text-ink-faint hover:border-lav/30 hover:text-ink",

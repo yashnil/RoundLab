@@ -82,7 +82,7 @@ export default function DrillCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.07, ...T.base }}
       className={[
-        "rounded-xl border transition-colors",
+        "rounded-lg border transition-colors",
         drill.status === "completed"
           ? "border-ok/20 bg-ok/3"
           : drill.status === "attempted"
@@ -98,10 +98,13 @@ export default function DrillCard({
         aria-expanded={expanded}
       >
         {/* Order number */}
-        <div className={[
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-          drill.status !== "assigned" ? "bg-lav text-white" : "border border-hairline-strong text-ink-faint",
-        ].join(" ")}>
+        <div
+          className={[
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-[3px] text-[11px] font-bold",
+            drill.status !== "assigned" ? "bg-lav text-white" : "border border-hairline-strong text-ink-faint",
+          ].join(" ")}
+          style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+        >
           {drill.order}
         </div>
 
@@ -155,9 +158,9 @@ export default function DrillCard({
 
           {/* Exercise prompt (compact) */}
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-1.5">
-              <Target size={12} className="text-lav" />
-              <span className="text-eyebrow text-ink-subtle">Exercise prompt</span>
+            <div className="section-stamp">
+              <Target size={10} className="text-lav" />
+              Exercise prompt
             </div>
             <p className="line-clamp-3 text-sm leading-relaxed text-ink-muted">{drill.prompt}</p>
           </div>
@@ -165,9 +168,9 @@ export default function DrillCard({
           {/* Success criteria summary (checkboxes only) */}
           {drill.success_criteria.length > 0 && (
             <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1.5">
-                <Zap size={12} className="text-lav" />
-                <span className="text-eyebrow text-ink-subtle">Success criteria</span>
+              <div className="section-stamp">
+                <Zap size={10} className="text-lav" />
+                Success criteria
               </div>
               <ul className="flex flex-col gap-1">
                 {drill.success_criteria.map((c, i) => (

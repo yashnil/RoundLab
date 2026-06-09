@@ -148,7 +148,7 @@ export default function PilotPage() {
           {/* Activity stats */}
           {!loading && pilotAggregate && (
             <motion.div variants={staggerChild}>
-              <p className="mb-3 text-eyebrow text-ink-faint">Activity</p>
+              <span className="section-stamp mb-3 block">Activity</span>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatCard label="Speeches" value={pilotAggregate.speeches_uploaded} sub={`${pilotAggregate.analyzed_speeches} analyzed`} />
                 <StatCard label="Drills assigned" value={pilotAggregate.drills_assigned} sub={`${pilotAggregate.drill_attempts} attempts`} />
@@ -161,7 +161,7 @@ export default function PilotPage() {
           {/* Pilot flags */}
           {!loading && pilotSummary && (
             <motion.div variants={staggerChild}>
-              <p className="mb-3 text-eyebrow text-ink-faint">Pilot loop flags</p>
+              <span className="section-stamp mb-3 block">Pilot loop flags</span>
               <Card>
                 <CardContent className="grid grid-cols-1 gap-2 px-5 py-4 sm:grid-cols-2">
                   <PilotFlag label="Returned for second speech" done={pilotSummary.return_for_second_speech} />
@@ -177,7 +177,7 @@ export default function PilotPage() {
           {/* Pilot checklist */}
           {!loading && progress && (
             <motion.div variants={staggerChild}>
-              <p className="mb-3 text-eyebrow text-ink-faint">Full loop checklist</p>
+              <span className="section-stamp mb-3 block">Full loop checklist</span>
               <Card>
                 <CardContent className="px-5 py-5">
                   <PilotChecklist progress={progress} pilot={pilotSummary} />
@@ -189,7 +189,7 @@ export default function PilotPage() {
           {/* Skill trends */}
           {!loading && pilotSummary?.skill_trends && (
             <motion.div variants={staggerChild}>
-              <p className="mb-3 text-eyebrow text-ink-faint">Skill trends</p>
+              <span className="section-stamp mb-3 block">Skill trends</span>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {SKILL_META.map(({ key, label, icon, max }) => {
                   const trend = pilotSummary.skill_trends![key as keyof typeof pilotSummary.skill_trends];
@@ -202,7 +202,7 @@ export default function PilotPage() {
           {/* Common issues */}
           {!loading && pilotSummary && pilotSummary.common_issues.length > 0 && (
             <motion.div variants={staggerChild}>
-              <p className="mb-3 text-eyebrow text-ink-faint">Common issues (from feedback)</p>
+              <span className="section-stamp mb-3 block">Common issues (from feedback)</span>
               <Card>
                 <CardContent className="flex flex-col gap-2 px-5 py-4">
                   {pilotSummary.common_issues.map((issue, i) => (
@@ -219,7 +219,7 @@ export default function PilotPage() {
           {/* Drop-off insight */}
           {!loading && pilotAggregate && (
             <motion.div variants={staggerChild}>
-              <p className="mb-3 text-eyebrow text-ink-faint">Drop-off point</p>
+              <span className="section-stamp mb-3 block">Drop-off point</span>
               <Card>
                 <CardContent className="px-5 py-4">
                   <div className="flex items-center gap-2">

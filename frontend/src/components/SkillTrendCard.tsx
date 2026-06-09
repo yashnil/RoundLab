@@ -29,10 +29,10 @@ export default function SkillTrendCard({ label, icon, max, trend }: Props) {
   const barColor = pct >= 70 ? "bg-lav" : pct >= 50 ? "bg-warn" : "bg-danger";
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-1 p-3">
+    <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-1 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-ink-subtle">
-          <span className="text-[11px]" aria-hidden>{icon}</span>
+        <span className="section-stamp">
+          <span aria-hidden>{icon}</span>
           {label}
         </span>
         <div className={`flex items-center gap-1 text-[10px] font-medium ${cfg.color}`}>
@@ -42,10 +42,16 @@ export default function SkillTrendCard({ label, icon, max, trend }: Props) {
       </div>
 
       <div className="flex items-end gap-2">
-        <span className="text-lg font-bold tabular-nums text-ink leading-none">
+        <span
+          className="text-lg font-bold tabular-nums text-ink leading-none"
+          style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+        >
           {trend.current.toFixed(1)}
         </span>
-        <span className="mb-0.5 text-xs text-ink-faint">/{max}</span>
+        <span
+          className="mb-0.5 text-xs text-ink-faint"
+          style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+        >/{max}</span>
         {trend.delta !== null && (
           <span className={`mb-0.5 text-[10px] font-semibold ${trend.delta > 0 ? "text-ok" : trend.delta < 0 ? "text-danger" : "text-ink-faint"}`}>
             {trend.delta > 0 ? "+" : ""}{trend.delta.toFixed(1)}

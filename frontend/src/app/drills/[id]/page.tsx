@@ -444,9 +444,9 @@ export default function DrillPage() {
 
                 {/* Exercise prompt */}
                 <motion.div {...fadeUp(0.13)} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <Target size={13} className="text-lav" />
-                    <p className="text-eyebrow text-ink-subtle">Exercise prompt</p>
+                  <div className="section-stamp">
+                    <Target size={11} className="text-lav" />
+                    Exercise prompt
                   </div>
                   <div className="rounded-xl border border-lav/20 bg-lav/5 px-5 py-4">
                     <p className="text-sm leading-relaxed text-ink">{drill.prompt}</p>
@@ -456,14 +456,17 @@ export default function DrillPage() {
                 {/* Instructions */}
                 {steps.length > 0 && (
                   <motion.div {...fadeUp(0.16)} className="flex flex-col gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <BookOpen size={13} className="text-lav" />
-                      <p className="text-eyebrow text-ink-subtle">How to practice</p>
+                    <div className="section-stamp">
+                      <BookOpen size={11} className="text-lav" />
+                      How to practice
                     </div>
                     <ol className="flex flex-col gap-2">
                       {steps.map((step, i) => (
                         <li key={i} className="flex items-start gap-3 text-sm text-ink-muted">
-                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-hairline text-[10px] font-bold text-ink-faint">
+                          <span
+                            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-hairline text-[10px] font-bold text-ink-faint"
+                            style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+                          >
                             {i + 1}
                           </span>
                           {step.replace(/^\d+\.\s*/, "")}
@@ -476,9 +479,9 @@ export default function DrillPage() {
                 {/* Success criteria */}
                 {drill.success_criteria.length > 0 && (
                   <motion.div {...fadeUp(0.19)} className="flex flex-col gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={13} className="text-lav" />
-                      <p className="text-eyebrow text-ink-subtle">Success criteria</p>
+                    <div className="section-stamp">
+                      <Zap size={11} className="text-lav" />
+                      Success criteria
                     </div>
                     <ul className="flex flex-col gap-2">
                       {drill.success_criteria.map((criterion, i) => (
@@ -496,9 +499,9 @@ export default function DrillPage() {
 
                 {/* ── Practice room ────────────────────────────────────── */}
                 <motion.div {...fadeUp(0.22)} id="practice-room" className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-lav" />
-                    <p className="text-eyebrow text-ink-subtle">Practice room</p>
+                  <div className="section-stamp">
+                    <span className="h-1.5 w-1.5 rounded-full bg-lav flex-shrink-0" />
+                    Practice room
                   </div>
 
                   {drill.status === "completed" ? (
@@ -574,9 +577,9 @@ export default function DrillPage() {
                 {/* ── Latest Result ─────────────────────────────────────── */}
                 {attempts.length > 0 && (
                   <motion.div {...fadeUp(0.26)} className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-lav" />
-                      <p className="text-eyebrow text-ink-subtle">Latest result</p>
+                    <div className="section-stamp">
+                      <span className="h-1.5 w-1.5 rounded-full bg-lav flex-shrink-0" />
+                      Latest result
                     </div>
                     <AttemptCard attempt={attempts[0]} index={0} isLatest />
                   </motion.div>
@@ -604,13 +607,11 @@ export default function DrillPage() {
                 {attempts.length > 1 && (
                   <motion.div {...fadeUp(0.28)} className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-ink-subtle" />
-                      <p className="text-eyebrow text-ink-subtle">
+                      <div className="section-stamp">
+                        <span className="h-1.5 w-1.5 rounded-full bg-ink-subtle flex-shrink-0" />
                         Earlier attempts
-                        <span className="ml-1.5 rounded-full border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-faint">
-                          {attempts.length - 1}
-                        </span>
-                      </p>
+                      </div>
+                      <span className="rep-badge">{attempts.length - 1}</span>
                     </div>
                     <div className="flex flex-col gap-2">
                       {attempts.slice(1).map((a, i) => (

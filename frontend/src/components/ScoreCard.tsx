@@ -67,10 +67,18 @@ export default function ScoreCard({ score, summary, className }: ScoreCardProps)
             ring,
           )}
         >
-          <span className="text-3xl font-bold leading-none tracking-tight text-ink sm:text-4xl">
+          <span
+            className="text-3xl font-bold leading-none tabular-nums text-ink sm:text-4xl"
+            style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+          >
             {score !== null ? <AnimatedNumber target={score} /> : "—"}
           </span>
-          <span className="mt-0.5 text-xs text-ink-faint">/100</span>
+          <span
+            className="mt-0.5 text-[10px] text-ink-faint"
+            style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+          >
+            /100
+          </span>
         </div>
       </div>
 

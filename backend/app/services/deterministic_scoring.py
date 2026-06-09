@@ -407,3 +407,47 @@ def calculate_rubric_scores(
         return {
             "unknown_dimension": 0,
         }
+
+
+def map_rubric_to_legacy_scores(
+    calibrated: dict[str, int],
+    speech_type: str,
+) -> dict[str, int]:
+    """Map speech-type-specific rubric dimension scores to the legacy 5-dimension schema.
+
+    The five legacy keys (clash, weighing, extensions, drops, judge_adaptation) are
+    what the frontend and reports tables expect. Their sum equals overall_score.
+    """
+    if speech_type == "constructive":
+        return {
+            "clash":            calibrated.get("case_structure", 0),
+            "weighing":         calibrated.get("impact_development", 0),
+            "extensions":       calibrated.get("judge_clarity", 0),
+            "drops":            calibrated.get("evidence_use", 0),
+            "judge_adaptation": calibrated.get("warranting", 0),
+        }
+    if speech_type == "rebuttal":
+        return {
+            "clash":            calibrated.get("clash_refutation", 0),
+            "weighing":         calibrated.get("weighing_setup", 0),
+            "extensions":       calibrated.get("response_quality", 0),
+            "drops":            calibrated.get("coverage_prioritization", 0),
+            "judge_adaptation": calibrated.get("evidence_comparison", 0),
+        }
+    if speech_type == "summary":
+        return {
+            "clash":            calibrated.get("frontlining", 0),
+            "weighing":         calibrated.get("weighing", 0),
+            "extensions":       calibrated.get("extension_quality", 0),
+            "drops":            calibrated.get("collapse_strategy", 0),
+            "judge_adaptation": calibrated.get("judge_clarity", 0),
+        }
+    if speech_type == "final_focus":
+        return {
+            "clash":            calibrated.get("crystallization", 0),
+            "weighing":         calibrated.get("comparative_weighing", 0),
+            "extensions":       calibrated.get("ballot_story", 0),
+            "drops":            calibrated.get("consistency", 0),
+            "judge_adaptation": calibrated.get("judge_adaptation", 0),
+        }
+    return {"clash": 0, "weighing": 0, "extensions": 0, "drops": 0, "judge_adaptation": 0}

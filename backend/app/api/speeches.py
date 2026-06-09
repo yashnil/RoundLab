@@ -1,10 +1,12 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 
+from app.models.job import AnalyzeResponse
 from app.models.speech import SpeechCreateRequest, SpeechRow, SpeechUpdateRequest
+from app.services.jobs import create_job, list_jobs_for_speech
 from app.services.product_events import track_product_event
 from app.services.supabase_client import get_supabase
 
@@ -200,6 +202,99 @@ async def reset_audio(speech_id: str, user_id: str = Query(...)) -> SpeechRow:
         return updated.data[0]
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to update speech") from exc
+
+
+# ── Unified analysis endpoint (job-backed) ────────────────────────────────────
+
+@router.post("/{speech_id}/analyze", response_model=AnalyzeResponse, status_code=202)
+async def analyze_speech(
+    speech_id: str,
+    background_tasks: BackgroundTasks,
+    user_id: str = Query(...),
+) -> AnalyzeResponse:
+    """
+    Kick off the full speech analysis pipeline as a background job.
+
+    Returns {job_id, status} immediately so the client can start polling
+    GET /jobs/{job_id}. The pipeline runs: transcribe → extract flow →
+    generate feedback → generate drills.
+
+    If a queued or running job already exists for this speech it is returned
+    instead of creating a duplicate.
+    """
+    from app.services.analysis_pipeline import run_speech_analysis_pipeline
+
+    supabase = get_supabase()
+
+    # Verify speech ownership
+    try:
+        speech_res = (
+            supabase.table("speeches")
+            .select("id, audio_url")
+            .eq("id", speech_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch speech") from exc
+
+    if not speech_res.data:
+        raise HTTPException(status_code=404, detail="Speech not found")
+
+    speech = speech_res.data[0]
+
+    # Check whether there's already a transcript (paste flow) or audio
+    has_audio = bool(speech.get("audio_url"))
+    tx_check = (
+        supabase.table("transcripts")
+        .select("id")
+        .eq("speech_id", speech_id)
+        .limit(1)
+        .execute()
+    )
+    has_transcript = bool(tx_check.data)
+
+    if not has_audio and not has_transcript:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload audio or paste a transcript before running analysis.",
+        )
+
+    # Return existing active job if one is already in flight
+    try:
+        existing = list_jobs_for_speech(supabase, speech_id, user_id, limit=1)
+        for j in existing:
+            if j["status"] in ("queued", "running"):
+                return AnalyzeResponse(job_id=j["id"], status=j["status"])
+    except Exception:
+        pass  # Best-effort dedup; proceed to create a new job
+
+    # Create job and enqueue background task
+    try:
+        job = create_job(
+            supabase,
+            user_id=user_id,
+            job_type="speech_analysis",
+            speech_id=speech_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "analyze_speech: create_job failed | exc_type=%s | speech_id=%s",
+            type(exc).__name__, speech_id,
+        )
+        raise HTTPException(status_code=500, detail="Failed to create analysis job") from exc
+
+    background_tasks.add_task(
+        run_speech_analysis_pipeline,
+        job["id"],
+        speech_id,
+        user_id,
+    )
+    logger.info(
+        "analyze_speech: job queued | job_id=%s speech_id=%s", job["id"], speech_id
+    )
+    return AnalyzeResponse(job_id=job["id"], status="queued")
 
 
 # ── Speech comparison (re-record improvement) ─────────────────────────────────

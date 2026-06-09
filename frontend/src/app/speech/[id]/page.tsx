@@ -5,10 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Check, ChevronDown, ChevronUp, FileText,
-  Mic, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target, Copy,
+  Mic, Pencil, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target, Copy,
   ShieldAlert, Sparkles,
 } from "lucide-react";
 import { useCopy } from "@/lib/useCopy";
+import { deriveAnalysisRecoveryState, isJobActive } from "@/lib/jobHelpers";
 import AppNav from "@/components/AppNav";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import RecordingStudio from "@/components/RecordingStudio";
@@ -35,9 +36,12 @@ import ImprovementComparisonCard from "@/components/ImprovementComparisonCard";
 import CoachMarginNote from "@/components/CoachMarginNote";
 import EvidenceSupportPanel from "@/components/EvidenceSupportPanel";
 import FeedbackRating from "@/components/FeedbackRating";
+import { AnalysisProgressCard } from "@/components/AnalysisProgressCard";
+import FlowEditPanel from "@/components/FlowEditPanel";
 import ConfusionReport from "@/components/ConfusionReport";
 import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue, deriveEvidenceRiskSummary } from "@/lib/debateHelpers";
-import type { ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
+import { initEditArgs, isFlowCorrectedAndNeedsRegen } from "@/lib/flowEditHelpers";
+import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
 import type { DebateIssue, ClaimEvidenceCheck, EvidenceCheckResult, EvidenceDocument } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
 
@@ -378,6 +382,30 @@ function FlowLensNote({ judgeMode }: { judgeMode: JudgeViewMode }) {
   );
 }
 
+// ── Contextual help panel ─────────────────────────────────────────────────────
+
+function ContextualHelp({ question, children }: { question: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="flex w-full items-start gap-2 rounded-lg border border-hairline bg-surface-2 px-3 py-2.5 text-left hover:border-hairline-strong hover:bg-surface-3 transition-colors"
+    >
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-lav/30 text-[9px] font-bold text-lav">?</span>
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <span className="text-xs font-medium text-ink-subtle">{question}</span>
+        {open && (
+          <p className="text-[11px] leading-relaxed text-ink-faint mt-0.5">{children}</p>
+        )}
+      </div>
+      <span className="shrink-0 text-ink-faint mt-0.5">
+        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </span>
+    </button>
+  );
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
@@ -498,6 +526,18 @@ export default function SpeechPage() {
   const [evidenceDrillErr, setEvidenceDrillErr] = useState("");
   const [evidenceDrillsDone, setEvidenceDrillsDone] = useState(false);
 
+  // Job-based analysis state
+  const [activeJob, setActiveJob] = useState<AnalysisJob | null>(null);
+  const [retryingJob, setRetryingJob] = useState(false);
+
+  // Flow edit state
+  const [flowEditMode, setFlowEditMode] = useState(false);
+  const [editingArgs, setEditingArgs] = useState<ArgumentItem[]>([]);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionErr, setCorrectionErr] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenErr, setRegenErr] = useState("");
+
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
   const stream  = useRef<MediaStream | null>(null);
@@ -505,9 +545,11 @@ export default function SpeechPage() {
   const extRef  = useRef("webm");
   const urlRef  = useRef<string | null>(null);
   const autoAnalysisStartedRef = useRef(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => {
     if (timer.current) clearInterval(timer.current);
+    if (pollRef.current) clearInterval(pollRef.current);
     stream.current?.getTracks().forEach((t) => t.stop());
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
   }, []);
@@ -550,6 +592,19 @@ export default function SpeechPage() {
           setHasLibrary((docs as EvidenceDocument[]).some((d) => d.status === "parsed"));
           if ((checks as ClaimEvidenceCheck[]).length > 0) setSavedChecks(checks as ClaimEvidenceCheck[]);
         });
+
+        // Recovery: check for in-progress or recently-failed analysis jobs
+        apiFetch<AnalysisJob[]>(`/speeches/${speechId}/jobs?user_id=${uid}`)
+          .then((jobs) => {
+            const state = deriveAnalysisRecoveryState(jobs, s.status);
+            if (state.type === "in_progress") {
+              setActiveJob(state.job);
+              startPollWithUid(state.job.id, uid);
+            } else if (state.type === "failed") {
+              setActiveJob(state.job);
+            }
+          })
+          .catch(() => {});
       })
       .catch(() => setPageErr("Could not load your data. Please refresh and try again."))
       .finally(() => setPageLoad(false));
@@ -712,6 +767,113 @@ export default function SpeechPage() {
       autoAnalysisStartedRef.current = false; // Reset auto-analysis flag for new upload
     } catch {}
     finally { setResetting(false); }
+  }
+
+  // ── Job-based analysis ─────────────────────────────────────────────────────
+
+  function startPollWithUid(jobId: string, uid: string) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const job = await apiFetch<AnalysisJob>(`/jobs/${jobId}?user_id=${uid}`);
+        setActiveJob(job);
+        if (!isJobActive(job.status)) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          if (job.status === "succeeded") {
+            const [txData, argData, fbData, drillData] = await Promise.allSettled([
+              apiFetch<Transcript>(`/speeches/${speechId}/transcript?user_id=${uid}`),
+              apiFetch<ArgumentMap>(`/speeches/${speechId}/argument-map?user_id=${uid}`),
+              apiFetch<FeedbackReport>(`/speeches/${speechId}/feedback?user_id=${uid}`),
+              apiFetch<Drill[]>(`/speeches/${speechId}/drills?user_id=${uid}`),
+            ]);
+            if (txData.status === "fulfilled") setTranscript(txData.value);
+            if (argData.status === "fulfilled") setArgMap(argData.value);
+            if (fbData.status === "fulfilled") setFeedback(fbData.value);
+            if (drillData.status === "fulfilled") setDrills(drillData.value);
+            const updatedSpeech = await apiFetch<Speech>(`/speeches/${speechId}?user_id=${uid}`).catch(() => null);
+            if (updatedSpeech) setSpeech(updatedSpeech);
+            setActiveJob(null);
+          }
+        }
+      } catch {}
+    }, 2000);
+  }
+
+  async function startJobAnalysis() {
+    if (!userId) return;
+    setUnifiedAnalysisErr("");
+    try {
+      const resp = await apiFetch<AnalyzeResponse>(
+        `/speeches/${speechId}/analyze?user_id=${userId}`,
+        { method: "POST" },
+      );
+      const job = await apiFetch<AnalysisJob>(`/jobs/${resp.job_id}?user_id=${userId}`);
+      setActiveJob(job);
+      if (isJobActive(job.status)) startPollWithUid(job.id, userId);
+    } catch (e: unknown) {
+      setUnifiedAnalysisErr(e instanceof Error ? e.message : "Analysis failed. Please try again.");
+    }
+  }
+
+  async function retryAnalysis() {
+    if (!activeJob || !userId) return;
+    setRetryingJob(true);
+    setUnifiedAnalysisErr("");
+    try {
+      const job = await apiFetch<AnalysisJob>(
+        `/jobs/${activeJob.id}/retry?user_id=${userId}`,
+        { method: "POST" },
+      );
+      setActiveJob(job);
+      if (isJobActive(job.status)) startPollWithUid(job.id, userId);
+    } catch (e: unknown) {
+      setUnifiedAnalysisErr(e instanceof Error ? e.message : "Retry failed. Please try again.");
+    } finally {
+      setRetryingJob(false);
+    }
+  }
+
+  // ── Flow correction ────────────────────────────────────────────────────────
+
+  async function saveFlowCorrection(args: ArgumentItem[], notes?: string) {
+    if (!userId) return;
+    setSavingCorrection(true);
+    setCorrectionErr("");
+    try {
+      const updated = await apiFetch<ArgumentMap>(
+        `/speeches/${speechId}/argument-map?user_id=${userId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ arguments: args, correction_notes: notes }),
+        }
+      );
+      setArgMap(updated);
+      setFlowEditMode(false);
+    } catch (e: unknown) {
+      setCorrectionErr(e instanceof Error ? e.message : "Could not save corrections.");
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
+
+  async function regenerateFromFlow() {
+    if (!userId) return;
+    setRegenerating(true);
+    setRegenErr("");
+    try {
+      const result = await apiFetch<{ feedback: FeedbackReport; drills: Drill[] }>(
+        `/speeches/${speechId}/regenerate-from-flow?user_id=${userId}`,
+        { method: "POST" }
+      );
+      setFeedback(result.feedback);
+      setDrills(result.drills);
+    } catch (e: unknown) {
+      setRegenErr(e instanceof Error ? e.message : "Regeneration failed. Please try again.");
+    } finally {
+      setRegenerating(false);
+    }
   }
 
   // ── AI operations ──────────────────────────────────────────────────────────
@@ -899,13 +1061,10 @@ export default function SpeechPage() {
 
     // Mark as started to prevent duplicates
     autoAnalysisStartedRef.current = true;
-    console.log("[AutoAnalyze] Starting automatic analysis with fresh speech object, audio_url=" + uploadedSpeech.audio_url);
+    console.log("[AutoAnalyze] Starting job-based analysis, audio_url=" + uploadedSpeech.audio_url);
 
-    // Start the analysis pipeline with the fresh uploaded speech object
-    await analyzeMySpeech({
-      speechOverride: uploadedSpeech,
-      autoStartedFromUpload: true,
-    });
+    // Start the job-based analysis pipeline
+    await startJobAnalysis();
   }
 
   async function deleteSession() {
@@ -1420,6 +1579,11 @@ export default function SpeechPage() {
                         </div>
                       </div>
 
+                      {/* Contextual help — warranting */}
+                      <ContextualHelp question="Why does warranting matter so much?">
+                        A warrant is the logical mechanism that connects your claim to your evidence. Without it, a judge can simply say "so what?" and ignore your argument even if the evidence is strong. Flow judges in particular will drop unwarranted arguments — a claim needs a clear "because" before the evidence or it doesn&apos;t count.
+                      </ContextualHelp>
+
                       {/* Coach Diagnosis Cards */}
                       {(feedback.raw_feedback?.dropped_or_undercovered_arguments?.length ||
                         feedback.raw_feedback?.warranting_diagnostics?.length ||
@@ -1599,37 +1763,95 @@ export default function SpeechPage() {
                 {argMap && (
                   <WorkspaceCard key="flow-done">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
                         <StepHeader n={3} title="Flow" done aside={
-                          <Badge variant="indigo">
-                            {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {argMap.source_type === "user_corrected" && (
+                              <Badge variant="indigo">Flow corrected</Badge>
+                            )}
+                            <Badge variant="indigo">
+                              {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
+                            </Badge>
+                          </div>
                         } />
-                        <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
+                        <div className="flex items-center gap-2">
+                          <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
+                          <button
+                            type="button"
+                            onClick={() => { setFlowEditMode(true); setEditingArgs(initEditArgs(argMap.arguments)); setCorrectionErr(""); }}
+                            className="flex items-center gap-1 rounded-md border border-hairline px-2 py-1 text-xs text-ink-faint hover:text-ink-subtle hover:border-hairline-strong transition-colors"
+                          >
+                            <Pencil size={10} />
+                            Edit
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Flow Summary */}
-                      <FlowSummary argMap={argMap} />
-
-                      {/* Lens note */}
-                      <FlowLensNote judgeMode={judgeViewMode} />
-
-                      {argMap.arguments.length === 0 ? (
-                        <p className="text-sm text-ink-faint">No arguments extracted.</p>
-                      ) : showTableView ? (
-                        <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
+                      {flowEditMode ? (
+                        <FlowEditPanel
+                          initialArgs={editingArgs}
+                          onSave={saveFlowCorrection}
+                          onCancel={() => setFlowEditMode(false)}
+                          saving={savingCorrection}
+                          saveError={correctionErr}
+                        />
                       ) : (
-                        <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
+                        <>
+                          {/* Flow Summary */}
+                          <FlowSummary argMap={argMap} />
+
+                          {/* Lens note */}
+                          <FlowLensNote judgeMode={judgeViewMode} />
+
+                          {/* Contextual help */}
+                          <div className="flex flex-col gap-1.5">
+                            <ContextualHelp question="What is a flow?">
+                              A flow is a structured map of every argument in your speech. Debate judges — especially flow judges — track claim, warrant, evidence, and impact for each contention. If your flow is clean and extended correctly, you can win even on a thin evidence base.
+                            </ContextualHelp>
+                            <ContextualHelp question="What does the judge lens change?">
+                              Lay judges care about persuasion, clarity, and which side sounds more confident. Flow judges track every argument and drop. Switching the lens shows you the most important weaknesses for each judge type — helping you prioritize your prep.
+                            </ContextualHelp>
+                          </div>
+
+                          {argMap.arguments.length === 0 ? (
+                            <p className="text-sm text-ink-faint">No arguments extracted.</p>
+                          ) : showTableView ? (
+                            <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
+                          ) : (
+                            <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
+                          )}
+
+                          {/* View toggle — demoted, secondary */}
+                          <button
+                            type="button"
+                            onClick={() => setShowTableView((v) => !v)}
+                            className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
+                          >
+                            {showTableView ? "Switch to flow board" : "Switch to table view"}
+                          </button>
+                        </>
                       )}
 
-                      {/* View toggle — demoted, secondary */}
-                      <button
-                        type="button"
-                        onClick={() => setShowTableView((v) => !v)}
-                        className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
-                      >
-                        {showTableView ? "Switch to flow board" : "Switch to table view"}
-                      </button>
+                      {/* Regenerate coaching CTA */}
+                      {isFlowCorrectedAndNeedsRegen(argMap, feedback) && !flowEditMode && (
+                        <div className="rounded-lg border border-lav/20 bg-lav/5 px-4 py-3 flex flex-col gap-3">
+                          <div className="flex flex-col gap-1">
+                            <p className="text-sm font-semibold text-lav">Flow corrected — regenerate coaching</p>
+                            <p className="text-xs text-ink-subtle leading-relaxed">
+                              Your flow was edited. Regenerate to get updated feedback and drills based on the corrected arguments.
+                            </p>
+                          </div>
+                          {regenErr && <p className="text-xs text-danger">{regenErr}</p>}
+                          <Button
+                            size="sm"
+                            onClick={regenerateFromFlow}
+                            disabled={regenerating}
+                            className="w-fit"
+                          >
+                            {regenerating ? "Regenerating…" : "Regenerate coaching from corrected flow"}
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </WorkspaceCard>
                 )}
@@ -1687,7 +1909,7 @@ export default function SpeechPage() {
                 )}
 
                 {/* Unified Analysis Workflow */}
-                {transcript && !feedback && !analyzingUnified && (
+                {transcript && !feedback && !analyzingUnified && !activeJob && (
                   <WorkspaceCard key="unified-analysis">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
                       <StepHeader n={3} title="Analysis" done={false} />
@@ -1704,15 +1926,31 @@ export default function SpeechPage() {
                         </div>
                       )}
                       {unifiedAnalysisErr && <InlineAlert variant="danger">{unifiedAnalysisErr}</InlineAlert>}
-                      <Button disabled={!canAnalyze || analyzingUnified} onClick={() => analyzeMySpeech()} size="sm" className="w-full">
-                        {analyzingUnified ? "Analyzing..." : "Analyze My Speech"}
+                      <Button disabled={!canAnalyze} onClick={startJobAnalysis} size="sm" className="w-full">
+                        Analyze My Speech
                       </Button>
                     </CardContent>
                   </WorkspaceCard>
                 )}
 
-                {/* Unified Analysis Loading */}
-                {analyzingUnified && (
+                {/* Job-based analysis progress */}
+                {activeJob && (
+                  <motion.div key="job-progress" {...fadeUp(0)}>
+                    <AnalysisProgressCard
+                      job={activeJob}
+                      onRetry={activeJob.status === "failed" ? retryAnalysis : undefined}
+                      retrying={retryingJob}
+                    />
+                    {unifiedAnalysisErr && (
+                      <div className="mt-2">
+                        <InlineAlert variant="danger">{unifiedAnalysisErr}</InlineAlert>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Legacy unified analysis loading (manual step-through) */}
+                {analyzingUnified && !activeJob && (
                   <motion.div key="unified-loading" {...fadeUp(0)}>
                     <LoadingCard
                       title={analysisStage ? STAGE_MESSAGES[analysisStage].title : "Analyzing your speech"}
@@ -1731,40 +1969,98 @@ export default function SpeechPage() {
                   ) : (
                     <WorkspaceCard key="flow-done">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                           <StepHeader n={3} title="Flow" done aside={
-                            <Badge variant="indigo">
-                              {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              {argMap.source_type === "user_corrected" && (
+                                <Badge variant="indigo">Flow corrected</Badge>
+                              )}
+                              <Badge variant="indigo">
+                                {argMap.arguments.length} arg{argMap.arguments.length !== 1 ? "s" : ""}
+                              </Badge>
+                            </div>
                           } />
-                          <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
+                          <div className="flex items-center gap-2">
+                            <JudgeModeSelector value={judgeViewMode} onChange={setJudgeViewMode} />
+                            <button
+                              type="button"
+                              onClick={() => { setFlowEditMode(true); setEditingArgs(initEditArgs(argMap.arguments)); setCorrectionErr(""); }}
+                              className="flex items-center gap-1 rounded-md border border-hairline px-2 py-1 text-xs text-ink-faint hover:text-ink-subtle hover:border-hairline-strong transition-colors"
+                            >
+                              <Pencil size={10} />
+                              Edit
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Flow Summary */}
-                        <FlowSummary argMap={argMap} />
-
-                        {/* Lens note */}
-                        <FlowLensNote judgeMode={judgeViewMode} />
-
-                        {argMap.arguments.length === 0 ? (
-                          <p className="py-4 text-center text-sm text-ink-faint">No arguments extracted.</p>
-                        ) : showTableView ? (
-                          <>
-                            <FlowCoachNote args={argMap.arguments} />
-                            <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
-                          </>
+                        {flowEditMode ? (
+                          <FlowEditPanel
+                            initialArgs={editingArgs}
+                            onSave={saveFlowCorrection}
+                            onCancel={() => setFlowEditMode(false)}
+                            saving={savingCorrection}
+                            saveError={correctionErr}
+                          />
                         ) : (
-                          <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
+                          <>
+                            {/* Flow Summary */}
+                            <FlowSummary argMap={argMap} />
+
+                            {/* Lens note */}
+                            <FlowLensNote judgeMode={judgeViewMode} />
+
+                            {/* Contextual help */}
+                            <div className="flex flex-col gap-1.5">
+                              <ContextualHelp question="What is a flow?">
+                                A flow is a structured map of every argument in your speech. Debate judges — especially flow judges — track claim, warrant, evidence, and impact for each contention. If your flow is clean and extended correctly, you can win even on a thin evidence base.
+                              </ContextualHelp>
+                              <ContextualHelp question="What does the judge lens change?">
+                                Lay judges care about persuasion, clarity, and which side sounds more confident. Flow judges track every argument and drop. Switching the lens shows you the most important weaknesses for each judge type — helping you prioritize your prep.
+                              </ContextualHelp>
+                            </div>
+
+                            {argMap.arguments.length === 0 ? (
+                              <p className="py-4 text-center text-sm text-ink-faint">No arguments extracted.</p>
+                            ) : showTableView ? (
+                              <>
+                                <FlowCoachNote args={argMap.arguments} />
+                                <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
+                              </>
+                            ) : (
+                              <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
+                            )}
+
+                            {/* View toggle — demoted, secondary */}
+                            <button
+                              type="button"
+                              onClick={() => setShowTableView((v) => !v)}
+                              className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
+                            >
+                              {showTableView ? "Switch to flow board" : "Switch to table view"}
+                            </button>
+                          </>
                         )}
 
-                        {/* View toggle — demoted, secondary */}
-                        <button
-                          type="button"
-                          onClick={() => setShowTableView((v) => !v)}
-                          className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
-                        >
-                          {showTableView ? "Switch to flow board" : "Switch to table view"}
-                        </button>
+                        {/* Regenerate coaching CTA */}
+                        {isFlowCorrectedAndNeedsRegen(argMap, feedback) && !flowEditMode && (
+                          <div className="rounded-lg border border-lav/20 bg-lav/5 px-4 py-3 flex flex-col gap-3">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm font-semibold text-lav">Flow corrected — regenerate coaching</p>
+                              <p className="text-xs text-ink-subtle leading-relaxed">
+                                Your flow was edited. Regenerate to get updated feedback and drills based on the corrected arguments.
+                              </p>
+                            </div>
+                            {regenErr && <p className="text-xs text-danger">{regenErr}</p>}
+                            <Button
+                              size="sm"
+                              onClick={regenerateFromFlow}
+                              disabled={regenerating}
+                              className="w-fit"
+                            >
+                              {regenerating ? "Regenerating…" : "Regenerate coaching from corrected flow"}
+                            </Button>
+                          </div>
+                        )}
 
                         {/* Optional: View speech text */}
                         {transcript && (
@@ -1892,6 +2188,11 @@ export default function SpeechPage() {
                             />
                           </div>
                         </div>
+
+                        {/* Contextual help — warranting */}
+                        <ContextualHelp question="Why does warranting matter so much?">
+                          A warrant is the logical mechanism that connects your claim to your evidence. Without it, a judge can simply say "so what?" and ignore your argument even if the evidence is strong. Flow judges in particular will drop unwarranted arguments — a claim needs a clear "because" before the evidence or it doesn&apos;t count.
+                        </ContextualHelp>
 
                         {/* Coach Diagnosis Cards */}
                         {(feedback.raw_feedback?.dropped_or_undercovered_arguments?.length ||

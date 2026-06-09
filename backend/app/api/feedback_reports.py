@@ -10,6 +10,7 @@ from app.services.deterministic_scoring import (
     SCORING_VERSION,
     calculate_rubric_scores,
     compute_report_fingerprint,
+    map_rubric_to_legacy_scores,
 )
 from app.services.product_events import track_product_event
 from app.services.supabase_client import get_supabase
@@ -21,59 +22,6 @@ router = APIRouter(prefix="/speeches", tags=["feedback_reports"])
 # Regeneration cooldown in seconds
 REGENERATE_COOLDOWN_SECONDS = 60
 
-
-def _map_rubric_to_legacy_scores(calibrated: dict[str, int], speech_type: str) -> dict[str, int]:
-    """Map calibrated rubric dimension scores to legacy 5-dimension schema.
-
-    This ensures the scores displayed in the frontend add up to the overall_score.
-    For constructive speeches, the mapping is:
-    - case_structure → clash
-    - warranting → judge_adaptation
-    - evidence_use → drops
-    - impact_development → weighing
-    - judge_clarity → extensions
-    """
-    if speech_type == "constructive":
-        return {
-            "clash": calibrated.get("case_structure", 0),
-            "weighing": calibrated.get("impact_development", 0),
-            "extensions": calibrated.get("judge_clarity", 0),
-            "drops": calibrated.get("evidence_use", 0),
-            "judge_adaptation": calibrated.get("warranting", 0),
-        }
-    elif speech_type == "rebuttal":
-        return {
-            "clash": calibrated.get("clash_refutation", 0),
-            "weighing": calibrated.get("weighing_setup", 0),
-            "extensions": calibrated.get("response_quality", 0),
-            "drops": calibrated.get("coverage_prioritization", 0),
-            "judge_adaptation": calibrated.get("evidence_comparison", 0),
-        }
-    elif speech_type == "summary":
-        return {
-            "clash": calibrated.get("frontlining", 0),
-            "weighing": calibrated.get("weighing", 0),
-            "extensions": calibrated.get("extension_quality", 0),
-            "drops": calibrated.get("collapse_strategy", 0),
-            "judge_adaptation": calibrated.get("judge_clarity", 0),
-        }
-    elif speech_type == "final_focus":
-        return {
-            "clash": calibrated.get("crystallization", 0),
-            "weighing": calibrated.get("comparative_weighing", 0),
-            "extensions": calibrated.get("ballot_story", 0),
-            "drops": calibrated.get("consistency", 0),
-            "judge_adaptation": calibrated.get("judge_adaptation", 0),
-        }
-    else:
-        # Default: return zeros if unknown speech type
-        return {
-            "clash": 0,
-            "weighing": 0,
-            "extensions": 0,
-            "drops": 0,
-            "judge_adaptation": 0,
-        }
 
 
 @router.post("/{speech_id}/generate-feedback", response_model=FeedbackReportRow)
@@ -293,7 +241,7 @@ async def generate_feedback_report(speech_id: str, user_id: str = Query(...)) ->
         logger.info("generate_feedback: stage=map_legacy_scores | speech_id=%s", speech_id)
         # Map deterministic rubric dimensions to legacy 5-dimension schema for backward compatibility
         # This ensures the frontend displays the correct scores that add up to overall_score
-        legacy_scores = _map_rubric_to_legacy_scores(deterministic_scores, speech.get("speech_type", ""))
+        legacy_scores = map_rubric_to_legacy_scores(deterministic_scores, speech.get("speech_type", ""))
 
         logger.info("generate_feedback: stage=build_report_payload | speech_id=%s", speech_id)
         # Store deterministic scores and metadata in raw_feedback

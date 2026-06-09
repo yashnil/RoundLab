@@ -44,6 +44,12 @@ export interface ArgumentMap {
   speech_id: string;
   arguments: ArgumentItem[];
   created_at: string;
+  /** Added by migration 20260609400000 */
+  source_type?: "ai" | "user_corrected";
+  original_arguments?: ArgumentItem[] | null;
+  user_corrected_at?: string | null;
+  correction_notes?: string | null;
+  updated_at?: string | null;
 }
 
 export interface Transcript {
@@ -120,6 +126,9 @@ export interface FeedbackReport {
     calibration_warnings?: string[];
     scoring_version?: string;
     report_input_hash?: string;
+    /** Set when coaching was regenerated from a user-corrected flow */
+    flow_correction_regenerated_at?: string | null;
+    regenerated_from_correction?: boolean;
   } | null;
   helpful_rating?: string | null;
   helpful_comment?: string | null;
@@ -263,6 +272,39 @@ export interface TeamDashboard {
   invite_code: string;
   member_count: number;
   students: StudentProgress[];
+}
+
+// ── Analysis Jobs ─────────────────────────────────────────────────────────────
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type JobType =
+  | "speech_analysis"
+  | "drill_attempt_scoring"
+  | "evidence_check"
+  | "evidence_drill_generation"
+  | "document_parse";
+
+export interface AnalysisJob {
+  id: string;
+  user_id: string;
+  speech_id: string | null;
+  job_type: JobType;
+  status: JobStatus;
+  current_step: string | null;
+  progress: number | null;
+  error_message: string | null;
+  error_code: string | null;
+  result_json: Record<string, unknown> | null;
+  attempt_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalyzeResponse {
+  job_id: string;
+  status: JobStatus;
 }
 
 // ── Evidence-Aware Coach types ─────────────────────────────────────────────────

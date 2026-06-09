@@ -28,6 +28,7 @@ import { staggerParent, staggerChild, cardHover } from "@/lib/motion";
 import { getSpeechStatusConfig } from "@/lib/debateHelpers";
 import DashboardMissionPanel, { DashboardMissionPanelSkeleton } from "@/components/DashboardMissionPanel";
 import DashboardCockpitBand from "@/components/DashboardCockpitBand";
+import FirstRunCommandCenter from "@/components/FirstRunCommandCenter";
 import type { Speech, ProgressSummary, PilotSummary } from "@/types";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -312,8 +313,15 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* Onboarding Checklist - show only if user hasn't completed any drill attempts */}
-          {!loading && progress && progress.drill_attempts_count === 0 && (
+          {/* First-run command center — only shown when user has no speeches yet */}
+          {!loading && progress && progress.speech_count === 0 && (
+            <motion.div variants={staggerChild}>
+              <FirstRunCommandCenter userId={userId} />
+            </motion.div>
+          )}
+
+          {/* Onboarding Checklist — show only after first speech, until first drill is done */}
+          {!loading && progress && progress.speech_count > 0 && progress.drill_attempts_count === 0 && (
             <motion.div variants={staggerChild}>
               <Card className="border-lav/20 bg-lav/5">
                 <CardContent className="px-6 py-6">
@@ -552,6 +560,35 @@ export default function DashboardPage() {
           {loading && (
             <motion.div variants={staggerChild} className="flex flex-col gap-1.5">
               {Array.from({ length: 3 }).map((_, i) => <SpeechSkeleton key={i} />)}
+            </motion.div>
+          )}
+
+          {/* Recovery banner — speeches stuck in error or still processing */}
+          {!loading && speeches.some((s) => s.status === "error" || s.status === "transcribing" || s.status === "analyzing") && (
+            <motion.div variants={staggerChild}>
+              <div className="rounded-xl border border-warn/25 bg-warn/5 px-4 py-3 flex items-start gap-3">
+                <span className="mt-0.5 shrink-0 text-warn text-sm">⚠</span>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <p className="text-sm font-medium text-ink">Some sessions need attention</p>
+                  <div className="flex flex-col gap-1">
+                    {speeches
+                      .filter((s) => s.status === "error" || s.status === "transcribing" || s.status === "analyzing")
+                      .slice(0, 3)
+                      .map((s) => (
+                        <Link
+                          key={s.id}
+                          href={`/speech/${s.id}`}
+                          className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-warn/10 hover:text-ink"
+                        >
+                          <span className="truncate font-medium">{s.title}</span>
+                          <span className={`shrink-0 ${s.status === "error" ? "text-danger" : "text-warn"} capitalize`}>
+                            {s.status === "error" ? "Failed — retry" : "In progress"}
+                          </span>
+                        </Link>
+                      ))}
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
 

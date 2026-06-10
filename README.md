@@ -80,8 +80,9 @@ RoundLab does not write cases, generate arguments on demand, or fabricate eviden
 | Drill attempt re-recording | Implemented | Records over parent speech; comparison view available |
 | Delivery analysis | Implemented | Pacing, filler words, repeated phrases, 5-segment timeline |
 | Delivery Coach panel | Implemented | Score, pacing band, filler breakdown, expandable timeline |
-| Evidence Library | Implemented (Phase 1) | Upload PDF/DOCX/TXT, extract evidence cards, search by keyword |
-| Evidence support checking | Implemented (Phase 1) | LLM classifies whether uploaded evidence supports a claim |
+| Evidence Library | Implemented | Upload PDF/DOCX/TXT, extract evidence cards, keyword/semantic/hybrid search |
+| Evidence RAG | Implemented | pgvector semantic search; text-embedding-3-small embeds each chunk; cosine similarity ranking |
+| Evidence support checking | Implemented | Semantic retrieval path (RPC → ranked chunks → LLM); keyword fallback; never uses outside knowledge |
 | Async background pipeline | Implemented | Jobs run in background; frontend polls for progress |
 | Team management | Implemented | Create/join teams; coach dashboard with student progress |
 | Gamification | Implemented | XP ledger, levels, badges, skill averages |
@@ -118,6 +119,7 @@ graph TB
     subgraph OpenAI["OpenAI APIs"]
         WHISPER["whisper-1\nTranscription"]
         GPT["gpt-4o-mini\nStructured reasoning"]
+        EMBED["text-embedding-3-small\nEvidence embeddings"]
     end
 
     FE -->|"JWT session"| AUTH
@@ -211,6 +213,8 @@ Weights shift per speech type. Rebuttal emphasizes clash and coverage. Summary f
 | File storage | Supabase Storage | latest |
 | PDF parsing | PyMuPDF | 1.23+ |
 | DOCX parsing | python-docx | 1.1+ |
+| Vector search | pgvector (PostgreSQL extension) | 0.7+ |
+| Embeddings | OpenAI text-embedding-3-small | API (1536 dims) |
 | Frontend tests | Jest + ts-jest | latest |
 | Backend tests | pytest | latest |
 
@@ -218,7 +222,7 @@ Weights shift per speech type. Rebuttal emphasizes clash and coverage. Summary f
 
 ## Database Schema
 
-RoundLab uses 19 tables in Supabase PostgreSQL. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
+RoundLab uses 19 tables in Supabase PostgreSQL, plus the `pgvector` extension for semantic search. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
 
 ```mermaid
 erDiagram
@@ -257,9 +261,9 @@ erDiagram
 | `teams` | Coach-created teams with 6-character invite code |
 | `team_members` | User-team membership with role (student or coach) |
 | `documents` | Uploaded case/evidence files (PDF, DOCX, TXT, MD) |
-| `document_chunks` | Text chunks split from documents for search |
+| `document_chunks` | Text chunks split from documents; each chunk stores a `vector(1536)` embedding for semantic search |
 | `evidence_cards` | Extracted tag, author, year, source, and card text |
-| `claim_evidence_checks` | LLM support classification for a claim against an evidence card |
+| `claim_evidence_checks` | LLM support classification for a claim; stores matched chunk IDs, top similarity score, retrieved snippets, support rationale, and retrieval mode |
 | `product_events` | Internal analytics events (best-effort, never blocks user flows) |
 | `output_feedback` | User confusion reports on AI outputs |
 | `user_xp_events` | XP ledger; one row per XP-earning action |
@@ -303,6 +307,7 @@ RoundLab/
 │   │   │   ├── api.ts               # Backend fetch wrapper
 │   │   │   ├── analytics.ts         # logEvent() — fire-and-forget event logger
 │   │   │   ├── deliveryHelpers.ts   # Pacing band display, score color, WPM format
+│   │   │   ├── evidenceHelpers.ts   # Similarity labels, search mode display, support level display
 │   │   │   ├── firstRunHelpers.ts   # deriveFirstRunState() — 9-state machine
 │   │   │   ├── supabase.ts          # Supabase client (PKCE OAuth)
 │   │   │   └── motion.ts            # Animation presets
@@ -333,13 +338,16 @@ RoundLab/
 │       │   ├── debate_signal_detection.py
 │       │   ├── feedback_generation.py
 │       │   ├── drill_generation.py  # LLM drills + make_delivery_drill()
+│       │   ├── embeddings.py        # embed_text / embed_texts / vector_to_pg_str (text-embedding-3-small)
 │       │   ├── evidence_extraction.py
-│       │   ├── evidence_support_check.py
+│       │   ├── evidence_support_check.py # Semantic retrieval path + keyword fallback
 │       │   ├── drill_attempt_scoring.py
 │       │   ├── deterministic_scoring.py
 │       │   ├── xp_ledger.py
 │       │   └── supabase_client.py
-│       └── tests/                   # pytest suite (592 tests)
+│       ├── scripts/
+│       │   └── embed_existing_documents.py  # Backfill embeddings for pre-RAG documents
+│       └── tests/                   # pytest suite (628 tests)
 ├── evals/                           # Labeled eval fixtures + runner
 │   ├── fixtures/                    # JSON fixture files
 │   ├── run_evals.py
@@ -436,6 +444,7 @@ Manual order if applying individually:
 20260609300000_add_analysis_jobs.sql       # analysis_jobs table
 20260609400000_add_argument_map_correction.sql
 20260609500000_add_delivery_metrics.sql    # delivery_metrics table
+20260609600000_add_pgvector_embeddings.sql # pgvector extension, embedding column on document_chunks, match_document_chunks RPC, RAG audit columns on claim_evidence_checks
 ```
 
 **Storage buckets** — create these in Supabase Dashboard under Storage:
@@ -477,9 +486,11 @@ Manual order if applying individually:
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                                      # all 592 tests
+pytest                                      # all 628 tests
 pytest tests/ -q                            # quiet output
 pytest tests/test_delivery_analysis.py -v  # delivery tests only
+pytest tests/test_evidence_rag.py -v       # Evidence RAG tests
+pytest tests/test_embeddings.py -v         # embeddings service tests
 pytest tests/test_schema_validation.py -v  # schema tests
 ```
 
@@ -487,7 +498,7 @@ pytest tests/test_schema_validation.py -v  # schema tests
 
 ```bash
 cd frontend
-npm test                                    # all 201 tests
+npm test                                    # all 245 tests
 npm test -- --testPathPattern delivery      # filter by name
 npm test -- --watch                         # watch mode
 ```
@@ -575,11 +586,12 @@ python -m evals.run_evals --fixture good_constructive
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/documents` | Register uploaded document and trigger parsing |
+| POST | `/documents` | Register uploaded document, trigger parsing, and embed chunks |
 | GET | `/documents?user_id={id}` | List documents |
 | GET | `/documents/{id}?user_id={id}` | Document with chunks and evidence cards |
 | DELETE | `/documents/{id}?user_id={id}` | Delete document and cascade |
-| POST | `/documents/search` | Full-text search over evidence library |
+| POST | `/documents/{id}/embed` | Embed any un-embedded chunks for an existing document |
+| POST | `/documents/search` | Search evidence library; `mode` param: `keyword`, `semantic`, or `hybrid` |
 
 ### Jobs
 
@@ -738,31 +750,66 @@ Only one delivery drill is appended, and only if no delivery-targeted drill was 
 
 ## Evidence Library
 
-Evidence Library is a Phase 1 implementation. Full LLM-powered evidence comparison is planned for Phase 2.
+The Evidence Library stores uploaded case files and uses pgvector semantic search to connect speech claims to the closest matching evidence in the student's own library.
 
 ### How it works
 
 1. Student uploads a PDF, DOCX, TXT, or MD case file (max 20 MB)
 2. Text is extracted (PDF via PyMuPDF; DOCX via python-docx; TXT/MD native)
-3. The pipeline detects evidence card boundaries and extracts tag, author, year, source, and card text
-4. Cards are stored with `attribution_complete: false` if author, year, or source is missing — RoundLab never fabricates citations
-5. The student can search the library by keyword or run evidence support checks on specific speech claims
+3. The document is split into chunks; each chunk is embedded with `text-embedding-3-small` (1536 dimensions) and stored in `document_chunks.embedding`
+4. The pipeline detects evidence card boundaries and extracts tag, author, year, source, and card text
+5. Cards are stored with `attribution_complete: false` if author, year, or source is missing — RoundLab never fabricates citations
+6. Students can search the library in three modes:
+   - **Keyword** — PostgreSQL full-text search with `ilike` fallback
+   - **Semantic** — cosine similarity over chunk embeddings via the `match_document_chunks` RPC
+   - **Hybrid** — semantic results first; keyword fills any remaining gaps (recommended default)
+7. Evidence support checks embed the claim, retrieve the top-k closest chunks, then classify support level with the LLM; results include matched chunk IDs, similarity scores, retrieved snippets, and a `missing_link` suggestion
 
 ### Support levels
 
 | Level | Meaning |
 |---|---|
 | `supported` | An uploaded card directly supports the claim |
-| `partially_supported` | An uploaded card is related but does not fully support the claim |
-| `unsupported` | No uploaded card supports the claim |
+| `partially_supported` | An uploaded card is related but does not fully prove the exact claim or magnitude |
+| `unsupported` | No uploaded card supports the claim as stated |
 | `unverifiable` | No relevant card was found in the library |
 
-### Limitations (Phase 1)
+### Similarity thresholds
+
+| Label | Similarity range | UI color |
+|---|---|---|
+| Strong match | ≥ 0.70 | green |
+| Possible match | 0.45 – 0.69 | amber |
+| Weak match | < 0.45 | red |
+
+### Semantic retrieval path
+
+```
+claim text  →  embed_text()  →  match_document_chunks RPC (cosine distance)
+            →  ranked chunks  →  LLM classifies support (no outside knowledge)
+            →  SupportCheckResult (matched_chunk_ids, top_similarity, retrieved_snippets, support_rationale, missing_link)
+```
+
+If embedding fails or the RPC returns no results, the check falls back to keyword ranking over evidence cards. The `retrieval_mode` field on each result indicates which path was used (`semantic`, `keyword`, or `none`).
+
+### Backfilling embeddings for existing documents
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.scripts.embed_existing_documents --user-id <uuid>
+python -m app.scripts.embed_existing_documents --document-id <uuid> --dry-run
+```
+
+Alternatively, call `POST /documents/{id}/embed` to re-embed a single document via the API.
+
+### Limitations
 
 - Scanned image PDFs without an embedded text layer are not supported
 - `.doc` (legacy Word format) is not supported; convert to `.docx` or `.txt`
-- Search uses PostgreSQL full-text (`tsvector`) with `ilike` fallback; pgvector semantic search is not yet enabled
+- Semantic search requires the pgvector extension to be enabled in Supabase and chunks to have been embedded; documents uploaded before the RAG migration need backfilling
 - Evidence checking is triggered manually per claim; it is not run automatically during the pipeline
+- RoundLab only searches the student's uploaded library — it never uses outside web knowledge or fabricates evidence
 
 ---
 
@@ -939,16 +986,18 @@ All events are stored in `product_events`. Logging is fire-and-forget and never 
 - Audio quality directly affects transcript accuracy and downstream AI output quality
 - Browser MediaRecorder support varies by platform; file upload is recommended for iOS Safari
 
-### Evidence Library (Phase 1)
+### Evidence Library
 - Scanned image PDFs (no embedded text layer) are not supported
 - `.doc` (legacy Word format) is not supported; use `.docx` or `.txt`
-- Search is keyword-based; pgvector semantic search is not yet enabled
-- Evidence checking is triggered manually, not run automatically during the pipeline
+- Semantic search requires the pgvector extension enabled in Supabase; documents uploaded before the RAG migration must be backfilled with `embed_existing_documents.py` or `POST /documents/{id}/embed`
+- Evidence checking is triggered manually per claim; it is not run automatically during the pipeline
+- Only the student's uploaded documents are searched — outside knowledge is never used
 
 ### AI accuracy
 - Argument extraction can misclassify argument types for highly conversational or off-structure speech
 - Debate signal detection has known gaps: new-argument detection in final focus, no-clash rebuttal detection, and false-positive suppression for generic content
-- Evidence support classification may return `unverifiable` for claims that use paraphrased evidence
+- Evidence support classification may return `unverifiable` for claims that use paraphrased evidence; semantic retrieval mitigates this but does not eliminate it
+- Semantic evidence retrieval degrades to keyword fallback when a document has not yet been embedded
 
 ### Teams
 - No leave-team or remove-member functionality yet; coaches must manage membership manually
@@ -968,8 +1017,7 @@ All events are stored in `product_events`. Logging is fire-and-forget and never 
 
 | Item | Notes |
 |---|---|
-| pgvector semantic search for evidence | Phase 2 evidence |
-| Automatic evidence checking in pipeline | Phase 2 evidence |
+| Automatic evidence checking in pipeline | Run evidence support checks as part of the analysis job (currently manual per claim) |
 | AI drill verification | Check whether the student's attempt actually addresses the drill prompt |
 | Streak bonuses | Auto-award XP for consecutive-day practice |
 | Team-wide pilot dashboard | Aggregate metrics across all students in a team |
@@ -1017,11 +1065,12 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 - [ ] Frontend builds without errors (`npm run build`)
 - [ ] TypeScript check clean (`npx tsc --noEmit`)
 - [ ] All environment variables set in production
-- [ ] Supabase migrations applied in order
+- [ ] Supabase migrations applied in order (includes `20260609600000_add_pgvector_embeddings.sql`)
+- [ ] pgvector extension enabled in Supabase (the migration enables it, but confirm it is available for your Supabase plan)
 - [ ] `audio` storage bucket created with public read access
 - [ ] `documents` storage bucket created with private access
 - [ ] CORS origins updated for production domain
-- [ ] OpenAI billing alerts configured
+- [ ] OpenAI billing alerts configured (includes embedding API calls via text-embedding-3-small)
 
 ---
 
@@ -1053,8 +1102,8 @@ MIT
 
 RoundLab is in active development, pre-production. It is not yet deployed to a public production environment.
 
-- Backend test suite: **592 tests passing**
-- Frontend test suite: **201 tests passing**
+- Backend test suite: **628 tests passing**
+- Frontend test suite: **245 tests passing**
 - TypeScript: **clean**
 - Next.js build: **passing**
 

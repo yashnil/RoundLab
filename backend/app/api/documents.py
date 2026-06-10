@@ -1,13 +1,14 @@
-"""Evidence-Aware Coach document endpoints.
+"""Evidence-Aware Coach document endpoints — Evidence RAG v1.
 
-POST /documents                    — register an uploaded document and trigger parse
-GET  /documents?user_id=...        — list user documents
-GET  /documents/{id}?user_id=...   — get document with chunks and cards
-DELETE /documents/{id}?user_id=... — delete document and cascade
+POST /documents                           — register an uploaded document and trigger parse
+GET  /documents?user_id=...               — list user documents
+GET  /documents/{id}?user_id=...          — get document with chunks and cards
+DELETE /documents/{id}?user_id=...        — delete document and cascade
+POST /documents/{id}/embed?user_id=...    — (re)embed chunks for a document
 
-POST /documents/search             — full-text / lexical search over evidence library
+POST /documents/search                    — keyword / semantic / hybrid search
 
-POST /speeches/{speech_id}/evidence-check  — run claim→card support check for one argument
+POST /speeches/{speech_id}/evidence-check  — run claim→chunk semantic support check
 GET  /speeches/{speech_id}/evidence-checks — list all checks for a speech
 POST /speeches/{speech_id}/evidence-drills — generate evidence-specific drills (deterministic)
 
@@ -15,6 +16,7 @@ All endpoints are additive — they do not touch any existing speech/drill/feedb
 """
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -24,9 +26,11 @@ from app.models.document import (
     DocumentRow,
     DocumentSearchRequest,
     DocumentWithCards,
+    EmbedDocumentResponse,
     EvidenceCardRow,
     EvidenceCheckRequest,
     EvidenceCheckResult,
+    RetrievalMode,
     SearchResultItem,
 )
 from app.services.document_parsing import DocumentParseError, parse_document
@@ -130,6 +134,15 @@ def _trigger_parse(doc_id: str, user_id: str, storage_path: str, filename: str) 
         for row in (chunk_result.data or []):
             chunk_id_map[row["chunk_index"]] = row["id"]
 
+    # Embed chunks — non-fatal; if this fails, keyword search still works
+    if chunk_id_map:
+        _embed_chunks_by_id(
+            sb,
+            chunk_id_list=list(chunk_id_map.values()),
+            chunk_texts=[c.chunk_text for c in parsed.chunks],
+            doc_id=doc_id,
+        )
+
     # Extract and insert evidence cards (summaries generated per card)
     cards: list[ExtractedCard] = extract_evidence_cards(
         parsed.chunks,
@@ -166,6 +179,57 @@ def _trigger_parse(doc_id: str, user_id: str, storage_path: str, filename: str) 
         len(parsed.chunks),
         len(cards),
     )
+
+
+def _embed_chunks_by_id(
+    sb,
+    chunk_id_list: list[str],
+    chunk_texts: list[str],
+    doc_id: str,
+) -> tuple[int, int]:
+    """Embed a list of chunks and write embeddings to document_chunks.
+
+    Returns (embedded_count, failed_count).
+    This function is non-fatal: any exception is caught and logged.
+    """
+    from app.services.embeddings import EMBEDDING_MODEL, embed_texts, vector_to_pg_str
+
+    if not chunk_id_list or not chunk_texts:
+        return 0, 0
+
+    try:
+        embeddings = embed_texts(chunk_texts)
+    except Exception as exc:
+        logger.warning(
+            "document_embed: embed_texts failed (non-fatal) | doc_id=%s | %s", doc_id, exc
+        )
+        return 0, len(chunk_id_list)
+
+    now = datetime.now(timezone.utc).isoformat()
+    embedded_count = 0
+    failed_count = 0
+
+    for chunk_id, emb in zip(chunk_id_list, embeddings):
+        try:
+            sb.table("document_chunks").update({
+                "embedding": vector_to_pg_str(emb),
+                "embedding_model": EMBEDDING_MODEL,
+                "embedded_at": now,
+            }).eq("id", chunk_id).execute()
+            embedded_count += 1
+        except Exception as exc:
+            logger.warning(
+                "document_embed: update failed for chunk %s | %s", chunk_id, exc
+            )
+            failed_count += 1
+
+    logger.info(
+        "document_embed: done | doc_id=%s embedded=%d failed=%d",
+        doc_id,
+        embedded_count,
+        failed_count,
+    )
+    return embedded_count, failed_count
 
 
 # ── Documents CRUD ─────────────────────────────────────────────────────────────
@@ -238,70 +302,148 @@ async def delete_document(doc_id: str, user_id: str = Query(...)) -> dict:
         raise HTTPException(status_code=500, detail="Failed to delete document.") from exc
 
 
-# ── Search ─────────────────────────────────────────────────────────────────────
+@router.post("/documents/{doc_id}/embed", response_model=EmbedDocumentResponse)
+async def embed_document_chunks(
+    doc_id: str,
+    user_id: str = Query(...),
+) -> EmbedDocumentResponse:
+    """(Re-)embed all chunks for a document that have no embedding yet.
 
-@router.post("/documents/search", response_model=list[SearchResultItem])
-async def search_evidence(body: DocumentSearchRequest) -> list[SearchResultItem]:
-    """Lexical search over the user's evidence library.
-
-    Uses PostgreSQL full-text search (tsvector) on document_chunks.fts.
-    Falls back to ilike if no results are found.
+    Safe to call multiple times — only processes chunks where embedding IS NULL.
+    Useful for backfilling documents uploaded before pgvector was enabled.
     """
-    if not body.query.strip():
-        raise HTTPException(status_code=422, detail="Query must not be empty.")
-
+    doc = _get_document_or_404(doc_id, user_id)
     sb = get_supabase()
-    limit = max(1, min(body.limit, 25))
 
-    # Attempt FTS via wfts filter
+    # Fetch only un-embedded chunks for this document
     try:
-        fts_result = (
+        result = (
             sb.table("document_chunks")
-            .select("*")
-            .eq("user_id", body.user_id)
-            .text_search("fts", body.query, config="english", type="websearch")
-            .limit(limit)
+            .select("id, chunk_text, chunk_index")
+            .eq("document_id", doc_id)
+            .eq("user_id", user_id)
+            .is_("embedding", "null")
+            .order("chunk_index")
             .execute()
         )
-        chunk_rows = fts_result.data or []
-    except Exception:
-        chunk_rows = []
+        rows = result.data or []
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch chunks.") from exc
 
-    # Fallback: ilike search if FTS returned nothing
-    if not chunk_rows:
+    if not rows:
+        return EmbedDocumentResponse(
+            document_id=doc_id,
+            chunks_embedded=0,
+            chunks_failed=0,
+            message="All chunks are already embedded.",
+        )
+
+    chunk_ids = [r["id"] for r in rows]
+    chunk_texts = [r["chunk_text"] for r in rows]
+
+    embedded, failed = _embed_chunks_by_id(sb, chunk_ids, chunk_texts, doc_id)
+
+    return EmbedDocumentResponse(
+        document_id=doc_id,
+        chunks_embedded=embedded,
+        chunks_failed=failed,
+        message=f"Embedded {embedded} chunks. {failed} failed.",
+    )
+
+
+# ── Search ─────────────────────────────────────────────────────────────────────
+
+def _keyword_search(
+    sb,
+    user_id: str,
+    query: str,
+    limit: int,
+    document_id: str | None = None,
+) -> list[dict]:
+    """FTS search with ilike fallback. Returns raw chunk rows."""
+    base = sb.table("document_chunks").select("*").eq("user_id", user_id)
+    if document_id:
+        base = base.eq("document_id", document_id)
+
+    try:
+        fts_result = base.text_search(
+            "fts", query, config="english", type="websearch"
+        ).limit(limit).execute()
+        rows = fts_result.data or []
+    except Exception:
+        rows = []
+
+    if not rows:
         try:
-            fallback = (
+            fallback_base = (
                 sb.table("document_chunks")
                 .select("*")
-                .eq("user_id", body.user_id)
-                .ilike("chunk_text", f"%{body.query}%")
-                .limit(limit)
-                .execute()
+                .eq("user_id", user_id)
+                .ilike("chunk_text", f"%{query}%")
             )
-            chunk_rows = fallback.data or []
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail="Search failed.") from exc
+            if document_id:
+                fallback_base = fallback_base.eq("document_id", document_id)
+            rows = (fallback_base.limit(limit).execute().data or [])
+        except Exception:
+            rows = []
 
+    return rows
+
+
+def _semantic_search(
+    sb,
+    user_id: str,
+    query: str,
+    limit: int,
+    similarity_threshold: float,
+    document_id: str | None = None,
+) -> list[dict]:
+    """Semantic search via match_document_chunks RPC. Returns rows with 'similarity' field."""
+    try:
+        from app.services.embeddings import embed_text, vector_to_pg_str
+        embedding_str = vector_to_pg_str(embed_text(query))
+    except Exception as exc:
+        logger.warning("documents/search: semantic embed failed | %s", exc)
+        return []
+
+    try:
+        result = sb.rpc(
+            "match_document_chunks",
+            {
+                "query_embedding": embedding_str,
+                "match_user_id": user_id,
+                "match_count": limit,
+                "similarity_threshold": similarity_threshold,
+            },
+        ).execute()
+        rows = result.data or []
+        if document_id:
+            rows = [r for r in rows if r.get("document_id") == document_id]
+        return rows
+    except Exception as exc:
+        logger.warning("documents/search: RPC failed | %s", exc)
+        return []
+
+
+def _build_search_items(
+    sb,
+    chunk_rows: list[dict],
+    similarity_map: dict[str, float] | None,
+    retrieval_mode: str,
+) -> list[SearchResultItem]:
+    """Attach document filenames and linked evidence cards to chunk rows."""
     if not chunk_rows:
         return []
 
-    # Collect document ids for metadata lookup
     doc_ids = list({row["document_id"] for row in chunk_rows})
     doc_result = (
-        sb.table("documents")
-        .select("id, filename")
-        .in_("id", doc_ids)
-        .execute()
+        sb.table("documents").select("id, filename").in_("id", doc_ids).execute()
     )
-    doc_map = {row["id"]: row["filename"] for row in (doc_result.data or [])}
+    doc_map = {r["id"]: r["filename"] for r in (doc_result.data or [])}
 
-    # Gather cards per chunk_id for display
     chunk_ids = [row["id"] for row in chunk_rows]
     card_result = (
-        sb.table("evidence_cards")
-        .select("*")
-        .in_("chunk_id", chunk_ids)
-        .execute()
+        sb.table("evidence_cards").select("*").in_("chunk_id", chunk_ids).execute()
     )
     chunk_card_map: dict[str, list[dict]] = {}
     for card in (card_result.data or []):
@@ -311,13 +453,83 @@ async def search_evidence(body: DocumentSearchRequest) -> list[SearchResultItem]
 
     items: list[SearchResultItem] = []
     for row in chunk_rows:
-        items.append({
-            "chunk": row,
-            "document_filename": doc_map.get(row["document_id"], ""),
-            "cards": chunk_card_map.get(row["id"], []),
-        })
-
+        items.append(
+            SearchResultItem(
+                chunk=row,
+                document_filename=doc_map.get(row["document_id"], ""),
+                cards=chunk_card_map.get(row["id"], []),
+                similarity=similarity_map.get(row["id"]) if similarity_map else None,
+                retrieval_mode=retrieval_mode,
+            )
+        )
     return items
+
+
+@router.post("/documents/search", response_model=list[SearchResultItem])
+async def search_evidence(body: DocumentSearchRequest) -> list[SearchResultItem]:
+    """Search the user's evidence library.
+
+    mode = "keyword"  — PostgreSQL FTS + ilike fallback
+    mode = "semantic" — pgvector cosine similarity via match_document_chunks RPC
+    mode = "hybrid"   — semantic first; merges keyword results for any gaps;
+                        deduplicates by chunk id; prefers higher similarity
+    """
+    if not body.query.strip():
+        raise HTTPException(status_code=422, detail="Query must not be empty.")
+
+    sb = get_supabase()
+    limit = max(1, min(body.limit, 25))
+    mode = body.mode if body.mode in ("keyword", "semantic", "hybrid") else "keyword"
+
+    similarity_map: dict[str, float] = {}
+    merged_rows: list[dict] = []
+    seen_ids: set[str] = set()
+
+    # ── Semantic pass ──────────────────────────────────────────────────────────
+    if mode in ("semantic", "hybrid"):
+        semantic_rows = _semantic_search(
+            sb,
+            user_id=body.user_id,
+            query=body.query,
+            limit=limit,
+            similarity_threshold=body.similarity_threshold,
+            document_id=body.document_id,
+        )
+        for row in semantic_rows:
+            rid = row["id"]
+            if rid not in seen_ids:
+                seen_ids.add(rid)
+                similarity_map[rid] = round(float(row.get("similarity", 0)), 4)
+                merged_rows.append(row)
+
+    # ── Keyword pass (always run for keyword mode; fill gaps for hybrid) ───────
+    if mode in ("keyword", "hybrid"):
+        keyword_rows = _keyword_search(
+            sb,
+            user_id=body.user_id,
+            query=body.query,
+            limit=limit,
+            document_id=body.document_id,
+        )
+        for row in keyword_rows:
+            rid = row["id"]
+            if rid not in seen_ids:
+                seen_ids.add(rid)
+                merged_rows.append(row)
+
+    if not merged_rows:
+        return []
+
+    # Trim to requested limit
+    merged_rows = merged_rows[:limit]
+
+    actual_mode = (
+        "semantic" if mode == "semantic"
+        else "keyword" if mode == "keyword"
+        else ("hybrid" if len(similarity_map) > 0 else "keyword")
+    )
+
+    return _build_search_items(sb, merged_rows, similarity_map or None, actual_mode)
 
 
 # ── Evidence support check ─────────────────────────────────────────────────────
@@ -360,13 +572,15 @@ async def evidence_check_for_argument(
         EvidenceCardRow(**row) for row in (library_result.data or [])
     ]
 
+    # Pass user_id to enable semantic retrieval
     result: SupportCheckResult = check_claim_support(
         claim=body.claim_text,
         evidence_from_speech=body.evidence_text_from_speech,
         library_cards=library_cards,
+        user_id=body.user_id,
     )
 
-    # Persist the check result
+    # Persist the check result including RAG audit fields
     try:
         check_row = {
             "speech_id": speech_id,
@@ -377,19 +591,31 @@ async def evidence_check_for_argument(
             "matched_card_id": result.matched_card.id if result.matched_card else None,
             "support_level": result.support_level,
             "explanation": result.explanation,
+            "matched_chunk_ids": result.matched_chunk_ids,
+            "top_similarity": float(result.top_similarity) if result.top_similarity is not None else None,
+            "retrieved_snippets_json": result.retrieved_snippets,
+            "support_rationale": result.support_rationale,
+            "missing_link": result.missing_link,
+            "retrieval_mode": result.retrieval_mode,
         }
         sb.table("claim_evidence_checks").insert(check_row).execute()
     except Exception as exc:
         logger.warning("evidence_check: failed to persist | %s", exc)
 
-    return {
-        "argument_label": body.argument_label,
-        "claim_text": body.claim_text,
-        "evidence_text_from_speech": body.evidence_text_from_speech,
-        "matched_card": result.matched_card,
-        "support_level": result.support_level,
-        "explanation": result.explanation,
-    }
+    return EvidenceCheckResult(
+        argument_label=body.argument_label,
+        claim_text=body.claim_text,
+        evidence_text_from_speech=body.evidence_text_from_speech,
+        matched_card=result.matched_card,
+        support_level=result.support_level,
+        explanation=result.explanation,
+        matched_chunk_ids=result.matched_chunk_ids,
+        top_similarity=result.top_similarity,
+        retrieved_snippets=result.retrieved_snippets,
+        support_rationale=result.support_rationale,
+        missing_link=result.missing_link,
+        retrieval_mode=result.retrieval_mode,
+    )
 
 
 @router.get(

@@ -85,13 +85,23 @@ type DisplayResult = {
   support_level: EvidenceSupportLevel;
   explanation: string;
   matched_card?: EvidenceCard | null;
+  top_similarity?: number | null;
+  retrieved_snippets?: Array<{chunk_id: string; snippet: string; similarity: number; heading: string | null;}> | null;
+  support_rationale?: string | null;
+  missing_link?: string | null;
+  retrieval_mode?: string | null;
 };
 
 function fromSavedCheck(c: ClaimEvidenceCheck): DisplayResult {
   return {
     support_level: (c.support_level as EvidenceSupportLevel) ?? "unverifiable",
     explanation: c.explanation ?? "",
-    matched_card: null, // persisted checks don't re-fetch card details
+    matched_card: null,
+    top_similarity: c.top_similarity,
+    retrieved_snippets: c.retrieved_snippets_json ?? null,
+    support_rationale: c.support_rationale,
+    missing_link: c.missing_link,
+    retrieval_mode: c.retrieval_mode,
   };
 }
 
@@ -100,7 +110,24 @@ function fromFreshResult(r: EvidenceCheckResult): DisplayResult {
     support_level: r.support_level,
     explanation: r.explanation,
     matched_card: r.matched_card,
+    top_similarity: r.top_similarity,
+    retrieved_snippets: r.retrieved_snippets ?? null,
+    support_rationale: r.support_rationale,
+    missing_link: r.missing_link,
+    retrieval_mode: r.retrieval_mode,
   };
+}
+
+function similarityLabel(sim: number): string {
+  if (sim >= 0.70) return "Strong match";
+  if (sim >= 0.45) return "Possible match";
+  return "Weak match";
+}
+
+function similarityColor(sim: number): string {
+  if (sim >= 0.70) return "text-ok";
+  if (sim >= 0.45) return "text-warn";
+  return "text-danger";
 }
 
 // ── Single argument row ────────────────────────────────────────────────────────
@@ -209,15 +236,73 @@ function ArgumentCheckRow({
       {/* Expanded result */}
       {result && cfg && open && (
         <div className="border-t border-hairline pt-3 flex flex-col gap-2.5">
-          <Badge variant={cfg.variant} className="w-fit gap-1 text-xs">
-            {cfg.icon} {cfg.label}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant={cfg.variant} className="w-fit gap-1 text-xs">
+              {cfg.icon} {cfg.label}
+            </Badge>
+            {result.top_similarity !== null && result.top_similarity !== undefined && (
+              <span className={`text-[10px] font-medium ${similarityColor(result.top_similarity)}`}>
+                {similarityLabel(result.top_similarity)} ({Math.round(result.top_similarity * 100)}%)
+              </span>
+            )}
+          </div>
 
           <p className="text-xs text-ink-subtle leading-relaxed">{cfg.shortCopy}</p>
 
           {result.explanation && result.explanation !== cfg.shortCopy && (
             <div className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-ink leading-relaxed">
               {result.explanation}
+            </div>
+          )}
+
+          {/* Retrieved snippets from semantic search */}
+          {result.retrieved_snippets && result.retrieved_snippets.length > 0 && (
+            <details className="group rounded-lg border border-hairline bg-surface-2 text-xs">
+              <summary className="flex cursor-pointer items-center justify-between px-3 py-2 list-none">
+                <span className="font-medium text-ink-subtle">
+                  {result.retrieved_snippets.length} retrieved evidence snippet{result.retrieved_snippets.length > 1 ? "s" : ""}
+                </span>
+                <ChevronDown
+                  size={12}
+                  className="text-ink-muted transition-transform group-open:rotate-180"
+                />
+              </summary>
+              <div className="border-t border-hairline px-3 py-2 flex flex-col gap-2">
+                {result.retrieved_snippets.slice(0, 3).map((s, i) => (
+                  <div key={s.chunk_id} className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-faint">
+                        Snippet {i + 1}
+                      </span>
+                      <span className={`text-[9px] font-medium ${similarityColor(s.similarity)}`}>
+                        {similarityLabel(s.similarity)} ({Math.round(s.similarity * 100)}%)
+                      </span>
+                    </div>
+                    {s.heading && (
+                      <p className="text-[10px] font-medium text-ink-subtle">{s.heading}</p>
+                    )}
+                    <p className="text-ink leading-relaxed line-clamp-4">
+                      {s.snippet.length > 220 ? s.snippet.slice(0, 220) + "…" : s.snippet}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {/* Keyword fallback notice */}
+          {result.retrieval_mode === "keyword" && (
+            <p className="text-[10px] text-ink-faint leading-relaxed">
+              Semantic evidence search is not ready for this document yet. Results are based on keyword matching.{" "}
+              <a href="/evidence" className="underline underline-offset-2">Re-embed in your library.</a>
+            </p>
+          )}
+
+          {/* Missing link suggestion */}
+          {result.missing_link && (
+            <div className="rounded-lg border border-warn/20 bg-warn/5 px-3 py-2 text-xs text-ink leading-relaxed">
+              <span className="font-medium text-warn">To fix: </span>
+              {result.missing_link}
             </div>
           )}
 
@@ -250,6 +335,11 @@ function ArgumentCheckRow({
               </div>
             </details>
           )}
+
+          {/* Disclaimer */}
+          <p className="text-[10px] text-ink-faint leading-relaxed border-t border-hairline pt-2">
+            RoundLab only checked your uploaded evidence library. Outside knowledge is never used.
+          </p>
 
           {result.support_level === "unverifiable" && (
             <a

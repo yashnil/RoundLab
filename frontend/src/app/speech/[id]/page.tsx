@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Check, ChevronDown, ChevronUp, FileText,
   Mic, Pencil, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target, Copy,
-  ShieldAlert, Sparkles,
+  ShieldAlert, Sparkles, Share2, Printer,
 } from "lucide-react";
 import { useCopy } from "@/lib/useCopy";
 import { deriveAnalysisRecoveryState, isJobActive } from "@/lib/jobHelpers";
@@ -40,9 +40,13 @@ import { AnalysisProgressCard } from "@/components/AnalysisProgressCard";
 import FlowEditPanel from "@/components/FlowEditPanel";
 import ConfusionReport from "@/components/ConfusionReport";
 import DeliveryCoachPanel, { DeliveryCoachPanelEmpty } from "@/components/DeliveryCoachPanel";
+import ShareReportModal from "@/components/ShareReportModal";
+import TournamentWorkoutPanel from "@/components/TournamentWorkoutPanel";
+import { logEvent } from "@/lib/analytics";
+import { formatPracticePlan, copyToClipboard } from "@/lib/reportHelpers";
 import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue, deriveEvidenceRiskSummary } from "@/lib/debateHelpers";
 import { initEditArgs, isFlowCorrectedAndNeedsRegen } from "@/lib/flowEditHelpers";
-import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, DeliveryMetrics, Drill, DrillStatus, FeedbackReport, Speech, Transcript } from "@/types";
+import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, DeliveryMetrics, Drill, DrillStatus, FeedbackReport, Speech, Transcript, Workout } from "@/types";
 import type { DebateIssue, ClaimEvidenceCheck, EvidenceCheckResult, EvidenceDocument } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
 
@@ -543,6 +547,13 @@ export default function SpeechPage() {
   const [deliveryMetrics, setDeliveryMetrics] = useState<DeliveryMetrics | null>(null);
   const [deliveryLoaded, setDeliveryLoaded] = useState(false);
 
+  // Share report modal + practice plan
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [practicePlanCopied, setPracticePlanCopied] = useState(false);
+
+  // Tournament prep workout (null = not generated yet, undefined = loading)
+  const [workout, setWorkout] = useState<Workout | null | undefined>(undefined);
+
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
   const stream  = useRef<MediaStream | null>(null);
@@ -602,6 +613,11 @@ export default function SpeechPage() {
         apiFetch<DeliveryMetrics>(`/speeches/${speechId}/delivery-metrics?user_id=${uid}`)
           .then((dm) => { setDeliveryMetrics(dm); setDeliveryLoaded(true); })
           .catch(() => { setDeliveryLoaded(true); });
+
+        // Workout — best-effort, non-blocking; null = not generated yet
+        apiFetch<Workout>(`/speeches/${speechId}/workout?user_id=${uid}`)
+          .then((w) => setWorkout(w))
+          .catch(() => setWorkout(null));
 
         // Recovery: check for in-progress or recently-failed analysis jobs
         apiFetch<AnalysisJob[]>(`/speeches/${speechId}/jobs?user_id=${uid}`)
@@ -1299,11 +1315,39 @@ export default function SpeechPage() {
     </button>
   );
 
+  const reportActions = isComplete && feedback ? (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => {
+          logEvent("share_report_modal_opened", userId, { speech_id: speechId });
+          setShowShareModal(true);
+        }}
+        className="no-print flex items-center gap-1.5 rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-subtle transition-colors hover:bg-surface-2 hover:text-ink"
+      >
+        <Share2 size={12} />
+        Share
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          logEvent("report_print_clicked", userId, { speech_id: speechId });
+          window.print();
+        }}
+        className="no-print flex items-center gap-1.5 rounded-md border border-hairline bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-subtle transition-colors hover:bg-surface-2 hover:text-ink"
+      >
+        <Printer size={12} />
+        Print
+      </button>
+      {deleteBtn}
+    </div>
+  ) : deleteBtn;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
-      <AppNav rightSlot={deleteBtn} />
+      <AppNav rightSlot={reportActions} />
       <main className="min-h-screen bg-canvas">
         <motion.div
           className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-9"
@@ -1716,13 +1760,29 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
+                {/* Tournament Prep Workout */}
+                {feedback && !analyzingUnified && userId && (
+                  <WorkspaceCard key="workout">
+                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                      <StepHeader n={6} title="Tournament Prep Workout" done={workout?.status === "completed"} />
+                      <TournamentWorkoutPanel
+                        speechId={speechId}
+                        userId={userId}
+                        workout={workout}
+                        onWorkoutChange={setWorkout}
+                        onStartReRecord={startNewAttempt}
+                      />
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
                 {/* Recommended Practice / Drills */}
                 {drills.length > 0 ? (
                   <WorkspaceCard key="drills-done">
                     {/* id="drills" is the anchor target for ReportVerdictPanel and PracticeLoopCTA #drills hrefs */}
                     <CardContent id="drills" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
                       <StepHeader
-                        n={6}
+                        n={7}
                         title="Recommended Practice"
                         done
                         aside={
@@ -1773,7 +1833,7 @@ export default function SpeechPage() {
                 ) : feedback && (
                   <WorkspaceCard key="drills-empty">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={5} title="Recommended Practice" done={false} />
+                      <StepHeader n={7} title="Recommended Practice" done={false} />
                       <EmptyStateCard
                         icon={Target}
                         title="No practice drills yet"
@@ -2368,7 +2428,23 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
-                {/* Step 6: Drills */}
+                {/* Tournament Prep Workout (second render path) */}
+                {feedback && !analyzingUnified && userId && (
+                  <WorkspaceCard key="workout-2">
+                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                      <StepHeader n={6} title="Tournament Prep Workout" done={workout?.status === "completed"} />
+                      <TournamentWorkoutPanel
+                        speechId={speechId}
+                        userId={userId}
+                        workout={workout}
+                        onWorkoutChange={setWorkout}
+                        onStartReRecord={startNewAttempt}
+                      />
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
+                {/* Step 7: Drills */}
                 {feedback && (
                   genDrills ? (
                     <motion.div key="drills-loading" {...fadeUp(0)}>
@@ -2378,7 +2454,7 @@ export default function SpeechPage() {
                     <WorkspaceCard key="drills-done">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
                         <StepHeader
-                          n={6}
+                          n={7}
                           title="Practice Drills"
                           done
                           aside={
@@ -2429,7 +2505,7 @@ export default function SpeechPage() {
                   ) : (
                     <WorkspaceCard key="drills-empty">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={6} title="Practice Drills" done={false} />
+                        <StepHeader n={7} title="Practice Drills" done={false} />
                         <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-ink">Create personalized drills</p>
@@ -2660,8 +2736,87 @@ export default function SpeechPage() {
             onStartNewAttempt={startNewAttempt}
           />
 
+          {/* Copy Practice Plan — visible only when report is complete */}
+          {isComplete && feedback && (
+            <motion.div variants={staggerChild} className="no-print">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!feedback || !argMap) return;
+                  const payload = {
+                    token: "",
+                    speech_type: speech.speech_type,
+                    side: speech.side,
+                    judge_type: speech.judge_type,
+                    topic: speech.topic,
+                    created_at: speech.created_at,
+                    feedback: feedback ? {
+                      overall_score: feedback.overall_score,
+                      scores: feedback.scores,
+                      summary: feedback.summary,
+                      strengths: feedback.strengths,
+                      weaknesses: feedback.weaknesses,
+                      top_3_priorities: feedback.raw_feedback?.top_3_priorities ?? null,
+                      structured_issues: null,
+                    } : null,
+                    arguments: null,
+                    drills: drills.map(d => ({
+                      title: d.title,
+                      description: d.description,
+                      skill_target: d.skill_target,
+                      prompt: d.prompt,
+                      success_criteria: d.success_criteria,
+                      difficulty: d.difficulty,
+                    })),
+                    delivery: deliveryMetrics ? {
+                      words_per_minute: deliveryMetrics.words_per_minute,
+                      filler_word_count: deliveryMetrics.filler_word_count,
+                      delivery_score: deliveryMetrics.delivery_score,
+                      pacing_band: deliveryMetrics.pacing_band,
+                      repeated_phrases_json: deliveryMetrics.repeated_phrases_json,
+                    } : null,
+                    transcript_text: null,
+                    evidence_summary: null,
+                    comparison: null,
+                    include_flags: {
+                      transcript: false, flow: false, feedback: true,
+                      drills: true, delivery: true, evidence_summary: false, improvement: false,
+                    },
+                  };
+                  const text = formatPracticePlan(payload, workout ?? null);
+                  const ok = await copyToClipboard(text);
+                  if (ok) {
+                    setPracticePlanCopied(true);
+                    setTimeout(() => setPracticePlanCopied(false), 2500);
+                    logEvent("practice_plan_copied", userId, { speech_id: speechId });
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-md border border-hairline bg-surface px-3 py-2 text-xs font-medium text-ink-subtle transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                {practicePlanCopied ? (
+                  <><Check size={12} className="text-ok" />Practice plan copied!</>
+                ) : (
+                  <><Copy size={12} />Copy practice plan</>
+                )}
+              </button>
+            </motion.div>
+          )}
+
         </motion.div>
       </main>
+
+      {showShareModal && userId && (
+        <ShareReportModal
+          speechId={speechId}
+          userId={userId}
+          hasImprovement={!!comparison?.has_parent}
+          onClose={() => setShowShareModal(false)}
+          onPrint={() => {
+            logEvent("report_print_clicked", userId, { speech_id: speechId });
+            window.print();
+          }}
+        />
+      )}
 
       <DeleteDialog
         open={delOpen}

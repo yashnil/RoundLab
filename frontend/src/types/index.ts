@@ -359,6 +359,8 @@ export type EvidenceSupportLevel =
   | "partially_supported"
   | "unsupported"
   | "unverifiable";
+export type SearchMode = "keyword" | "semantic" | "hybrid";
+export type EvidenceRetrievalMode = "semantic" | "keyword" | "none";
 
 export interface EvidenceDocument {
   id: string;
@@ -402,6 +404,14 @@ export interface EvidenceCard {
   created_at: string;
 }
 
+export interface RetrievedSnippet {
+  chunk_id: string;
+  document_id: string;
+  snippet: string;
+  similarity: number;
+  heading: string | null;
+}
+
 export interface ClaimEvidenceCheck {
   id: string;
   speech_id: string;
@@ -413,6 +423,13 @@ export interface ClaimEvidenceCheck {
   support_level: EvidenceSupportLevel | null;
   explanation: string | null;
   created_at: string;
+  // RAG fields (added in Evidence RAG v1; optional for pre-RAG rows)
+  matched_chunk_ids?: string[] | null;
+  top_similarity?: number | null;
+  retrieved_snippets_json?: RetrievedSnippet[] | null;
+  support_rationale?: string | null;
+  missing_link?: string | null;
+  retrieval_mode?: EvidenceRetrievalMode | null;
 }
 
 export interface DocumentWithCards {
@@ -425,6 +442,8 @@ export interface SearchResultItem {
   chunk: DocumentChunk;
   document_filename: string;
   cards: EvidenceCard[];
+  similarity: number | null;
+  retrieval_mode: string | null;
 }
 
 export interface EvidenceCheckResult {
@@ -434,6 +453,13 @@ export interface EvidenceCheckResult {
   matched_card: EvidenceCard | null;
   support_level: EvidenceSupportLevel;
   explanation: string;
+  // RAG fields (optional for backward compatibility)
+  matched_chunk_ids?: string[] | null;
+  top_similarity?: number | null;
+  retrieved_snippets?: RetrievedSnippet[] | null;
+  support_rationale?: string | null;
+  missing_link?: string | null;
+  retrieval_mode?: EvidenceRetrievalMode | null;
 }
 
 // ── Pilot / Analytics types ───────────────────────────────────────────────────
@@ -496,6 +522,174 @@ export interface PilotSummary {
   latest_skill_scores: Record<string, number> | null;
   skill_trends: SkillTrends | null;
   common_issues: string[];
+}
+
+// ── Share report types ────────────────────────────────────────────────────────
+
+export interface ShareResponse {
+  id: string;
+  share_token: string;
+  include_transcript: boolean;
+  include_flow: boolean;
+  include_feedback: boolean;
+  include_drills: boolean;
+  include_delivery: boolean;
+  include_evidence_summary: boolean;
+  include_improvement: boolean;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateShareRequest {
+  user_id: string;
+  include_transcript?: boolean;
+  include_flow?: boolean;
+  include_feedback?: boolean;
+  include_drills?: boolean;
+  include_delivery?: boolean;
+  include_evidence_summary?: boolean;
+  include_improvement?: boolean;
+  expires_in_days?: number | null;
+}
+
+export interface SharedReportFeedback {
+  overall_score: number | null;
+  scores: FeedbackScores | null;
+  summary: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  top_3_priorities: string[] | null;
+  structured_issues: DebateIssue[] | null;
+}
+
+export interface SharedReportArgument {
+  label: string;
+  claim: string;
+  warrant: string;
+  evidence: string | null;
+  impact: string;
+  argument_type: ArgumentType;
+}
+
+export interface SharedReportDrill {
+  title: string;
+  description: string | null;
+  skill_target: string;
+  prompt: string;
+  success_criteria: string[];
+  difficulty: string;
+}
+
+export interface SharedReportDelivery {
+  words_per_minute: number | null;
+  filler_word_count: number | null;
+  delivery_score: number | null;
+  pacing_band: string | null;
+  repeated_phrases_json: Array<{ phrase: string; count: number }> | null;
+}
+
+export interface SharedReportEvidenceSummary {
+  supported_count: number;
+  partially_supported_count: number;
+  unsupported_count: number;
+  unverifiable_count: number;
+  top_issues: Array<{
+    claim_text: string;
+    support_level: string;
+    explanation: string | null;
+  }>;
+}
+
+export interface SharedReportComparison {
+  original_overall_score: number | null;
+  new_overall_score: number | null;
+  overall_delta: number | null;
+  original_delivery_score: number | null;
+  new_delivery_score: number | null;
+  delivery_score_delta: number | null;
+  original_wpm: number | null;
+  new_wpm: number | null;
+  wpm_delta: number | null;
+  original_filler_count: number | null;
+  new_filler_count: number | null;
+  filler_delta: number | null;
+  summary: string;
+}
+
+export interface SharedReportIncludeFlags {
+  transcript: boolean;
+  flow: boolean;
+  feedback: boolean;
+  drills: boolean;
+  delivery: boolean;
+  evidence_summary: boolean;
+  improvement: boolean;
+}
+
+export interface SharedReportPayload {
+  token: string;
+  speech_type: SpeechType;
+  side: SpeechSide | null;
+  judge_type: JudgeType | null;
+  topic: string | null;
+  created_at: string;
+  feedback: SharedReportFeedback | null;
+  arguments: SharedReportArgument[] | null;
+  drills: SharedReportDrill[] | null;
+  delivery: SharedReportDelivery | null;
+  transcript_text: string | null;
+  evidence_summary: SharedReportEvidenceSummary | null;
+  comparison: SharedReportComparison | null;
+  include_flags: SharedReportIncludeFlags;
+}
+
+// ── Tournament Prep Workout ────────────────────────────────────────────────────
+
+export type WorkoutStatus = "not_started" | "in_progress" | "completed";
+export type WorkoutStepCategory = "argument" | "evidence" | "delivery" | "rerecord";
+export type WorkoutStepSource = "feedback" | "drill" | "delivery" | "evidence";
+
+export interface WorkoutStep {
+  id: string;
+  title: string;
+  category: WorkoutStepCategory;
+  focus: string;
+  estimated_minutes: number;
+  source: WorkoutStepSource;
+  problem: string;
+  instruction: string;
+  success_criteria: string;
+  linked_drill_id?: string | null;
+  completed: boolean;
+}
+
+export interface WorkoutJson {
+  steps: WorkoutStep[];
+  re_record_goal: string;
+  coach_note: string;
+  generated_from: {
+    feedback_report_id?: string | null;
+    argument_map_id?: string | null;
+    delivery_metrics_id?: string | null;
+  };
+}
+
+export interface Workout {
+  id: string;
+  user_id: string;
+  speech_id: string;
+  title: string;
+  description?: string | null;
+  estimated_minutes?: number | null;
+  workout_type: string;
+  status: WorkoutStatus;
+  focus_area?: string | null;
+  workout_json: WorkoutJson;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PilotAggregate {

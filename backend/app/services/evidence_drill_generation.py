@@ -32,8 +32,26 @@ class EvidenceDrillRow(TypedDict):
 
 # ── Templates by support level ────────────────────────────────────────────────
 
+def _best_snippet(check: ClaimEvidenceCheckRow) -> str | None:
+    """Extract the highest-similarity snippet from retrieved_snippets_json."""
+    snippets = check.retrieved_snippets_json
+    if not snippets:
+        return None
+    best = max(snippets, key=lambda s: s.get("similarity", 0))
+    text = best.get("snippet", "").strip()
+    return text[:300] if text else None
+
+
 def _drill_for_unsupported(check: ClaimEvidenceCheckRow) -> EvidenceDrillRow:
     label = check.argument_label or check.claim_text[:60]
+    snippet = _best_snippet(check)
+    snippet_line = (
+        f"\n\nClosest uploaded evidence (similarity {check.top_similarity:.2f} if applicable):\n"
+        f'"{snippet}"\n\n'
+        "Restate your claim so it uses language and facts from this snippet — "
+        "or explain why the snippet does not support the claim and what card you need."
+        if snippet else ""
+    )
     return EvidenceDrillRow(
         title=f"Precision Restatement — {label}",
         skill_target="claim_precision",
@@ -47,7 +65,7 @@ def _drill_for_unsupported(check: ClaimEvidenceCheckRow) -> EvidenceDrillRow:
             "does not support the exact claim you made in the speech. "
             "Re-read your card carefully, then restate the claim in 1–2 sentences "
             "that your card can directly prove. Say what the card ACTUALLY shows — "
-            "not what you wish it showed."
+            f"not what you wish it showed.{snippet_line}"
         ),
         instructions="\n".join([
             "1. Write down the original claim you made in the speech.",
@@ -72,6 +90,14 @@ def _drill_for_unsupported(check: ClaimEvidenceCheckRow) -> EvidenceDrillRow:
 
 def _drill_for_partially_supported(check: ClaimEvidenceCheckRow) -> EvidenceDrillRow:
     label = check.argument_label or check.claim_text[:60]
+    snippet = _best_snippet(check)
+    missing = check.missing_link or ""
+    snippet_line = (
+        f"\n\nBest matching snippet from your library:\n\"{snippet}\"\n\n"
+        + (f"Gap to close: {missing}\n\n" if missing else "")
+        + "Practice bridging from this snippet to your claim with a clear warrant."
+        if snippet else (f"\n\nGap to close: {missing}" if missing else "")
+    )
     return EvidenceDrillRow(
         title=f"Evidence Alignment — {label}",
         skill_target="evidence_alignment",
@@ -85,7 +111,7 @@ def _drill_for_partially_supported(check: ClaimEvidenceCheckRow) -> EvidenceDril
             "but doesn't prove the full claim. "
             "Read your card, identify the gap between what you said and what it shows, "
             "then practice a 30-second block that closes that gap — either by narrowing "
-            "the claim or by explaining the inferential link from the card to the claim."
+            f"the claim or by explaining the inferential link from the card to the claim.{snippet_line}"
         ),
         instructions="\n".join([
             "1. State the claim you ran in the speech.",
@@ -110,6 +136,8 @@ def _drill_for_partially_supported(check: ClaimEvidenceCheckRow) -> EvidenceDril
 
 def _drill_for_unverifiable(check: ClaimEvidenceCheckRow) -> EvidenceDrillRow:
     label = check.argument_label or check.claim_text[:60]
+    missing = check.missing_link or ""
+    suggestion_line = f"\n\nWhat would make this verifiable: {missing}" if missing else ""
     return EvidenceDrillRow(
         title=f"Evidence Attribution — {label}",
         skill_target="evidence_attribution",
@@ -122,7 +150,7 @@ def _drill_for_unverifiable(check: ClaimEvidenceCheckRow) -> EvidenceDrillRow:
             f"The argument '{label}' had no matching card in your evidence library. "
             "Find or write a card for this claim. Then practice citing it in round: "
             "say the author, year, what the card finds, and the warrant connecting it to your claim. "
-            "Repeat until the attribution is automatic."
+            f"Repeat until the attribution is automatic.{suggestion_line}"
         ),
         instructions="\n".join([
             "1. Write the claim you made in the speech.",

@@ -24,19 +24,20 @@ RoundLab is a full-stack practice platform that closes the coaching gap for stud
 14. [Evaluation Harness](#evaluation-harness)
 15. [Delivery Coach](#delivery-coach)
 16. [Evidence Library](#evidence-library)
-17. [Gamification](#gamification)
-18. [Team Features](#team-features)
-19. [First-Run Onboarding and Demo Mode](#first-run-onboarding-and-demo-mode)
-20. [Async Analysis Jobs](#async-analysis-jobs)
-21. [Pilot Testing Protocol](#pilot-testing-protocol)
-22. [Analytics Events](#analytics-events)
-23. [Current Limitations](#current-limitations)
-24. [Roadmap](#roadmap)
-25. [Deployment](#deployment)
-26. [Screenshots](#screenshots)
-27. [Contributing](#contributing)
-28. [License](#license)
-29. [Status](#status)
+17. [Shareable Coach Reports](#shareable-coach-reports)
+18. [Gamification](#gamification)
+19. [Team Features](#team-features)
+20. [First-Run Onboarding and Demo Mode](#first-run-onboarding-and-demo-mode)
+21. [Async Analysis Jobs](#async-analysis-jobs)
+22. [Pilot Testing Protocol](#pilot-testing-protocol)
+23. [Analytics Events](#analytics-events)
+24. [Current Limitations](#current-limitations)
+25. [Roadmap](#roadmap)
+26. [Deployment](#deployment)
+27. [Screenshots](#screenshots)
+28. [Contributing](#contributing)
+29. [License](#license)
+30. [Status](#status)
 
 ---
 
@@ -95,6 +96,8 @@ RoundLab does not write cases, generate arguments on demand, or fabricate eviden
 | Flow editing | Implemented | Users can correct extracted arguments before locking report |
 | Dark/light mode | Implemented | Full oklch theme system; toggles persist via localStorage |
 | PWA manifest | Implemented | Installable on mobile; viewport and safe-area configured |
+| Shareable coach reports | Implemented | Token-gated share link; configurable sections; browser print-to-PDF; copy practice plan as plain text |
+| Tournament Prep Workout Mode | Implemented | Deterministic 3–6 step workout generated from feedback/delivery/evidence; step-by-step with mark-complete; dashboard "Today's Prep" card |
 
 ---
 
@@ -222,7 +225,7 @@ Weights shift per speech type. Rebuttal emphasizes clash and coverage. Summary f
 
 ## Database Schema
 
-RoundLab uses 19 tables in Supabase PostgreSQL, plus the `pgvector` extension for semantic search. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
+RoundLab uses 20 tables in Supabase PostgreSQL, plus the `pgvector` extension for semantic search. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
 
 ```mermaid
 erDiagram
@@ -241,6 +244,7 @@ erDiagram
     documents ||--o{ document_chunks : "splits into"
     document_chunks ||--o{ evidence_cards : "extracts"
     speeches ||--o{ claim_evidence_checks : "checked against"
+    speeches ||--o{ shared_reports : "shared via"
     profiles ||--o{ product_events : "logs"
     profiles ||--o{ output_feedback : "submits"
     profiles ||--o{ user_xp_events : "earns"
@@ -267,6 +271,8 @@ erDiagram
 | `product_events` | Internal analytics events (best-effort, never blocks user flows) |
 | `output_feedback` | User confusion reports on AI outputs |
 | `user_xp_events` | XP ledger; one row per XP-earning action |
+| `shared_reports` | Share link records with configurable include flags and optional expiry; private by default |
+| `workouts` | Tournament prep workout per speech; JSONB step list; status machine (not_started → in_progress → completed); speech-type-specific final step |
 
 ---
 
@@ -288,6 +294,7 @@ RoundLab/
 │   │   │   ├── evals/               # Eval quality dashboard
 │   │   │   ├── pilot/               # Pilot analytics (current user only)
 │   │   │   ├── learn/               # Onboarding reference
+│   │   │   ├── share/[token]/       # Public shared report (no login required)
 │   │   │   └── login/               # Supabase Auth
 │   │   ├── components/              # React components
 │   │   │   ├── ui/                  # Radix-based primitives
@@ -302,6 +309,8 @@ RoundLab/
 │   │   │   ├── FlowTable.tsx        # Classic vertical flow table
 │   │   │   ├── ImprovementComparisonCard.tsx # Re-record delta view
 │   │   │   ├── ScoreCard.tsx        # Feedback score ring + breakdown
+│   │   │   ├── CoachReportView.tsx  # Print-friendly shared report renderer
+│   │   │   ├── ShareReportModal.tsx # Share link creator/manager
 │   │   │   └── ...
 │   │   ├── lib/
 │   │   │   ├── api.ts               # Backend fetch wrapper
@@ -309,6 +318,7 @@ RoundLab/
 │   │   │   ├── deliveryHelpers.ts   # Pacing band display, score color, WPM format
 │   │   │   ├── evidenceHelpers.ts   # Similarity labels, search mode display, support level display
 │   │   │   ├── firstRunHelpers.ts   # deriveFirstRunState() — 9-state machine
+│   │   │   ├── reportHelpers.ts     # speechTypeLabel, judgeTypeLabel, scoreColor, formatDelta, formatPracticePlan, buildShareUrl
 │   │   │   ├── supabase.ts          # Supabase client (PKCE OAuth)
 │   │   │   └── motion.ts            # Animation presets
 │   │   ├── types/
@@ -329,7 +339,8 @@ RoundLab/
 │       │   ├── documents.py         # Evidence library endpoints
 │       │   ├── jobs.py              # Analysis job polling
 │       │   ├── pilot.py             # Pilot metrics
-│       │   └── output_feedback.py   # Confusion reports
+│       │   ├── output_feedback.py   # Confusion reports
+│       │   └── shared_reports.py    # Share link CRUD + public report endpoint
 │       ├── models/                  # Pydantic response schemas
 │       ├── services/
 │       │   ├── analysis_pipeline.py # LangGraph orchestration (7 steps)
@@ -347,7 +358,7 @@ RoundLab/
 │       │   └── supabase_client.py
 │       ├── scripts/
 │       │   └── embed_existing_documents.py  # Backfill embeddings for pre-RAG documents
-│       └── tests/                   # pytest suite (628 tests)
+│       └── tests/                   # pytest suite (678 tests)
 ├── evals/                           # Labeled eval fixtures + runner
 │   ├── fixtures/                    # JSON fixture files
 │   ├── run_evals.py
@@ -445,6 +456,7 @@ Manual order if applying individually:
 20260609400000_add_argument_map_correction.sql
 20260609500000_add_delivery_metrics.sql    # delivery_metrics table
 20260609600000_add_pgvector_embeddings.sql # pgvector extension, embedding column on document_chunks, match_document_chunks RPC, RAG audit columns on claim_evidence_checks
+20260609700000_add_shared_reports.sql      # shared_reports table with token, include flags, expiry, RLS policies
 ```
 
 **Storage buckets** — create these in Supabase Dashboard under Storage:
@@ -486,11 +498,12 @@ Manual order if applying individually:
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                                      # all 628 tests
+pytest                                      # all 678 tests
 pytest tests/ -q                            # quiet output
 pytest tests/test_delivery_analysis.py -v  # delivery tests only
 pytest tests/test_evidence_rag.py -v       # Evidence RAG tests
 pytest tests/test_embeddings.py -v         # embeddings service tests
+pytest tests/test_shared_reports.py -v     # share report endpoint tests
 pytest tests/test_schema_validation.py -v  # schema tests
 ```
 
@@ -498,8 +511,9 @@ pytest tests/test_schema_validation.py -v  # schema tests
 
 ```bash
 cd frontend
-npm test                                    # all 245 tests
+npm test                                    # all 318 tests
 npm test -- --testPathPattern delivery      # filter by name
+npm test -- --testPathPattern shareReport   # share report logic tests
 npm test -- --watch                         # watch mode
 ```
 
@@ -593,6 +607,23 @@ python -m evals.run_evals --fixture good_constructive
 | POST | `/documents/{id}/embed` | Embed any un-embedded chunks for an existing document |
 | POST | `/documents/search` | Search evidence library; `mode` param: `keyword`, `semantic`, or `hybrid` |
 
+### Shared Reports
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/speeches/{id}/share` | user_id body | Create or refresh a share link; returns token and include flags |
+| GET | `/speeches/{id}/share?user_id={id}` | query param | Get current active share settings (null if none) |
+| PATCH | `/shared-reports/{share_id}` | user_id body | Update which sections are included |
+| DELETE | `/shared-reports/{share_id}?user_id={id}` | query param | Revoke the share link permanently |
+| GET | `/shared-reports/{token}` | none (public) | Fetch sanitized report payload for a valid, non-revoked, non-expired token |
+
+**Privacy rules for `GET /shared-reports/{token}`:**
+- Returns HTTP 410 Gone if the link has been revoked or is past its expiry
+- Returns HTTP 404 if the token does not exist
+- `user_id`, `audio_url`, and storage paths are never included in the response
+- `evidence_summary` is excluded unless `include_evidence_summary` is explicitly `true`
+- Each section (transcript, flow, feedback, drills, delivery, improvement) is included only if the `include_*` flag is true AND the data exists in the database
+
 ### Jobs
 
 | Method | Path | Description |
@@ -631,6 +662,7 @@ python -m evals.run_evals --fixture good_constructive
 | `/pilot` | Pilot metrics for current user |
 | `/learn` | Onboarding reference material |
 | `/login` | Supabase Auth with Google OAuth |
+| `/share/[token]` | Public shared coach report; no login required; 410 if revoked or expired |
 
 ### Key components
 
@@ -651,6 +683,8 @@ python -m evals.run_evals --fixture good_constructive
 | `JudgeLensComparison` | Side-by-side feedback delta when judge type changes |
 | `CoachMarginNote` | Inline coach observation card |
 | `DashboardCockpitBand` | Stats band across the top of the dashboard |
+| `CoachReportView` | Print-friendly shared report renderer; all sections conditional on data and include flags |
+| `ShareReportModal` | Share link create/update/revoke modal; evidence summary off by default; expiry pill buttons |
 
 ---
 
@@ -810,6 +844,51 @@ Alternatively, call `POST /documents/{id}/embed` to re-embed a single document v
 - Semantic search requires the pgvector extension to be enabled in Supabase and chunks to have been embedded; documents uploaded before the RAG migration need backfilling
 - Evidence checking is triggered manually per claim; it is not run automatically during the pipeline
 - RoundLab only searches the student's uploaded library — it never uses outside web knowledge or fabricates evidence
+
+---
+
+## Shareable Coach Reports
+
+Students can share a read-only coaching report with a coach or parent using a private, token-gated link. Reports are private by default — no share link is created until the student explicitly requests one.
+
+### Privacy model
+
+- Links are never publicly indexed; they are accessible only to people who have the URL
+- Each link is a 43-character cryptographically random token (`secrets.token_urlsafe(32)`)
+- Evidence files and audio recordings are **never** included
+- `user_id`, `audio_url`, and internal storage paths are stripped from the public response
+- Evidence risk summary is **excluded by default**; students must explicitly enable it
+- Links can be revoked instantly; the shared URL returns 410 Gone after revocation
+
+### What gets shared
+
+The student chooses which sections to include when creating the link. All sections are on by default except evidence risk summary:
+
+| Section | Default | Description |
+|---|---|---|
+| Judge feedback | On | Summary, priorities, strengths, weaknesses, score breakdown |
+| Argument flow | On | All extracted arguments with claim, warrant, evidence, impact |
+| Practice plan | On | All three drills with prompts and success criteria |
+| Delivery | On | WPM, filler count, delivery score, pacing band |
+| Transcript | On | Full speech transcript text |
+| Improvement vs. previous | On | Score and delivery deltas from the most recent re-record |
+| Evidence risk summary | Off | Evidence support check summary (excluded by default) |
+
+### Share link expiry
+
+| Option | Behavior |
+|---|---|
+| No expiration | Link stays active until revoked |
+| 7 days | Automatically expires; returns 410 after expiry |
+| 30 days | Automatically expires; returns 410 after expiry |
+
+### Print-to-PDF
+
+The shared report page includes a Print button. Clicking it calls `window.print()`. The `@media print` CSS hides navigation, modal backdrops, and buttons; sets a 12pt black-on-white layout; and adds page break hints to sections. Use the browser's "Save as PDF" option when printing.
+
+### Copy practice plan
+
+The speech report page includes a "Copy practice plan" button that formats the coaching report, priorities, drills, and delivery metrics as plain indented text and copies it to the clipboard. The plan can be pasted into a message or shared without a link.
 
 ---
 
@@ -975,6 +1054,12 @@ All events are stored in `product_events`. Logging is fire-and-forget and never 
 | `drill_attempt_scored` | Drill attempt scoring completes |
 | `drill_rated` | User submits a drill helpfulness rating |
 | `comparison_viewed` | User views a speech improvement comparison |
+| `share_report_modal_opened` | User opens the share report modal |
+| `share_report_created` | User creates or updates a share link |
+| `share_report_copied` | User copies the share link to clipboard |
+| `share_report_revoked` | User revokes an active share link |
+| `shared_report_opened` | Viewer opens a shared report via public token URL |
+| `report_print_clicked` | User clicks Print on the shared report page |
 
 ---
 
@@ -1003,6 +1088,11 @@ All events are stored in `product_events`. Logging is fire-and-forget and never 
 - No leave-team or remove-member functionality yet; coaches must manage membership manually
 - The pilot dashboard shows only the current user's data, not a team-wide aggregate view
 
+### Sharing
+- One active share link per speech at a time; creating a new link with different settings updates the existing one
+- Expiry is checked at request time, not by a background job — the row stays in the database after expiry
+- The shared report renders the snapshot of data at the time of the request, not at the time the link was created
+
 ### Gamification
 - Streak bonuses are defined in the XP rules but are not yet automatically awarded
 
@@ -1021,7 +1111,7 @@ All events are stored in `product_events`. Logging is fire-and-forget and never 
 | AI drill verification | Check whether the student's attempt actually addresses the drill prompt |
 | Streak bonuses | Auto-award XP for consecutive-day practice |
 | Team-wide pilot dashboard | Aggregate metrics across all students in a team |
-| Tournament prep mode | Judge adaptation profiles; round simulation |
+| Tournament prep mode (v2) | Judge adaptation profiles; round simulation; blockfile trainer |
 | Tabroom.com integration | Pull tournament results to contextualize practice gaps |
 | Advanced skill trend analytics | Peer comparison; long-range regression charts |
 | Video upload support | Crossfire analysis; body language feedback |
@@ -1065,7 +1155,7 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 - [ ] Frontend builds without errors (`npm run build`)
 - [ ] TypeScript check clean (`npx tsc --noEmit`)
 - [ ] All environment variables set in production
-- [ ] Supabase migrations applied in order (includes `20260609600000_add_pgvector_embeddings.sql`)
+- [ ] Supabase migrations applied in order (includes `20260609600000_add_pgvector_embeddings.sql` and `20260609700000_add_shared_reports.sql`)
 - [ ] pgvector extension enabled in Supabase (the migration enables it, but confirm it is available for your Supabase plan)
 - [ ] `audio` storage bucket created with public read access
 - [ ] `documents` storage bucket created with private access
@@ -1102,8 +1192,8 @@ MIT
 
 RoundLab is in active development, pre-production. It is not yet deployed to a public production environment.
 
-- Backend test suite: **628 tests passing**
-- Frontend test suite: **245 tests passing**
+- Backend test suite: **645 tests passing**
+- Frontend test suite: **318 tests passing**
 - TypeScript: **clean**
 - Next.js build: **passing**
 

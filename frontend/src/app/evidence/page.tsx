@@ -252,20 +252,34 @@ function DocumentCard({
 
 function SearchResultCard({ item }: { item: SearchResultItem }) {
   const [open, setOpen] = useState(false);
-  // Show meaningful heading: prefer card tag, then CARD N label, then nothing
   const topCard = item.cards[0];
   const displayTitle = (topCard?.tag && !topCard.tag.match(/^CARD\s+\d+$/i))
     ? topCard.tag
     : item.chunk.heading ?? null;
 
+  const sim = item.similarity;
+  const simLabel = sim !== null && sim !== undefined
+    ? (sim >= 0.70 ? "Strong match" : sim >= 0.45 ? "Possible match" : "Weak match")
+    : null;
+  const simColor = sim !== null && sim !== undefined
+    ? (sim >= 0.70 ? "text-ok" : sim >= 0.45 ? "text-warn" : "text-danger")
+    : "";
+
   return (
     <div className="case-file-card p-3 text-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          {/* Source document */}
-          <p className="text-[10px] font-medium uppercase tracking-wide text-ink-muted truncate">
-            {item.document_filename}
-          </p>
+          {/* Source document + similarity */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-ink-muted truncate">
+              {item.document_filename}
+            </p>
+            {simLabel && (
+              <span className={`text-[10px] font-semibold ${simColor}`}>
+                {simLabel} ({Math.round((sim ?? 0) * 100)}%)
+              </span>
+            )}
+          </div>
           {/* Card tag or chunk heading */}
           {displayTitle && (
             <p className="text-xs font-semibold text-ink mt-0.5 leading-snug">{displayTitle}</p>
@@ -319,6 +333,7 @@ export default function EvidencePage() {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[] | null>(null);
   const [searchError, setSearchError] = useState("");
+  const [searchMode, setSearchMode] = useState<"keyword" | "semantic" | "hybrid">("hybrid");
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
@@ -459,7 +474,7 @@ export default function EvidencePage() {
       const results = await apiFetch<SearchResultItem[]>("/documents/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, query: searchQuery.trim(), limit: 8 }),
+        body: JSON.stringify({ user_id: userId, query: searchQuery.trim(), limit: 8, mode: searchMode }),
       });
       setSearchResults(results);
     } catch (err: unknown) {
@@ -573,6 +588,30 @@ export default function EvidencePage() {
         {parsedCount > 0 && (
           <section>
             <span className="section-stamp mb-3 block">Search evidence</span>
+
+            {/* Search mode toggle */}
+            <div className="mb-2 flex items-center gap-1">
+              {(["keyword", "semantic", "hybrid"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setSearchMode(m)}
+                  className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+                    searchMode === m
+                      ? "border-lav/40 bg-lav/10 text-lav"
+                      : "border-hairline bg-surface-2 text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <p className="mb-2 text-[10px] text-ink-faint">
+              {searchMode === "keyword" && "Matches exact words. Fast and deterministic."}
+              {searchMode === "semantic" && "Finds conceptually related evidence even when the wording differs. Uses AI embeddings."}
+              {searchMode === "hybrid" && "Semantic results first, then keyword results to fill any gaps. Recommended."}
+            </p>
+
             <form onSubmit={handleSearch} className="flex gap-2">
               <Input
                 value={searchQuery}
@@ -592,10 +631,24 @@ export default function EvidencePage() {
             {searchResults !== null && (
               <div className="mt-3 flex flex-col gap-2">
                 {searchResults.length === 0 ? (
-                  <p className="text-sm text-ink-subtle">No matching evidence found in your library.</p>
+                  <div className="text-sm text-ink-subtle">
+                    <p>No matching evidence found in your library.</p>
+                    {searchMode !== "keyword" && (
+                      <p className="mt-1 text-xs text-ink-faint">
+                        If documents were uploaded before semantic search was enabled, try re-embedding them or switch to Keyword mode.
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <>
-                    <p className="text-xs text-ink-subtle">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-ink-subtle">
+                        {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+                      </p>
+                      {searchResults.some((r) => r.retrieval_mode === "semantic" || r.retrieval_mode === "hybrid") && (
+                        <span className="text-[10px] text-lav font-medium">semantic</span>
+                      )}
+                    </div>
                     {searchResults.map((item, i) => (
                       <SearchResultCard key={item.chunk.id ?? i} item={item} />
                     ))}

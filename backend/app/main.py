@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import argument_maps, dev, documents, drills, feedback_reports, health, jobs, output_feedback, pilot, speeches, teams, transcripts, users
+from app.api import argument_maps, dev, documents, drills, feedback_reports, health, jobs, output_feedback, pilot, shared_reports, speeches, teams, transcripts, users, workouts
 from app.config import settings
 
 app = FastAPI(title="RoundLab API", version="0.1.0")
@@ -30,6 +30,8 @@ app.include_router(documents.router)
 app.include_router(jobs.router)
 app.include_router(output_feedback.router)
 app.include_router(pilot.router)
+app.include_router(shared_reports.router)
+app.include_router(workouts.router)
 
 # Dev-only endpoints (disabled in production via environment check)
 if settings.environment != "production":

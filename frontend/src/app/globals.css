@@ -595,6 +595,43 @@
 ::-webkit-scrollbar-thumb { background: oklch(0.270 0.006 264); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: oklch(0.370 0.006 264); }
 
+/* ── Print styles — used by shared report page and speech report print view ─── */
+@media print {
+  /* Hide interactive chrome */
+  .no-print,
+  nav,
+  header > button,
+  [data-testid="share-modal-backdrop"] {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  /* Reset ambient gradient mesh */
+  body > div[aria-hidden="true"] {
+    display: none !important;
+  }
+
+  h1, h2, h3 {
+    color: black !important;
+  }
+
+  /* Avoid splitting cards across page breaks */
+  .print\:break-inside-avoid { break-inside: avoid; }
+
+  /* Clean borders for print */
+  .rounded-lg,
+  .rounded-xl {
+    border-radius: 4px !important;
+  }
+
+  a { color: inherit; text-decoration: none; }
+}
+
 /* ── Prefers-reduced-motion — kill all decorative animations ────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .shimmer,

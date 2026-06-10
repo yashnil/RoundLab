@@ -7,7 +7,7 @@ import { motion } from "motion/react";
 import {
   Mic, CheckCircle2, Target,
   MoreHorizontal, Trash2, ArrowUpRight, ArrowRight,
-  BookOpen, Zap, Users, Play, BarChart2,
+  BookOpen, Zap, Users, Play, BarChart2, Dumbbell, ChevronRight,
 } from "lucide-react";
 import AppNav from "@/components/AppNav";
 import EmptyState from "@/components/EmptyState";
@@ -29,7 +29,8 @@ import { getSpeechStatusConfig } from "@/lib/debateHelpers";
 import DashboardMissionPanel, { DashboardMissionPanelSkeleton } from "@/components/DashboardMissionPanel";
 import DashboardCockpitBand from "@/components/DashboardCockpitBand";
 import FirstRunCommandCenter from "@/components/FirstRunCommandCenter";
-import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary } from "@/types";
+import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary, Workout } from "@/types";
+import { deriveWorkoutProgress, getNextIncompleteStep } from "@/lib/workoutHelpers";
 import { deriveDeliveryFocus, deliveryScoreColor, getPacingBandDisplay } from "@/lib/deliveryHelpers";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -195,6 +196,7 @@ export default function DashboardPage() {
   const [progress,      setProgress]     = useState<ProgressSummary | null>(null);
   const [pilotSummary,  setPilotSummary] = useState<PilotSummary | null>(null);
   const [latestDelivery, setLatestDelivery] = useState<DeliveryMetrics | null>(null);
+  const [latestWorkout, setLatestWorkout] = useState<Workout | null>(null);
   const [loading,       setLoading]      = useState(true);
   const [err,           setErr]          = useState("");
   const [del,           setDel]          = useState<Speech | null>(null);
@@ -228,6 +230,11 @@ export default function DashboardPage() {
             .then(setLatestDelivery)
             .catch(() => {});
         }
+
+        // Latest workout — best-effort
+        apiFetch<Workout[]>(`/workouts?user_id=${data.user.id}`)
+          .then((ws) => { if (ws.length > 0) setLatestWorkout(ws[0]); })
+          .catch(() => {});
       })
       .catch(() => setErr("Could not load your data. Please refresh and try again."))
       .finally(() => setLoading(false));
@@ -332,6 +339,69 @@ export default function DashboardPage() {
               </motion.div>
             );
           })()}
+
+          {/* ── Today's Prep — compact workout card ──────────────────────────────── */}
+          {!loading && latestWorkout && latestWorkout.status !== "completed" && (() => {
+            const prog = deriveWorkoutProgress(latestWorkout);
+            const next = getNextIncompleteStep(latestWorkout);
+            const speechId = latestWorkout.speech_id;
+            return (
+              <motion.div variants={staggerChild}>
+                <Card className="border-hairline bg-surface-1">
+                  <CardContent className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-lav/10">
+                        <Dumbbell size={13} className="text-lav" />
+                      </div>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="section-stamp">Today&apos;s prep</span>
+                          <span className="text-[10px] text-ink-faint">
+                            {prog.completed}/{prog.total} steps · {latestWorkout.estimated_minutes ?? "—"} min
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-ink truncate">{latestWorkout.title}</p>
+                        {next && (
+                          <p className="text-[11px] text-ink-faint truncate">Next: {next.title}</p>
+                        )}
+                      </div>
+                      <Link
+                        href={`/speech/${speechId}`}
+                        className="shrink-0 flex items-center gap-0.5 text-[10px] text-lav font-medium hover:underline"
+                      >
+                        Continue <ChevronRight size={10} />
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })()}
+
+          {/* Today's Prep CTA — when no active workout but latest speech is done */}
+          {!loading && !latestWorkout && speeches[0]?.status === "done" && (
+            <motion.div variants={staggerChild}>
+              <Card className="border-hairline bg-surface-1">
+                <CardContent className="px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-lav/10">
+                      <Dumbbell size={13} className="text-lav" />
+                    </div>
+                    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                      <span className="section-stamp">Today&apos;s prep</span>
+                      <p className="text-xs text-ink-subtle">No workout yet — build one from your latest speech.</p>
+                    </div>
+                    <Link
+                      href={`/speech/${speeches[0].id}`}
+                      className="shrink-0 flex items-center gap-0.5 text-[10px] text-lav font-medium hover:underline"
+                    >
+                      Build workout <ChevronRight size={10} />
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Badges — shown separately below the mission panel */}
           {!loading && progress && progress.badges.length > 0 && (

@@ -98,6 +98,9 @@ RoundLab does not write cases, generate arguments on demand, or fabricate eviden
 | PWA manifest | Implemented | Installable on mobile; viewport and safe-area configured |
 | Shareable coach reports | Implemented | Token-gated share link; configurable sections; browser print-to-PDF; copy practice plan as plain text |
 | Tournament Prep Workout Mode | Implemented | Deterministic 3–6 step workout generated from feedback/delivery/evidence; step-by-step with mark-complete; dashboard "Today's Prep" card |
+| Blockfile / Frontline Trainer | Implemented | Upload blockfiles/frontlines; extract AT:/Block:/Frontline: entries; semantic block coverage check per speech; Practice Hub grouping; Evidence Library Trainer section |
+| Practice Hub | Implemented | Speech report grouped into practice modules (Delivery Coach, Workout, Block Coverage, Drills); "Practice Hub" section header; Next Best Action card; no numeric step labels |
+| Research-to-Card Evidence Builder | Implemented | URL extraction (SSRF-safe), manual paste, Tavily web search; LLM passage selection by char indices; body_text always exact source; span verification; user review required; saves to Evidence Library; Card Builder tab in Evidence Library |
 
 ---
 
@@ -225,7 +228,7 @@ Weights shift per speech type. Rebuttal emphasizes clash and coverage. Summary f
 
 ## Database Schema
 
-RoundLab uses 20 tables in Supabase PostgreSQL, plus the `pgvector` extension for semantic search. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
+RoundLab uses 22 tables in Supabase PostgreSQL, plus the `pgvector` extension for semantic search. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
 
 ```mermaid
 erDiagram
@@ -273,6 +276,8 @@ erDiagram
 | `user_xp_events` | XP ledger; one row per XP-earning action |
 | `shared_reports` | Share link records with configurable include flags and optional expiry; private by default |
 | `workouts` | Tournament prep workout per speech; JSONB step list; status machine (not_started → in_progress → completed); speech-type-specific final step |
+| `block_entries` | Extracted block/frontline entries from user-uploaded files; pgvector(1536) embedding with HNSW index; entry types: block/frontline/answer/turn/defense/weighing/overview |
+| `block_coverage_checks` | Per-argument block coverage result for a speech; status: covered/partially_covered/missing/no_available_block; stores similarity score, rationale, missing piece, drill suggestion |
 
 ---
 
@@ -358,13 +363,13 @@ RoundLab/
 │       │   └── supabase_client.py
 │       ├── scripts/
 │       │   └── embed_existing_documents.py  # Backfill embeddings for pre-RAG documents
-│       └── tests/                   # pytest suite (678 tests)
+│       └── tests/                   # pytest suite (763 tests)
 ├── evals/                           # Labeled eval fixtures + runner
 │   ├── fixtures/                    # JSON fixture files
 │   ├── run_evals.py
 │   └── results/                     # latest.json + timestamped archives
 ├── supabase/
-│   └── migrations/                  # 19 ordered SQL migration files
+│   └── migrations/                  # 21 ordered SQL migration files
 └── docs/                            # Product requirements, rubric, samples
 ```
 
@@ -498,7 +503,7 @@ Manual order if applying individually:
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                                      # all 678 tests
+pytest                                      # all 763 tests
 pytest tests/ -q                            # quiet output
 pytest tests/test_delivery_analysis.py -v  # delivery tests only
 pytest tests/test_evidence_rag.py -v       # Evidence RAG tests
@@ -511,7 +516,7 @@ pytest tests/test_schema_validation.py -v  # schema tests
 
 ```bash
 cd frontend
-npm test                                    # all 318 tests
+npm test                                    # all 418 tests
 npm test -- --testPathPattern delivery      # filter by name
 npm test -- --testPathPattern shareReport   # share report logic tests
 npm test -- --watch                         # watch mode

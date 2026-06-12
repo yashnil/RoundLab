@@ -138,6 +138,19 @@ async def generate_workout(speech_id: str, body: GenerateWorkoutRequest) -> Work
     except Exception:
         pass
 
+    block_coverage_checks: Optional[list[dict]] = None
+    try:
+        bcc_res = (
+            sb.table("block_coverage_checks")
+            .select("*")
+            .eq("speech_id", speech_id)
+            .execute()
+        )
+        if bcc_res.data:
+            block_coverage_checks = bcc_res.data
+    except Exception:
+        pass
+
     # Generate workout plan
     try:
         plan = generate_tournament_workout(
@@ -147,6 +160,7 @@ async def generate_workout(speech_id: str, body: GenerateWorkoutRequest) -> Work
             drills=drills,
             delivery_metrics=delivery_metrics,
             evidence_checks=evidence_checks,
+            block_coverage_checks=block_coverage_checks,
         )
     except Exception as exc:
         logger.error("workout_generation failed: %s", exc)

@@ -374,6 +374,11 @@ export interface EvidenceDocument {
   page_count: number | null;
   error_message: string | null;
   created_at: string;
+  // Blockfile trainer fields (added by migration 20260609900000)
+  document_role?: DocumentRole | null;
+  debate_side?: string | null;
+  topic?: string | null;
+  blockfile_metadata_json?: Record<string, unknown>;
 }
 
 export interface DocumentChunk {
@@ -648,7 +653,7 @@ export interface SharedReportPayload {
 // ── Tournament Prep Workout ────────────────────────────────────────────────────
 
 export type WorkoutStatus = "not_started" | "in_progress" | "completed";
-export type WorkoutStepCategory = "argument" | "evidence" | "delivery" | "rerecord";
+export type WorkoutStepCategory = "argument" | "evidence" | "delivery" | "rerecord" | "blockfile";
 export type WorkoutStepSource = "feedback" | "drill" | "delivery" | "evidence";
 
 export interface WorkoutStep {
@@ -692,6 +697,77 @@ export interface Workout {
   updated_at: string;
 }
 
+// ── Blockfile and Frontline Trainer ───────────────────────────────────────────
+
+export type BlockEntryType =
+  | "block" | "frontline" | "answer" | "turn"
+  | "defense" | "weighing" | "overview" | "unknown";
+
+export type BlockCoverageStatus =
+  | "covered" | "partially_covered" | "missing" | "no_available_block";
+
+export type DocumentRole =
+  | "evidence" | "case" | "blockfile" | "frontline" | "mixed";
+
+export interface BlockEntry {
+  id: string;
+  user_id: string;
+  document_id: string | null;
+  source_chunk_id: string | null;
+  entry_type: BlockEntryType;
+  side: string | null;
+  tag: string | null;
+  opponent_claim: string | null;
+  response_text: string;
+  warrant_text: string | null;
+  evidence_text: string | null;
+  impact_text: string | null;
+  weighing_text: string | null;
+  author: string | null;
+  source: string | null;
+  date: string | null;
+  topic: string | null;
+  metadata_json: Record<string, unknown>;
+  embedding_model: string | null;
+  embedded_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlockCoverageCheck {
+  id: string;
+  user_id: string;
+  speech_id: string;
+  argument_id: string | null;
+  claim_text: string;
+  check_type: "block" | "frontline";
+  status: BlockCoverageStatus;
+  matched_block_entry_ids: string[];
+  top_similarity: number | null;
+  rationale: string | null;
+  missing_piece: string | null;
+  suggested_drill_json: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlockCoverageResponse {
+  speech_id: string;
+  checks: BlockCoverageCheck[];
+  covered_count: number;
+  partially_covered_count: number;
+  missing_count: number;
+  no_available_block_count: number;
+  total_block_entries: number;
+}
+
+export interface ExtractBlocksResponse {
+  document_id: string;
+  entries_extracted: number;
+  entries_embedded: number;
+  entries: BlockEntry[];
+}
+
 export interface PilotAggregate {
   total_users: number;
   speeches_uploaded: number;
@@ -705,4 +781,336 @@ export interface PilotAggregate {
   average_drill_usefulness: number | null;
   common_issues: string[];
   common_drop_off: string;
+}
+
+// ── Research-to-Card Evidence Builder ─────────────────────────────────────────
+
+export type SourceQuality = "high" | "medium" | "low" | "unknown";
+export type CardDraftStatus = "draft" | "saved" | "discarded";
+export type CardSourceType = "url" | "manual_paste" | "research_search";
+export type SupportLevel = "strong_support" | "partial_support" | "weak_support" | "no_support";
+export type CardPurpose =
+  | "uniqueness" | "link" | "internal_link" | "impact" | "answer"
+  | "frontline" | "weighing" | "background" | "solvency" | "harm" | "unknown";
+export type EvidenceRole =
+  | "direct_support"
+  | "mechanism_support"
+  | "example_support"
+  | "impact_support"
+  | "definition_support"
+  | "authority_support"
+  | "counter_evidence"
+  | "not_useful";
+
+export interface HighlightSpan {
+  start: number;
+  end: number;
+  type?: "highlight" | "underline";
+  reason?: string;
+}
+
+export interface SelectedSpan {
+  start: number;
+  end: number;
+  text: string;
+  sentence_index: number;
+  rationale?: string;
+}
+
+export interface AnnotatedSpan extends SelectedSpan {
+  id?: string;
+  selected_by?: "ai" | "user";
+  confidence?: number;
+  prefix?: string;
+  suffix?: string;
+}
+
+export interface EvidenceCutResult {
+  original_passage: string;
+  selected_spans: SelectedSpan[];
+  cut_text: string;
+  cut_text_with_ellipses: string;
+  compression_ratio: number;
+  confidence: number;
+  cut_style: "full" | "light_cut" | "medium_cut" | "aggressive_cut";
+  validation_passed: boolean;
+  validation_notes?: string;
+  // Part 4 — cut quality signals
+  cut_confidence?: number;
+  cut_warnings?: string[];
+  bold_spans?: SelectedSpan[];
+  annotated_spans?: AnnotatedSpan[];
+  // Part 4b — spans remapped to cut_text_with_ellipses (for card-body highlighting)
+  cut_body_spans?: SelectedSpan[];
+  cut_body_bold_spans?: SelectedSpan[];
+  // Part 4c — user-annotated underline spans (offsets in cut_text_with_ellipses)
+  cut_body_underline_spans?: SelectedSpan[];
+}
+
+export interface CitationMetadata {
+  author_display: string;
+  authors: string[];
+  year: string;
+  title: string;
+  container_title?: string;
+  publication_name: string;
+  url: string;
+  doi?: string;
+  accessed_date: string;
+  citation_quality: "complete" | "partial" | "weak";
+  mla_citation: string;
+  short_cite: string;
+  // Part 3 — citation provenance
+  author_source?: string;
+  date_source?: string;
+  title_source?: string;
+  publication_source?: string;
+}
+
+// Evidence Set Builder (Parts 1-2)
+export interface EvidenceSlot {
+  slot_id: string;
+  slot_label: string;
+  strategic_function: string;
+  target_claim: string;
+  desired_evidence_role: string;
+  search_intent: string;
+  preferred_source_types?: string[];
+  recency_policy?: string;
+  must_have_terms?: string[];
+  helpful_terms?: string[];
+  avoid_terms?: string[];
+  success_criteria?: string;
+}
+
+export interface EvidenceSetPlan {
+  topic: string;
+  claim: string;
+  side: string;
+  slots: EvidenceSlot[];
+  planning_method: "llm" | "deterministic";
+}
+
+export interface WeakLead {
+  url?: string | null;
+  tag?: string | null;
+  slot_label?: string;
+  short_cite?: string;
+  reason?: string;
+  body_excerpt?: string;
+}
+
+export interface CardIntelligence {
+  why_this_card: string;
+  supports_claim_because: string[];
+  best_use:
+    | "contention"
+    | "rebuttal"
+    | "frontline"
+    | "weighing"
+    | "impact"
+    | "definition"
+    | "crossfire";
+  debate_use_notes: string[];
+  limitations: string[];
+  suggested_block_label: string;
+  save_readiness: "ready" | "review_needed" | "weak";
+  save_readiness_reasons: string[];
+  // Part 9 — slot-aware debate intelligence
+  opponent_response?: string;
+  crossfire_question?: string;
+}
+
+export interface RegenerateCutRequest {
+  original_passage: string;
+  claim: string;
+  evidence_role?: string;
+  tag?: string;
+  cut_style?: string;
+  use_llm?: boolean;
+}
+
+export interface RegenerateCutResponse {
+  cut: EvidenceCutResult;
+  cut_style_applied: string;
+}
+
+export interface ArticleMetadata {
+  title: string | null;
+  author: string | null;
+  publication: string | null;
+  published_date: string | null;
+  url: string;
+  canonical_url?: string | null;
+  language?: string | null;
+  excerpt?: string | null;
+  warnings: string[];
+}
+
+export interface ExtractedArticle {
+  url: string;
+  metadata: ArticleMetadata;
+  extracted_text: string;
+  extraction_method: string;
+  extraction_confidence: number;
+  status: "ok" | "partial" | "failed";
+  error?: string | null;
+}
+
+export interface SourceQualityResult {
+  source_quality: SourceQuality;
+  credibility_notes: string;
+  warnings: string[];
+}
+
+export interface ExtractUrlResponse {
+  research_source_id: string;
+  article: ExtractedArticle;
+  quality: SourceQualityResult;
+}
+
+export interface SearchSourceCandidate {
+  title: string;
+  url: string;
+  snippet: string;
+  publication: string | null;
+  published_date: string | null;
+  source_quality: SourceQuality | null;
+}
+
+export interface SearchSourcesResponse {
+  results: SearchSourceCandidate[];
+  provider?: string | null;
+  fallback?: string | null;
+}
+
+export interface CardDraft {
+  id: string;
+  user_id: string;
+  research_source_id: string | null;
+  url: string | null;
+  topic: string | null;
+  claim_goal: string | null;
+  side: string | null;
+  tag: string;
+  cite: string;
+  body_text: string;
+  highlighted_spans_json: HighlightSpan[];
+  underline_spans_json: HighlightSpan[];
+  author: string | null;
+  publication: string | null;
+  title: string | null;
+  published_date: string | null;
+  author_credentials: string | null;
+  warrant_summary: string | null;
+  impact_summary: string | null;
+  source_quality: SourceQuality | null;
+  credibility_notes: string | null;
+  extraction_confidence: number | null;
+  generated_tag: boolean;
+  missing_metadata_json: Record<string, string>;
+  card_source_type: CardSourceType | null;
+  status: CardDraftStatus;
+  saved_card_id: string | null;
+  // Research-search extra fields (populated from draft_json by backend)
+  support_level?: SupportLevel | null;
+  support_rationale?: string | null;
+  card_purpose?: CardPurpose | null;
+  claim_supported?: boolean | null;
+  best_supported_claim?: string | null;
+  overclaim_warning?: string | null;
+  safe_tag_scope?: string | null;
+  evidence_role?: EvidenceRole | null;
+  is_counter_evidence?: boolean | null;
+  is_snippet_source?: boolean | null;
+  // New evidence cut fields (all optional for backward compat)
+  evidence_cut?: EvidenceCutResult | null;
+  citation?: CitationMetadata | null;
+  intelligence?: CardIntelligence | null;
+  cut_text_with_ellipses?: string | null;
+  selected_spans?: SelectedSpan[] | null;
+  short_cite?: string | null;
+  mla_citation?: string | null;
+  citation_quality?: "complete" | "partial" | "weak" | null;
+  extraction_method?: string | null;
+  source_domain?: string | null;
+  source_title?: string | null;
+  // Evidence Set Builder slot assignment (Parts 2 + 9)
+  slot_id?: string | null;
+  slot_label?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SaveDraftResponse {
+  card_id: string;
+  draft_id: string;
+  message: string;
+}
+
+export interface SearchDiagnostics {
+  sources_found: number;
+  sources_attempted: number;
+  sources_extracted: number;
+  passages_considered: number;
+  candidates_generated: number;
+  filtered_no_support: number;
+  filtered_low_quality: number;
+  query_variants_used: string[];
+  // Extended diagnostics (Change 7)
+  urls_extracted_full?: number;
+  urls_snippet_only?: number;
+  chunks_created?: number;
+  chunks_after_quality_filter?: number;
+  chunks_classified?: number;
+  rejected_by_low_source_quality?: number;
+  rejected_by_low_debate_usefulness?: number;
+  rejected_by_overclaim?: number;
+  rejected_as_counter_evidence?: number;
+  providers_used?: string[];
+  queries_run?: string[];
+  possible_lead_urls?: string[];
+  reranker_used?: string;
+  // Firecrawl / Cohere instrumentation
+  firecrawl_attempted?: number;
+  firecrawl_succeeded?: number;
+  firecrawl_failed?: number;
+  cohere_rerank_attempted?: number;
+  cohere_rerank_succeeded?: number;
+  // Per-slot search diagnostics (populated when slot planner is active)
+  slot_diagnostics?: Record<string, unknown> | null;
+  slot_queries_run?: Record<string, string[]> | null;
+  slot_cards_filled?: string[];
+  slot_weak_leads?: string[];
+  slot_unfilled_reasons?: Record<string, string> | null;
+}
+
+export interface GenerateCardsResponse {
+  search_configured: boolean;
+  query_used?: string | null;
+  cards: CardDraft[];
+  sources_considered?: Array<{ url: string; status: string; reason?: string; quality?: string; support_level?: string }>;
+  no_card_reason?: string | null;
+  suggestions?: string[];
+  warnings?: string[];
+  diagnostics?: SearchDiagnostics | null;
+  suggested_revised_claims?: string[];
+  normalized_claim?: string | null;
+  corrections_applied?: string[];
+  candidates_by_role?: Record<string, number>;
+  // Claim ladder support indicators (Change 4)
+  direct_support_found?: boolean;
+  usable_indirect_support_found?: boolean;
+  indirect_support_explanation?: string | null;
+  // Evidence Set Builder (Parts 2 + 6)
+  weak_leads?: WeakLead[];
+  unfilled_slots?: string[];
+  evidence_set_plan?: EvidenceSetPlan | null;
+}
+
+export interface ResearchConfigResponse {
+  search_provider: string;
+  search_configured: boolean;
+  url_extraction_available: boolean;
+  card_builder_available: boolean;
 }

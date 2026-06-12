@@ -261,6 +261,7 @@ def generate_tournament_workout(
     drills: list[dict],
     delivery_metrics: Optional[dict] = None,
     evidence_checks: Optional[list[dict]] = None,
+    block_coverage_checks: Optional[list[dict]] = None,
 ) -> dict[str, Any]:
     """
     Build a 3–5 step tournament prep workout from existing report data.
@@ -397,6 +398,48 @@ def generate_tournament_workout(
                 success_criteria=success,
                 estimated_minutes=3,
                 source="evidence",
+            )
+
+    # ── 3.5 Block coverage gap ────────────────────────────────────────────
+    if block_coverage_checks and "block_application" not in used_focuses and len(steps) < 4:
+        gap_checks = [
+            c for c in block_coverage_checks
+            if c.get("status") in ("missing", "partially_covered")
+        ]
+        if gap_checks:
+            worst = sorted(
+                gap_checks,
+                key=lambda c: 0 if c.get("status") == "missing" else 1,
+            )[0]
+            status = worst.get("status", "missing")
+            claim = (worst.get("claim_text") or "")[:120]
+            missing_piece = worst.get("missing_piece") or "Apply the full block response including warrant and impact."
+            if status == "missing":
+                problem = f"A relevant block exists for '{claim}' but your speech did not use it."
+                instruction = (
+                    "Open your blockfile in the Evidence Library. "
+                    "Find the matching block for this opponent argument. "
+                    "Deliver the block in 45 seconds: core response → warrant → impact comparison. "
+                    "Do not read directly — paraphrase from memory."
+                )
+                success = "Response includes core counter-argument, warrant explaining why, and impact comparison."
+            else:
+                problem = f"Your response to '{claim}' is incomplete — key block elements are missing."
+                instruction = (
+                    f"Identify the missing piece: {missing_piece} "
+                    "Re-deliver the response adding the missing element. "
+                    "Practice until both the response and warrant are present."
+                )
+                success = "Response includes warrant and impact from the uploaded block. No overclaiming."
+            add_step(
+                title="Block Application Rep",
+                category="blockfile",
+                focus="block_application",
+                problem=problem,
+                instruction=instruction,
+                success_criteria=success,
+                estimated_minutes=4,
+                source="feedback",
             )
 
     # ── 4. Severe delivery issue ──────────────────────────────────────────

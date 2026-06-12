@@ -37,17 +37,19 @@ interface TournamentWorkoutPanelProps {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  argument: "text-lav",
-  evidence: "text-warn",
-  delivery: "text-cyan",
-  rerecord: "text-ok",
+  argument:  "text-lav",
+  evidence:  "text-warn",
+  delivery:  "text-cyan",
+  rerecord:  "text-ok",
+  blockfile: "text-ink",
 };
 
 const CATEGORY_BG: Record<string, string> = {
-  argument: "bg-lav/8 border-lav/20",
-  evidence: "bg-warn/8 border-warn/20",
-  delivery: "bg-cyan/8 border-cyan/20",
-  rerecord: "bg-ok/8 border-ok/20",
+  argument:  "bg-lav/8 border-lav/20",
+  evidence:  "bg-warn/8 border-warn/20",
+  delivery:  "bg-cyan/8 border-cyan/20",
+  rerecord:  "bg-ok/8 border-ok/20",
+  blockfile: "bg-surface-2 border-hairline-strong",
 };
 
 function StepCard({

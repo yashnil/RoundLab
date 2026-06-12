@@ -271,6 +271,7 @@ async def list_documents(user_id: str = Query(...)) -> list[DocumentRow]:
             .table("documents")
             .select("*")
             .eq("user_id", user_id)
+            .neq("storage_path", "_research")
             .order("created_at", desc=True)
             .execute()
         )

@@ -1,3 +1,6 @@
+from typing import Optional
+
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -7,8 +10,44 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     cors_origins: str = "http://localhost:3000"
     environment: str = "development"
+    tavily_api_key: str = ""
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    # Optional provider keys — absence never breaks local dev
+    exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
+    firecrawl_api_key: Optional[str] = Field(default=None, alias="FIRECRAWL_API_KEY")
+    cohere_api_key: Optional[str] = Field(default=None, alias="COHERE_API_KEY")
+    jina_api_key: Optional[str] = Field(default=None, alias="JINA_API_KEY")
+
+    # Research search tuning knobs
+    research_search_max_queries: int = Field(default=12, alias="RESEARCH_SEARCH_MAX_QUERIES")
+    research_search_max_urls: int = Field(default=20, alias="RESEARCH_SEARCH_MAX_URLS")
+    research_search_max_extracted_pages: int = Field(default=12, alias="RESEARCH_SEARCH_MAX_EXTRACTED_PAGES")
+    research_search_max_classified_chunks: int = Field(default=40, alias="RESEARCH_SEARCH_MAX_CLASSIFIED_CHUNKS")
+    research_enable_llm_role_classifier: bool = Field(default=True, alias="RESEARCH_ENABLE_LLM_ROLE_CLASSIFIER")
+    research_enable_strict_card_validation: bool = Field(default=True, alias="RESEARCH_ENABLE_STRICT_CARD_VALIDATION")
+
+    # Evidence Set Builder — per-slot planning + search (Parts 1-2)
+    research_enable_slot_planner: bool = Field(default=True, alias="RESEARCH_ENABLE_SLOT_PLANNER")
+    research_max_evidence_slots: int = Field(default=5, alias="RESEARCH_MAX_EVIDENCE_SLOTS")
+
+    # Optional Zotero Translation Server for citation metadata (Part 3)
+    zotero_translation_server_url: Optional[str] = Field(
+        default=None, alias="ZOTERO_TRANSLATION_SERVER_URL"
+    )
+    research_enable_zotero: bool = Field(default=False, alias="RESEARCH_ENABLE_ZOTERO")
+
+    model_config = {"env_file": ".env", "extra": "ignore", "populate_by_name": True}
 
 
 settings = Settings()
+
+
+def get_tavily_api_key() -> Optional[str]:
+    """Return the Tavily API key if configured, or None.
+
+    Reads from the pydantic-settings object (which loads from .env in dev
+    and from actual environment variables in production).
+    Never logs or exposes the key value.
+    """
+    key = settings.tavily_api_key.strip()
+    return key if key else None

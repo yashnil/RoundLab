@@ -29,9 +29,10 @@ import { getSpeechStatusConfig } from "@/lib/debateHelpers";
 import DashboardMissionPanel, { DashboardMissionPanelSkeleton } from "@/components/DashboardMissionPanel";
 import DashboardCockpitBand from "@/components/DashboardCockpitBand";
 import FirstRunCommandCenter from "@/components/FirstRunCommandCenter";
-import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary, Workout } from "@/types";
+import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary, Workout, BlockCoverageResponse } from "@/types";
 import { deriveWorkoutProgress, getNextIncompleteStep } from "@/lib/workoutHelpers";
 import { deriveDeliveryFocus, deliveryScoreColor, getPacingBandDisplay } from "@/lib/deliveryHelpers";
+import { deriveBlockReadiness } from "@/lib/blockfileHelpers";
 
 const TYPE_LABEL: Record<string, string> = {
   constructive: "Constructive", rebuttal: "Rebuttal", summary: "Summary",
@@ -197,6 +198,8 @@ export default function DashboardPage() {
   const [pilotSummary,  setPilotSummary] = useState<PilotSummary | null>(null);
   const [latestDelivery, setLatestDelivery] = useState<DeliveryMetrics | null>(null);
   const [latestWorkout, setLatestWorkout] = useState<Workout | null>(null);
+  const [blockEntryCount, setBlockEntryCount] = useState(0);
+  const [latestBlockCoverage, setLatestBlockCoverage] = useState<BlockCoverageResponse | null>(null);
   const [loading,       setLoading]      = useState(true);
   const [err,           setErr]          = useState("");
   const [del,           setDel]          = useState<Speech | null>(null);
@@ -235,6 +238,18 @@ export default function DashboardPage() {
         apiFetch<Workout[]>(`/workouts?user_id=${data.user.id}`)
           .then((ws) => { if (ws.length > 0) setLatestWorkout(ws[0]); })
           .catch(() => {});
+
+        // Block entries count — best-effort
+        apiFetch<Array<unknown>>(`/block-entries?user_id=${data.user.id}`)
+          .then((entries) => setBlockEntryCount(entries.length))
+          .catch(() => {});
+
+        // Block coverage for latest speech — best-effort
+        if (speechesData.length > 0) {
+          apiFetch<BlockCoverageResponse>(
+            `/speeches/${speechesData[0].id}/block-coverage?user_id=${data.user.id}`,
+          ).then(setLatestBlockCoverage).catch(() => {});
+        }
       })
       .catch(() => setErr("Could not load your data. Please refresh and try again."))
       .finally(() => setLoading(false));
@@ -402,6 +417,56 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
           )}
+
+          {/* Blockfile Readiness card — shown when user has block entries or coverage data */}
+          {!loading && (blockEntryCount > 0 || latestBlockCoverage !== null) && (() => {
+            const readiness = deriveBlockReadiness(blockEntryCount, latestBlockCoverage);
+            const hasMissing = (latestBlockCoverage?.missing_count ?? 0) > 0;
+            const hasPartial = (latestBlockCoverage?.partially_covered_count ?? 0) > 0;
+            return (
+              <motion.div variants={staggerChild}>
+                <Card className="border-hairline bg-surface-1">
+                  <CardContent className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-2 border border-hairline">
+                        <BookOpen size={13} className={hasMissing ? "text-danger" : hasPartial ? "text-warn" : "text-ok"} />
+                      </div>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <span className="section-stamp">Block readiness</span>
+                        <p className="text-xs font-semibold text-ink">
+                          {readiness.totalEntries} block{readiness.totalEntries !== 1 ? "s" : ""}
+                          {readiness.hasCoverage && latestBlockCoverage && (
+                            <> · {latestBlockCoverage.covered_count}/{latestBlockCoverage.checks.length} covered</>
+                          )}
+                        </p>
+                        {readiness.strongestGap && (
+                          <p className="text-xs text-ink-subtle truncate">{readiness.strongestGap}</p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {speeches[0] && (
+                          <Link
+                            href={`/speech/${speeches[0].id}#block-coverage`}
+                            className="flex items-center gap-0.5 text-[10px] text-lav font-medium hover:underline"
+                          >
+                            Check <ChevronRight size={10} />
+                          </Link>
+                        )}
+                        {blockEntryCount === 0 && (
+                          <Link
+                            href="/evidence"
+                            className="flex items-center gap-0.5 text-[10px] text-lav font-medium hover:underline"
+                          >
+                            Upload <ChevronRight size={10} />
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })()}
 
           {/* Badges — shown separately below the mission panel */}
           {!loading && progress && progress.badges.length > 0 && (

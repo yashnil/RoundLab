@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Check, ChevronDown, ChevronUp, FileText,
   Mic, Pencil, RefreshCw, Trash2, Upload, ThumbsUp, ThumbsDown, Target, Copy,
-  ShieldAlert, Sparkles, Share2, Printer,
+  ShieldAlert, Sparkles, Share2, Printer, ArrowRight, Swords,
 } from "lucide-react";
 import { useCopy } from "@/lib/useCopy";
 import { deriveAnalysisRecoveryState, isJobActive } from "@/lib/jobHelpers";
@@ -42,11 +42,13 @@ import ConfusionReport from "@/components/ConfusionReport";
 import DeliveryCoachPanel, { DeliveryCoachPanelEmpty } from "@/components/DeliveryCoachPanel";
 import ShareReportModal from "@/components/ShareReportModal";
 import TournamentWorkoutPanel from "@/components/TournamentWorkoutPanel";
+import BlockCoveragePanel from "@/components/BlockCoveragePanel";
 import { logEvent } from "@/lib/analytics";
+import { deriveNextBestAction } from "@/lib/blockfileHelpers";
 import { formatPracticePlan, copyToClipboard } from "@/lib/reportHelpers";
 import { getCoachNote, deriveFlowCoachNoteType, getPrimaryIssue, deriveEvidenceRiskSummary } from "@/lib/debateHelpers";
 import { initEditArgs, isFlowCorrectedAndNeedsRegen } from "@/lib/flowEditHelpers";
-import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, DeliveryMetrics, Drill, DrillStatus, FeedbackReport, Speech, Transcript, Workout } from "@/types";
+import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, DeliveryMetrics, Drill, DrillStatus, FeedbackReport, Speech, Transcript, Workout, BlockCoverageResponse } from "@/types";
 import type { DebateIssue, ClaimEvidenceCheck, EvidenceCheckResult, EvidenceDocument } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
 
@@ -107,35 +109,37 @@ function getBestMime(): { mimeType: string; ext: string } {
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function StepHeader({ n, title, done, aside }: {
-  n: number; title: string; done: boolean; aside?: React.ReactNode;
+  n?: number; title: string; done: boolean; aside?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-2.5">
-        <AnimatePresence mode="wait">
-          {done ? (
-            <motion.span
-              key="done"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={T.snap}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lav text-white"
-            >
-              <Check size={10} strokeWidth={2.5} />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="pending"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={T.snap}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-hairline-strong text-[11px] font-bold text-ink-faint"
-              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
-            >
-              {n}
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {(done || n !== undefined) && (
+          <AnimatePresence mode="wait">
+            {done ? (
+              <motion.span
+                key="done"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={T.snap}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lav text-white"
+              >
+                <Check size={10} strokeWidth={2.5} />
+              </motion.span>
+            ) : (
+              <motion.span
+                key="pending"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={T.snap}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[3px] border border-hairline-strong text-[11px] font-bold text-ink-faint"
+                style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+              >
+                {n}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        )}
         <p className="text-heading text-ink">{title}</p>
       </div>
       {aside}
@@ -554,6 +558,10 @@ export default function SpeechPage() {
   // Tournament prep workout (null = not generated yet, undefined = loading)
   const [workout, setWorkout] = useState<Workout | null | undefined>(undefined);
 
+  // Block coverage (null = not run yet, undefined = loading)
+  const [blockCoverage, setBlockCoverage] = useState<BlockCoverageResponse | null | undefined>(undefined);
+  const [hasBlockEntries, setHasBlockEntries] = useState(false);
+
   const mrRef   = useRef<MediaRecorder | null>(null);
   const chunks  = useRef<Blob[]>([]);
   const stream  = useRef<MediaStream | null>(null);
@@ -618,6 +626,16 @@ export default function SpeechPage() {
         apiFetch<Workout>(`/speeches/${speechId}/workout?user_id=${uid}`)
           .then((w) => setWorkout(w))
           .catch(() => setWorkout(null));
+
+        // Block coverage — best-effort; null = not run yet
+        apiFetch<BlockCoverageResponse>(`/speeches/${speechId}/block-coverage?user_id=${uid}`)
+          .then((c) => setBlockCoverage(c))
+          .catch(() => setBlockCoverage(null));
+
+        // Block entries — just need to know if any exist for this user
+        apiFetch<Array<unknown>>(`/block-entries?user_id=${uid}`)
+          .then((entries) => setHasBlockEntries(entries.length > 0))
+          .catch(() => {});
 
         // Recovery: check for in-progress or recently-failed analysis jobs
         apiFetch<AnalysisJob[]>(`/speeches/${speechId}/jobs?user_id=${uid}`)
@@ -1742,11 +1760,62 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
+                {/* ── Practice Hub — groups Delivery Coach, Workout, Block Coverage, Drills ── */}
+                {feedback && !analyzingUnified && (
+                  <div className="flex items-center gap-2 px-1 pt-1">
+                    <Swords size={13} className="shrink-0 text-ink-faint" />
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-faint">
+                      Practice Hub
+                    </p>
+                  </div>
+                )}
+
+                {/* Next best action */}
+                {feedback && !analyzingUnified && userId && (
+                  (() => {
+                    const action = deriveNextBestAction({
+                      workout: workout ?? null,
+                      drillsIncomplete: drills.filter(d => d.status === "assigned").length,
+                      hasEvidenceRisk:
+                        freshResults.some(r => r.support_level === "unsupported") ||
+                        savedChecks.some(c => c.support_level === "unsupported"),
+                      hasMissingBlocks: (blockCoverage?.missing_count ?? 0) > 0,
+                      hasBlockEntries,
+                      hasFeedback: true,
+                      speechStatus: speech?.status,
+                      speechId,
+                    });
+                    return (
+                      <WorkspaceCard key="next-best-action">
+                        <CardContent className="px-5 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col gap-0.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
+                                Next best action
+                              </p>
+                              <p className="text-sm font-semibold text-ink">{action.label}</p>
+                              <p className="text-xs text-ink-subtle">{action.description}</p>
+                            </div>
+                            {action.href && (
+                              <a
+                                href={action.href}
+                                className="shrink-0 flex items-center gap-1 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-3 transition-colors"
+                              >
+                                Go <ArrowRight size={11} />
+                              </a>
+                            )}
+                          </div>
+                        </CardContent>
+                      </WorkspaceCard>
+                    );
+                  })()
+                )}
+
                 {/* Delivery Coach Panel — visible after coaching report is done */}
                 {feedback && !analyzingUnified && deliveryLoaded && (
                   <WorkspaceCard key="delivery-coach">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={5} title="Delivery Coach" done={!!deliveryMetrics} aside={
+                      <StepHeader title="Delivery Coach" done={!!deliveryMetrics} aside={
                         deliveryMetrics?.delivery_score !== null && deliveryMetrics?.delivery_score !== undefined ? (
                           <Badge variant="indigo">{deliveryMetrics.delivery_score}/100 delivery</Badge>
                         ) : undefined
@@ -1764,7 +1833,7 @@ export default function SpeechPage() {
                 {feedback && !analyzingUnified && userId && (
                   <WorkspaceCard key="workout">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={6} title="Tournament Prep Workout" done={workout?.status === "completed"} />
+                      <StepHeader title="Tournament Prep Workout" done={workout?.status === "completed"} />
                       <TournamentWorkoutPanel
                         speechId={speechId}
                         userId={userId}
@@ -1776,13 +1845,28 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
+                {/* Block Coverage */}
+                {feedback && !analyzingUnified && userId && (
+                  <WorkspaceCard key="block-coverage">
+                    <CardContent id="block-coverage" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
+                      <StepHeader title="Block Coverage" done={!!blockCoverage && blockCoverage.covered_count === blockCoverage.checks.length && blockCoverage.checks.length > 0} />
+                      <BlockCoveragePanel
+                        speechId={speechId}
+                        userId={userId}
+                        coverage={blockCoverage}
+                        hasBlockEntries={hasBlockEntries}
+                        onCoverageChange={setBlockCoverage}
+                      />
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
                 {/* Recommended Practice / Drills */}
                 {drills.length > 0 ? (
                   <WorkspaceCard key="drills-done">
                     {/* id="drills" is the anchor target for ReportVerdictPanel and PracticeLoopCTA #drills hrefs */}
                     <CardContent id="drills" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
                       <StepHeader
-                        n={7}
                         title="Recommended Practice"
                         done
                         aside={
@@ -1833,7 +1917,7 @@ export default function SpeechPage() {
                 ) : feedback && (
                   <WorkspaceCard key="drills-empty">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={7} title="Recommended Practice" done={false} />
+                      <StepHeader title="Recommended Practice" done={false} />
                       <EmptyStateCard
                         icon={Target}
                         title="No practice drills yet"
@@ -2410,11 +2494,21 @@ export default function SpeechPage() {
                   )
                 )}
 
+                {/* ── Practice Hub header (second render path) ── */}
+                {feedback && !analyzingUnified && (
+                  <div className="flex items-center gap-2 px-1 pt-1">
+                    <Swords size={13} className="shrink-0 text-ink-faint" />
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-faint">
+                      Practice Hub
+                    </p>
+                  </div>
+                )}
+
                 {/* Delivery Coach Panel (second render path) */}
                 {feedback && !analyzingUnified && deliveryLoaded && (
                   <WorkspaceCard key="delivery-coach-2">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={5} title="Delivery Coach" done={!!deliveryMetrics} aside={
+                      <StepHeader title="Delivery Coach" done={!!deliveryMetrics} aside={
                         deliveryMetrics?.delivery_score !== null && deliveryMetrics?.delivery_score !== undefined ? (
                           <Badge variant="indigo">{deliveryMetrics.delivery_score}/100 delivery</Badge>
                         ) : undefined
@@ -2432,7 +2526,7 @@ export default function SpeechPage() {
                 {feedback && !analyzingUnified && userId && (
                   <WorkspaceCard key="workout-2">
                     <CardContent className="flex flex-col gap-4 px-5 py-5">
-                      <StepHeader n={6} title="Tournament Prep Workout" done={workout?.status === "completed"} />
+                      <StepHeader title="Tournament Prep Workout" done={workout?.status === "completed"} />
                       <TournamentWorkoutPanel
                         speechId={speechId}
                         userId={userId}
@@ -2444,7 +2538,23 @@ export default function SpeechPage() {
                   </WorkspaceCard>
                 )}
 
-                {/* Step 7: Drills */}
+                {/* Block Coverage (second render path) */}
+                {feedback && !analyzingUnified && userId && (
+                  <WorkspaceCard key="block-coverage-2">
+                    <CardContent id="block-coverage-2" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
+                      <StepHeader title="Block Coverage" done={!!blockCoverage && blockCoverage.covered_count === blockCoverage.checks.length && blockCoverage.checks.length > 0} />
+                      <BlockCoveragePanel
+                        speechId={speechId}
+                        userId={userId}
+                        coverage={blockCoverage}
+                        hasBlockEntries={hasBlockEntries}
+                        onCoverageChange={setBlockCoverage}
+                      />
+                    </CardContent>
+                  </WorkspaceCard>
+                )}
+
+                {/* Drills */}
                 {feedback && (
                   genDrills ? (
                     <motion.div key="drills-loading" {...fadeUp(0)}>
@@ -2454,7 +2564,6 @@ export default function SpeechPage() {
                     <WorkspaceCard key="drills-done">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
                         <StepHeader
-                          n={7}
                           title="Practice Drills"
                           done
                           aside={
@@ -2505,7 +2614,7 @@ export default function SpeechPage() {
                   ) : (
                     <WorkspaceCard key="drills-empty">
                       <CardContent className="flex flex-col gap-4 px-5 py-5">
-                        <StepHeader n={7} title="Practice Drills" done={false} />
+                        <StepHeader title="Practice Drills" done={false} />
                         <div className="flex items-start gap-3 rounded-lg border border-lav/20 bg-lav/5 px-4 py-3">
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-ink">Create personalized drills</p>
@@ -2531,12 +2640,7 @@ export default function SpeechPage() {
                 <CardContent className="flex flex-col gap-4 px-5 py-5">
                   {/* Section header */}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-hairline-strong text-xs font-bold text-ink-faint">
-                        E
-                      </span>
-                      <p className="text-heading text-ink">Evidence Support</p>
-                    </div>
+                    <p className="text-heading text-ink">Evidence Support</p>
                     {hasLibrary && !checkingEvidence && (
                       <Button
                         size="sm"

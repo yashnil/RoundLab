@@ -42,6 +42,7 @@ export function getWorkoutStepCategoryLabel(category: string): string {
     evidence:  "Evidence",
     delivery:  "Delivery",
     rerecord:  "Re-record",
+    blockfile: "Block",
   };
   return labels[category] ?? category;
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { User, Users, Plus, Trophy } from "lucide-react";
-import PageShell from "@/components/PageShell";
+import AppShell from "@/components/shell/AppShell";
 import ActionCard from "@/components/ActionCard";
 import SectionHeader from "@/components/SectionHeader";
 import { createClient } from "@/lib/supabase";
@@ -57,7 +57,7 @@ export default function LearnPage() {
   if (!userId) return null;
 
   return (
-    <PageShell maxWidth="5xl">
+    <AppShell maxWidth="5xl">
       <div className="flex flex-col gap-8 py-12">
         {/* Header */}
         <div className="text-center">
@@ -131,6 +131,6 @@ export default function LearnPage() {
           Not sure which to choose? Start with Individual Practice to build foundational skills.
         </motion.p>
       </div>
-    </PageShell>
+    </AppShell>
   );
 }

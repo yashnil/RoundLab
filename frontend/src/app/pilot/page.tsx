@@ -16,7 +16,7 @@ import {
   ArrowLeft, BarChart2, TrendingUp, TrendingDown, Minus,
   CheckCircle2, Circle, MessageSquare, Zap,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import PilotChecklist from "@/components/PilotChecklist";
 import SkillTrendCard from "@/components/SkillTrendCard";
 import { Card, CardContent } from "@/components/ui/card";
@@ -103,9 +103,7 @@ export default function PilotPage() {
   }, [router]);
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <motion.div
           className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6"
           variants={staggerParent(0.07, 0.05)}
@@ -262,7 +260,6 @@ export default function PilotPage() {
           </motion.div>
 
         </motion.div>
-      </main>
-    </>
+    </AppShell>
   );
 }

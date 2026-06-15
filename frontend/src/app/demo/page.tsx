@@ -18,7 +18,7 @@ import {
   AlertCircle, ArrowRight, CheckSquare, ChevronDown, ChevronUp,
   FileText, FlaskConical, Target, ThumbsUp, TrendingUp,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import FlowBoard from "@/components/FlowBoard";
 import { fadeUp, EASE } from "@/lib/motion";
 import {
@@ -87,9 +87,7 @@ export default function DemoPage() {
   }> | undefined) ?? [];
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <div className="mx-auto flex max-w-3xl flex-col gap-7 px-4 py-8 sm:px-6">
 
           {/* ── Demo banner ──────────────────────────────────────────────── */}
@@ -388,7 +386,6 @@ export default function DemoPage() {
           </motion.div>
 
         </div>
-      </main>
-    </>
+    </AppShell>
   );
 }

@@ -7,7 +7,7 @@ import {
   AlertCircle, CheckCircle2, X, BookOpen, Loader2, Sparkles,
   Link2, ClipboardPaste, Globe,
 } from "lucide-react";
-import PageShell from "@/components/PageShell";
+import AppShell from "@/components/shell/AppShell";
 import SectionHeader from "@/components/SectionHeader";
 import { EmptyEvidenceGlyph } from "@/components/EmptyStateGlyphs";
 import { Button } from "@/components/ui/button";
@@ -933,7 +933,7 @@ export default function EvidencePage() {
   const parsedCount = documents.filter((d) => d.status === "parsed").length;
 
   return (
-    <PageShell maxWidth="7xl">
+    <AppShell maxWidth="7xl">
       {/* ── Evidence Studio Modal ─────────────────────────────────────────────── */}
       {studioCard && (
         <EvidenceStudioModal
@@ -1877,7 +1877,7 @@ export default function EvidencePage() {
         </> /* end library tab */}
 
       </div>
-    </PageShell>
+    </AppShell>
   );
 }
 

@@ -9,7 +9,7 @@ import {
   MoreHorizontal, Trash2, ArrowUpRight, ArrowRight,
   BookOpen, Zap, Users, Play, BarChart2, Dumbbell, ChevronRight,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import EmptyState from "@/components/EmptyState";
 import DeleteDialog from "@/components/DeleteDialog";
 import PilotChecklist from "@/components/PilotChecklist";
@@ -278,9 +278,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <motion.div
           className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-7"
           variants={staggerParent(0.07, 0.05)}
@@ -814,7 +812,6 @@ export default function DashboardPage() {
             </motion.section>
           )}
         </motion.div>
-      </main>
 
       <DeleteDialog
         open={del !== null}
@@ -825,6 +822,6 @@ export default function DashboardPage() {
         isDeleting={deleting}
         error={deleteErr}
       />
-    </>
+    </AppShell>
   );
 }

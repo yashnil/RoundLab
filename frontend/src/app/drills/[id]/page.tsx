@@ -17,7 +17,7 @@ import {
   Target, BookOpen, Zap, Clock, Headphones,
   ChevronDown, ChevronUp, ThumbsUp, AlertCircle, RefreshCw,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import CoachMarginNote from "@/components/CoachMarginNote";
 import RoundLabJourneyRail from "@/components/RoundLabJourneyRail";
 import DrillAttemptRecorder from "@/components/DrillAttemptRecorder";
@@ -357,9 +357,7 @@ export default function DrillPage() {
   const tlLabel = formatTimeLimit(drill?.time_limit_seconds);
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6">
 
           {/* ── Back link ─────────────────────────────────────────────── */}
@@ -727,7 +725,6 @@ export default function DrillPage() {
             </AnimatePresence>
           )}
         </div>
-      </main>
-    </>
+    </AppShell>
   );
 }

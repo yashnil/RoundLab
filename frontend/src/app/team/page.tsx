@@ -7,7 +7,7 @@ import {
   Users, Copy, Check, TrendingUp, Mic, Target, Headphones,
   UserPlus, Plus, MessageSquare, ChevronRight,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import EmptyState from "@/components/EmptyState";
 import MetricCard from "@/components/MetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -173,9 +173,7 @@ export default function TeamPage() {
 
   if (loading) {
     return (
-      <>
-        <AppNav />
-        <main className="min-h-screen bg-canvas">
+      <AppShell maxWidth="full" bare>
           <div className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-9">
             <Skeleton className="h-6 w-48 rounded-lg" />
             <Skeleton className="h-4 w-60 rounded-lg" />
@@ -187,30 +185,24 @@ export default function TeamPage() {
               </Card>
             ))}
           </div>
-        </main>
-      </>
+        </AppShell>
     );
   }
 
   if (err) {
     return (
-      <>
-        <AppNav />
-        <main className="min-h-screen bg-canvas">
+      <AppShell maxWidth="full" bare>
           <div className="mx-auto max-w-4xl px-6 py-16">
             <p className="text-sm text-danger">{err}</p>
           </div>
-        </main>
-      </>
+        </AppShell>
     );
   }
 
   // No teams yet - show create/join cards
   if (teams.length === 0) {
     return (
-      <>
-        <AppNav />
-        <main className="min-h-screen bg-canvas">
+      <AppShell maxWidth="full" bare>
           <motion.div
             className="mx-auto flex max-w-4xl flex-col gap-7 px-6 py-9"
             variants={staggerParent(0.07, 0.05)}
@@ -300,16 +292,13 @@ export default function TeamPage() {
               </Card>
             </motion.div>
           </motion.div>
-        </main>
-      </>
+        </AppShell>
     );
   }
 
   // Has teams - show team hub
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <motion.div
           className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-7"
           variants={staggerParent(0.07, 0.05)}
@@ -626,7 +615,6 @@ export default function TeamPage() {
             </Card>
           </motion.div>
         </motion.div>
-      </main>
-    </>
+      </AppShell>
   );
 }

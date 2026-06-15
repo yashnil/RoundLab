@@ -13,7 +13,7 @@
  */
 
 import { CheckCircle2, XCircle, TrendingUp, AlertCircle, FlaskConical } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import { SAMPLE_EVAL_RESULTS, type EvalSampleResult } from "@/lib/eval_results_fixture";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -78,9 +78,7 @@ export default function EvalsPage() {
   const passRate = r.total_fixtures > 0 ? r.passed / r.total_fixtures : 0;
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
 
           {/* Dev banner */}
@@ -202,7 +200,6 @@ export default function EvalsPage() {
           </div>
 
         </div>
-      </main>
-    </>
+    </AppShell>
   );
 }

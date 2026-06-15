@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import {
   Mic, GitBranch, FileText, ArrowRight, Target, Zap, RefreshCw,
 } from "lucide-react";
-import AppNav from "@/components/AppNav";
+import AppShell from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -161,9 +161,7 @@ export default function SessionPage() {
   }
 
   return (
-    <>
-      <AppNav />
-      <main className="min-h-screen bg-canvas">
+    <AppShell maxWidth="full" bare>
         <div className="mx-auto max-w-5xl px-5 py-10 sm:px-6">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-[2fr_3fr] lg:gap-14">
 
@@ -397,7 +395,6 @@ export default function SessionPage() {
 
           </div>
         </div>
-      </main>
-    </>
+    </AppShell>
   );
 }

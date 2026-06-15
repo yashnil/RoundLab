@@ -90,6 +90,15 @@
   --color-ok:     oklch(0.620 0.170 145);   /* #27a644 success */
   --color-warn:   oklch(0.750 0.155 74);    /* amber   warning */
   --color-danger: oklch(0.640 0.215 25);    /* red     error   */
+  --color-info:   oklch(0.620 0.120 235);   /* blue    informational */
+
+  /* ── Sidebar surface (theme-aware, set per theme below) ─────────────────── */
+  --color-sidebar:         var(--theme-sidebar);
+  --color-sidebar-border:  var(--theme-sidebar-border);
+
+  /* ── Debate side colors (Pro / Con) — never the sole status signal ──────── */
+  --color-pro:    oklch(0.620 0.150 165);   /* teal-green  affirmative */
+  --color-con:    oklch(0.600 0.180 25);    /* warm red    negative    */
 
   /* ── Argument type colors (debate-specific, consistent) ─────────────────── */
   --color-blue:      oklch(0.560 0.150 250);
@@ -141,6 +150,10 @@
   --theme-ink-muted:       oklch(0.860 0.008 264);   /* #d0d6e0  secondary  */
   --theme-ink-subtle:      oklch(0.630 0.007 264);   /* #8a8f98  tertiary   */
   --theme-ink-faint:       oklch(0.490 0.006 264);   /* #62666d  disabled   */
+
+  /* Sidebar — slightly deeper than canvas for a distinct nav rail */
+  --theme-sidebar:         oklch(0.090 0.002 264);
+  --theme-sidebar-border:  oklch(0.190 0.005 264);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -179,6 +192,10 @@
   --theme-ink-muted:       oklch(0.250 0.006 264);   /* dark gray       */
   --theme-ink-subtle:      oklch(0.450 0.006 264);   /* medium gray     */
   --theme-ink-faint:       oklch(0.600 0.005 264);   /* light gray      */
+
+  /* Sidebar — faint tint off the off-white canvas */
+  --theme-sidebar:         oklch(0.975 0.001 264);
+  --theme-sidebar-border:  oklch(0.900 0.003 264);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

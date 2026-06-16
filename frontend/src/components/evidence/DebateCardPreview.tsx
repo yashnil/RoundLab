@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { SelectedSpan } from "@/types";
 
 // ── Card body font stack ──────────────────────────────────────────────────────
@@ -33,6 +32,68 @@ export function CardBodyWithEllipses({ text }: { text: string }) {
 
 // ── Highlighted + underlined body ─────────────────────────────────────────────
 
+/** Does any span fully cover the half-open range [a, b)? */
+function rangeCovered(arr: SelectedSpan[], a: number, b: number): boolean {
+  return arr.some((s) => s.start <= a && s.end >= b);
+}
+
+export interface MarkupSegment {
+  text: string;
+  highlighted: boolean;
+  bold: boolean;
+  underlined: boolean;
+  italic: boolean;
+}
+
+/**
+ * Split `text` at every span boundary, then resolve which of
+ * highlight/bold/underline/italic covers each segment. This boundary-splitting
+ * approach is what lets the four styles render independently AND combine on the
+ * same run of text (highlight+bold, bold+underline, all four, etc.). Exported
+ * for unit testing.
+ */
+export function computeMarkupSegments(
+  text: string,
+  ranges: {
+    highlight?: SelectedSpan[];
+    bold?: SelectedSpan[];
+    underline?: SelectedSpan[];
+    italic?: SelectedSpan[];
+  },
+): MarkupSegment[] {
+  const highlight = ranges.highlight ?? [];
+  const bold = ranges.bold ?? [];
+  const underline = ranges.underline ?? [];
+  const italic = ranges.italic ?? [];
+
+  const clamp = (n: number) => Math.max(0, Math.min(n, text.length));
+  const points = new Set<number>([0, text.length]);
+  for (const arr of [highlight, bold, underline, italic]) {
+    for (const s of arr) {
+      points.add(clamp(s.start));
+      points.add(clamp(s.end));
+    }
+  }
+  const bounds = [...points].sort((a, b) => a - b);
+
+  const segments: MarkupSegment[] = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const a = bounds[i];
+    const b = bounds[i + 1];
+    if (b <= a) continue;
+    const segText = text.slice(a, b);
+    if (!segText) continue;
+    segments.push({
+      text: segText,
+      highlighted: rangeCovered(highlight, a, b),
+      bold: rangeCovered(bold, a, b),
+      underlined: rangeCovered(underline, a, b),
+      italic: rangeCovered(italic, a, b),
+    });
+  }
+  return segments;
+}
+
 export function HighlightedBodyWithEllipses({
   text,
   spans,
@@ -48,7 +109,14 @@ export function HighlightedBodyWithEllipses({
   italicSpans?: SelectedSpan[];
   deemphasizeUnmarked?: boolean;
 }) {
-  if (!spans || spans.length === 0) {
+  const highlight = spans ?? [];
+  const bold = boldSpans ?? [];
+  const underline = underlineSpans ?? [];
+  const italic = italicSpans ?? [];
+
+  const hasAny =
+    highlight.length > 0 || bold.length > 0 || underline.length > 0 || italic.length > 0;
+  if (!hasAny) {
     return (
       <p className="text-[16px] leading-[1.75] text-gray-700 break-words whitespace-pre-wrap" style={CARD_BODY_STYLE}>
         <CardBodyWithEllipses text={text} />
@@ -56,76 +124,42 @@ export function HighlightedBodyWithEllipses({
     );
   }
 
-  // Build per-span lookup sets using "start:end" keys
-  const boldSet = new Set(boldSpans.map((s) => `${s.start}:${s.end}`));
-  const underSet = new Set(underlineSpans.map((s) => `${s.start}:${s.end}`));
-  const italicSet = new Set(italicSpans.map((s) => `${s.start}:${s.end}`));
-
-  // Also check if any non-highlight italic spans exist (user may have applied italic
-  // to unhighlighted text — we render those as plain italic spans in the non-highlighted path)
-  const allItalicRanges = italicSpans.map((s) => ({ start: s.start, end: s.end }));
-
-  const sorted = [...spans].sort((a, b) => a.start - b.start);
-  const segments: {
-    text: string;
-    highlighted: boolean;
-    bold: boolean;
-    underlined: boolean;
-    italic: boolean;
-  }[] = [];
-  let cursor = 0;
-
-  for (const span of sorted) {
-    const s = Math.max(span.start, cursor);
-    const e = Math.min(span.end, text.length);
-    if (s > cursor) {
-      // Non-highlighted segment — check if any italic span covers it
-      const segText = text.slice(cursor, s);
-      const midPos = cursor + Math.floor(segText.length / 2);
-      const isItalic = allItalicRanges.some((r) => r.start <= cursor && r.end >= s);
-      segments.push({ text: segText, highlighted: false, bold: false, underlined: false, italic: isItalic });
-    }
-    if (s < e) {
-      const key = `${span.start}:${span.end}`;
-      segments.push({
-        text: text.slice(s, e),
-        highlighted: true,
-        bold: boldSet.has(key),
-        underlined: underSet.has(key),
-        italic: italicSet.has(key),
-      });
-    }
-    cursor = Math.max(cursor, e);
-  }
-  if (cursor < text.length) {
-    const segText = text.slice(cursor);
-    const isItalic = allItalicRanges.some((r) => r.start <= cursor && r.end >= text.length);
-    segments.push({ text: segText, highlighted: false, bold: false, underlined: false, italic: isItalic });
-  }
+  // Boundary-split so the four styles render independently and combine.
+  const segments = computeMarkupSegments(text, { highlight, bold, underline, italic });
 
   return (
     <p className="text-[16px] leading-[1.75] break-words whitespace-pre-wrap" style={CARD_BODY_STYLE}>
-      {segments.map((seg, i) =>
-        seg.highlighted ? (
-          <mark
-            key={i}
-            className={`rounded-[3px] px-0.5 text-[16px] ${
-              seg.bold ? "bg-amber-200 text-amber-950 font-semibold" : "bg-amber-100 text-amber-900"
-            } ${seg.underlined ? "underline decoration-blue-600 decoration-[1.5px]" : ""} ${seg.italic ? "italic" : ""}`}
-          >
-            {seg.text.includes("[…]") ? <CardBodyWithEllipses text={seg.text} /> : seg.text}
-          </mark>
-        ) : (
-          <span
-            key={i}
-            className={`${
-              deemphasizeUnmarked ? "text-gray-400 text-[13px]" : "text-gray-700 text-[16px]"
-            } ${seg.italic ? "italic" : ""}`}
-          >
-            {seg.text.includes("[…]") ? <CardBodyWithEllipses text={seg.text} /> : seg.text}
+      {segments.map((seg, i) => {
+        const fx = [
+          seg.bold ? "font-bold" : "",
+          seg.underlined ? "underline decoration-blue-500 decoration-2 underline-offset-2" : "",
+          seg.italic ? "italic" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const content = seg.text.includes("[…]")
+          ? <CardBodyWithEllipses text={seg.text} />
+          : seg.text;
+
+        if (seg.highlighted) {
+          // Read-aloud text — prominent regardless of de-emphasis mode.
+          return (
+            <mark key={i} className={`rounded-[3px] px-0.5 bg-amber-200 text-amber-950 text-[16px] ${fx}`}>
+              {content}
+            </mark>
+          );
+        }
+        // Context — smaller/lighter when de-emphasizing, but bold/underline/italic
+        // the user applied still show.
+        const tone = deemphasizeUnmarked
+          ? "text-gray-400 text-[12.5px]"
+          : "text-gray-700 text-[16px]";
+        return (
+          <span key={i} className={`${tone} ${fx}`}>
+            {content}
           </span>
-        ),
-      )}
+        );
+      })}
     </p>
   );
 }
@@ -140,6 +174,8 @@ export function DebateCardPreview({
   tag,
   shortCite,
   containerTitle,
+  author,
+  year,
   bodyText,
   spans,
   boldSpans,
@@ -148,10 +184,14 @@ export function DebateCardPreview({
   mlacitation,
   claimGoal,
   isTagNarrowed,
+  sourceDomain,
+  onCopyMla,
 }: {
   tag: string;
   shortCite?: string | null;
   containerTitle?: string | null;
+  author?: string | null;
+  year?: string | null;
   bodyText: string;
   spans?: SelectedSpan[];
   boldSpans?: SelectedSpan[];
@@ -160,131 +200,103 @@ export function DebateCardPreview({
   mlacitation?: string | null;
   claimGoal?: string | null;
   isTagNarrowed?: boolean;
+  sourceDomain?: string | null;
+  onCopyMla?: () => void;
 }) {
-  const [showMore, setShowMore] = useState(false);
-  const [mlaOpen, setMlaOpen] = useState(false);
-  const [emphasisMode, setEmphasisMode] = useState<"debate" | "full">("debate");
-
-  // Truncate at sentence boundary
-  const PREVIEW_CHARS = 800;
-  const needsTruncate = bodyText.length > PREVIEW_CHARS && !showMore;
-  let visibleText = bodyText;
-  if (needsTruncate) {
-    const slice = bodyText.slice(0, PREVIEW_CHARS);
-    const lastPeriod = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf(".\n"));
-    const lastSpace = slice.lastIndexOf(" ");
-    const cutAt = lastPeriod > PREVIEW_CHARS - 120 ? lastPeriod + 1 : lastSpace;
-    visibleText = (cutAt > 0 ? slice.slice(0, cutAt) : slice) + " …";
-  }
-
-  const visibleSpans = !spans
-    ? undefined
-    : needsTruncate
-      ? spans.filter((s) => s.start < visibleText.length - 2)
-      : spans;
-
-  const hasHighlights = !!(visibleSpans && visibleSpans.length > 0);
+  const hasHighlights = !!(spans && spans.length > 0);
   const hasMla = !!mlacitation?.trim();
+
+  // Source line with graceful fallbacks: author → publication → "Unknown author";
+  // year → "n.d."; publication → domain.
+  const displayAuthor = (author || containerTitle || shortCite || "Unknown author").trim();
+  const displayYear = (year && /\d{4}/.test(year) ? /(\d{4})/.exec(year)![1] : "n.d.");
+  const displayPublication =
+    (containerTitle && containerTitle !== author ? containerTitle : "") ||
+    (sourceDomain || "");
+  // Citation is "partial" when we lack a real author or year.
+  const citationPartial = !author || !(year && /\d{4}/.test(year));
 
   return (
     <div
-      className="bg-white rounded-xl border border-gray-200 overflow-hidden"
-      style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04)" }}
+      className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden"
+      style={{ boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 10px 28px -14px rgba(0,0,0,0.14)" }}
     >
-      {/* Tag */}
-      <div className="px-6 pt-6 pb-2">
+      {/* TAG — the biggest, clearest claim on the card */}
+      <div className="px-6 sm:px-7 pt-6 pb-3">
         <p
-          className="text-[22px] sm:text-[26px] font-bold leading-snug text-gray-900 break-words"
-          style={{ ...CARD_BODY_STYLE, letterSpacing: "-0.02em" }}
+          className="text-[28px] sm:text-[34px] font-bold leading-[1.12] text-gray-900 break-words"
+          style={{ ...CARD_BODY_STYLE, letterSpacing: "-0.025em" }}
         >
           {tag}
         </p>
         {isTagNarrowed && (
-          <p className="mt-1 text-[11px] text-amber-600 font-medium">Tag narrowed to match source.</p>
+          <p className="mt-1.5 text-[11px] text-amber-600 font-medium">Tag narrowed to match source.</p>
         )}
       </div>
 
-      {/* Cite line */}
-      <div className="px-6 pb-3">
-        <p className="text-[13px] text-gray-500 font-medium leading-snug" style={CARD_BODY_STYLE}>
-          {shortCite || "Unknown"}
-          {containerTitle && <span className="text-gray-400"> — {containerTitle}</span>}
-        </p>
-        {claimGoal && (
-          <p className="text-[11px] text-gray-400 italic mt-1" style={CARD_BODY_STYLE}>
-            Supports: {claimGoal}
-          </p>
-        )}
+      {/* SOURCE — author/org · year · publication, with graceful fallbacks */}
+      <div className="px-6 sm:px-7">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14px]" style={CARD_BODY_STYLE}>
+          <span className="font-semibold text-gray-800">{displayAuthor}</span>
+          <span className="font-semibold text-gray-800">· {displayYear}</span>
+          {displayPublication && (
+            <span className="text-gray-500">· {displayPublication}</span>
+          )}
+        </div>
       </div>
+
+      {/* MLA — visible by default (not hidden behind an accordion) */}
+      <div className="px-6 sm:px-7 mt-3">
+        <div className="rounded-lg border border-gray-200/70 bg-gray-50/70 px-4 py-3">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              {citationPartial ? "Citation (partial)" : "MLA citation"}
+            </p>
+            {hasMla && onCopyMla && (
+              <button
+                onClick={onCopyMla}
+                className="text-[10px] px-2 py-0.5 rounded-md border border-gray-200 text-gray-500 hover:bg-white transition-colors"
+              >
+                Copy MLA
+              </button>
+            )}
+          </div>
+          <p className="text-[13px] text-gray-700 leading-relaxed break-words" style={CARD_BODY_STYLE}>
+            {mlacitation?.trim() || `${displayAuthor}. ${displayPublication || ""}${displayPublication ? ", " : ""}${displayYear}.`}
+          </p>
+        </div>
+      </div>
+
+      {/* Claim supported — secondary, demoted from the old tiny italic "Supports:" */}
+      {claimGoal && (
+        <div className="px-6 sm:px-7 mt-2.5">
+          <p className="text-[11px] text-gray-500" style={CARD_BODY_STYLE}>
+            <span className="font-semibold uppercase tracking-wide text-[9px] text-gray-400">Claim supported</span>
+            {"  "}{claimGoal}
+          </p>
+        </div>
+      )}
 
       {/* Divider */}
-      <div className="mx-6 border-t border-gray-100" />
+      <div className="mx-6 sm:mx-7 my-4 border-t border-gray-100" />
 
-      {/* Mode toggle + body */}
-      <div className="px-6 py-4">
-        {hasHighlights && (
-          <div className="flex items-center gap-1 mb-3">
-            {(["debate", "full"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setEmphasisMode(mode)}
-                className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
-                  emphasisMode === mode
-                    ? "bg-gray-800 text-white border-gray-800"
-                    : "border-gray-200 text-gray-400 hover:border-gray-300"
-                }`}
-              >
-                {mode === "debate" ? "Card view" : "Full quote"}
-              </button>
-            ))}
-            <span className="text-[9px] text-gray-400 ml-1">
-              {emphasisMode === "debate" ? "Highlights prominent" : "Full text equally sized"}
-            </span>
-          </div>
-        )}
-
+      {/* CARD BODY — entire card, one clean debate-styled display (no toggles) */}
+      <div className="px-6 sm:px-7 pb-6">
         {hasHighlights ? (
           <HighlightedBodyWithEllipses
-            text={visibleText}
-            spans={visibleSpans!}
+            text={bodyText}
+            spans={spans!}
             boldSpans={boldSpans}
             underlineSpans={underlineSpans}
             italicSpans={italicSpans}
-            deemphasizeUnmarked={emphasisMode === "debate"}
+            deemphasizeUnmarked
           />
         ) : (
           <p className="text-[16px] text-gray-700 leading-[1.75] break-words whitespace-pre-wrap" style={CARD_BODY_STYLE}>
-            <CardBodyWithEllipses text={visibleText} />
+            <CardBodyWithEllipses text={bodyText} />
           </p>
         )}
-
-        {bodyText.length > PREVIEW_CHARS && (
-          <button
-            onClick={() => setShowMore(!showMore)}
-            className="mt-2 text-[11px] text-blue-600 hover:text-blue-700 hover:underline"
-          >
-            {showMore ? "Show less ↑" : "Show more ↓"}
-          </button>
-        )}
       </div>
-
-      {/* MLA (compact collapsible) */}
-      {hasMla && (
-        <div className="border-t border-gray-100 bg-gray-50/50">
-          <button
-            onClick={() => setMlaOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-6 py-2 text-[10px] text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
-          >
-            <span className="font-semibold uppercase tracking-wide">MLA</span>
-            <span>{mlaOpen ? "▲" : "▼"}</span>
-          </button>
-          {mlaOpen && (
-            <p className="px-6 pb-3 text-[10px] text-gray-500 leading-relaxed break-words" style={CARD_BODY_STYLE}>
-              {mlacitation}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

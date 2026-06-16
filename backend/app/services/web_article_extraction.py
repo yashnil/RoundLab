@@ -356,6 +356,57 @@ def _extract_metadata_from_html(html: str, url: str) -> ArticleMetadata:
         return ArticleMetadata(url=url, warnings=warnings)
 
 
+def _build_article_metadata(html: str, url: str) -> ArticleMetadata:
+    """Build ArticleMetadata using the deepest available cascade.
+
+    Combines the rich metadata cascade (OpenGraph + academic citation_* meta +
+    Dublin Core + schema.org JSON-LD + organization-as-author heuristic) from
+    extract_metadata_from_html with the structural fields (canonical URL,
+    excerpt, language) from the basic meta-tag reader. The richer cascade wins
+    for title/author/publication/date because it understands scholarly markup;
+    the basic reader supplies page-structure fields the cascade does not return.
+
+    Never fabricates: any field still missing stays None.
+    """
+    base = _extract_metadata_from_html(html, url)
+    warnings = list(base.warnings)
+
+    rich: dict = {}
+    try:
+        rich = extract_metadata_from_html(url, html, {})
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("rich metadata cascade failed: %s", exc)
+
+    def _pick(rich_key: str, base_val: Optional[str]) -> Optional[str]:
+        rv = rich.get(rich_key)
+        if rv and str(rv).strip():
+            return str(rv).strip()
+        return base_val
+
+    published_date = _pick("date", base.published_date)
+    if published_date and "T" in published_date:
+        published_date = published_date.split("T")[0]
+
+    prov = rich.get("provenance", {}) or {}
+    if prov:
+        # Record where the strongest fields came from (useful for debugging extraction).
+        srcs = ", ".join(f"{k}:{v}" for k, v in prov.items() if v)
+        if srcs:
+            warnings.append(f"metadata_provenance: {srcs}")
+
+    return ArticleMetadata(
+        title=_pick("title", base.title),
+        author=_pick("author", base.author),
+        publication=_pick("publication", base.publication),
+        published_date=published_date,
+        url=url,
+        canonical_url=base.canonical_url or url,
+        language=base.language,
+        excerpt=base.excerpt,
+        warnings=warnings,
+    )
+
+
 # ── Text extraction ───────────────────────────────────────────────────────────
 
 def _extract_text_trafilatura(html: str, url: str) -> tuple[str, float]:
@@ -487,8 +538,8 @@ def extract_article(url: str) -> ExtractedArticle:
             error=str(exc),
         )
 
-    # ── Metadata ──────────────────────────────────────────────────────────
-    metadata = _extract_metadata_from_html(html, url)
+    # ── Metadata (deep cascade: OG + citation_* + Dublin Core + JSON-LD + org) ─
+    metadata = _build_article_metadata(html, url)
 
     # ── Text extraction ───────────────────────────────────────────────────
     text, confidence = _extract_text_trafilatura(html, url)

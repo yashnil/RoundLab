@@ -107,6 +107,10 @@ class EvidenceCardRow(BaseModel):
     claim_summary: Optional[str] = None
     attribution_complete: bool
     metadata_json: dict = {}
+    # Saved markup so the Library preview can re-render user formatting.
+    highlighted_spans_json: list[dict] = []
+    underline_spans_json: list[dict] = []
+    card_cutting_metadata_json: dict = {}
     created_at: str
 
 

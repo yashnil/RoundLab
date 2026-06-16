@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.models.research import (
     AnnotatedSpan,
+    CardCutValidation,
     CardIntelligence,
     CitationMetadata,
     EvidenceCutResult,
@@ -200,8 +201,66 @@ class SentenceSpan:
 
 # ── Sentence splitting ────────────────────────────────────────────────────────
 
+# pysbd is a rule-based, dependency-free sentence boundary detector that handles
+# abbreviations, citations, decimals, and quotes far better than a hand-rolled
+# regex. We load it lazily and fall back to the regex splitter if it is absent,
+# so the service never hard-depends on it.
+_PYSBD_SEGMENTER = None
+_PYSBD_TRIED = False
+
+
+def _get_pysbd():
+    global _PYSBD_SEGMENTER, _PYSBD_TRIED
+    if _PYSBD_TRIED:
+        return _PYSBD_SEGMENTER
+    _PYSBD_TRIED = True
+    try:
+        import pysbd  # type: ignore
+        _PYSBD_SEGMENTER = pysbd.Segmenter(language="en", clean=False, char_span=True)
+    except Exception as exc:  # pragma: no cover - import/env dependent
+        logger.debug("pysbd unavailable, using regex segmenter: %s", exc)
+        _PYSBD_SEGMENTER = None
+    return _PYSBD_SEGMENTER
+
+
+def segment_text(text: str) -> list[SentenceSpan]:
+    """Segment text into sentences with exact character offsets.
+
+    Adapter: prefers pysbd (robust, handles abbreviations/citations) and falls
+    back to the regex splitter when pysbd is not installed. Returned spans always
+    satisfy text[span.start:span.end] == span.text.
+    """
+    if not text or not text.strip():
+        return []
+    seg = _get_pysbd()
+    if seg is not None:
+        try:
+            spans: list[SentenceSpan] = []
+            for i, ts in enumerate(seg.segment(text)):
+                raw = ts.sent
+                start = ts.start
+                # Trim trailing/leading whitespace pysbd keeps, keeping offsets exact.
+                lead = len(raw) - len(raw.lstrip())
+                trail = len(raw) - len(raw.rstrip())
+                s = start + lead
+                e = ts.end - trail
+                sent_text = text[s:e]
+                if sent_text.strip():
+                    spans.append(SentenceSpan(text=sent_text, start=s, end=e, index=len(spans)))
+            if spans:
+                return spans
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("pysbd segmentation failed, falling back: %s", exc)
+    return _split_sentences_regex(text)
+
+
 def _split_sentences(text: str) -> list[SentenceSpan]:
-    """Split text into sentences with character offsets. Returns SentenceSpan list.
+    """Public splitter used throughout — routes through the segment_text adapter."""
+    return segment_text(text)
+
+
+def _split_sentences_regex(text: str) -> list[SentenceSpan]:
+    """Regex sentence splitter with character offsets (pysbd-free fallback).
 
     Avoids splitting on common abbreviations (U.S., v., et al., etc.).
     Also avoids splitting in the middle of dotted abbreviations like U.S. or e.g.
@@ -569,44 +628,66 @@ def _deterministic_cut(
     sentences: list[SentenceSpan],
     claim: str,
     target_ratio: float = 0.60,
+    evidence_role: str = "",
+    topic: str = "",
 ) -> EvidenceCutResult:
-    """Deterministic fallback: score clause candidates and take top ones.
+    """Deterministic fallback: rank WHOLE sentences and keep the top ones.
 
-    target_ratio controls roughly what fraction of the candidate clauses to keep:
-    higher values keep more context (lighter cut), lower values cut harder.
+    Sentence scoring runs through the BM25-backed candidate ranker (lexical
+    relevance + entity/role/coherence), with a light position prior so the
+    opening thesis sentence is favoured. Operating at sentence granularity keeps
+    the cut coherent: the kept text reads as connected sentences aloud.
+
+    target_ratio controls roughly what fraction of sentences to keep.
     """
-    claim_words = set((claim or "").lower().split())
-
+    # Rank sentences with the dedicated candidate ranker (BM25 + heuristics).
+    entities = extract_case_entities(passage, topic) if passage else []
     try:
-        candidates = _get_clause_candidates(sentences, passage)
-    except Exception as exc:
-        logger.debug("_get_clause_candidates failed (%s) — using full sentences", exc)
-        candidates = [
-            SelectedSpan(start=s.start, end=s.end, text=s.text, sentence_index=s.index)
-            for s in sentences
-        ]
+        from app.services.evidence_candidate_ranker import rank_candidate_windows
+        ranked = rank_candidate_windows(
+            [s.text for s in sentences], topic=topic, claim=claim,
+            role=evidence_role, role_target=claim, entities=entities,
+        )
+        rank_by_text: dict[str, float] = {}
+        for w in ranked:
+            rank_by_text.setdefault(w.text, w.score)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("candidate ranker failed, using local scoring: %s", exc)
+        rank_by_text = {}
 
-    scored = []
-    for i, cand in enumerate(candidates):
-        sent_words = set(cand.text.lower().split())
-        overlap = len(claim_words & sent_words) / max(len(claim_words), 1)
-        length_score = min(1.0, len(cand.text.split()) / 20)
-        # Prefer sentences with legal/evidentiary terms
-        legal_score = sum(
-            1 for w in ["court", "held", "ruled", "provides", "states", "found", "evidence"]
-            if w in cand.text.lower()
-        ) * 0.2
-        score = overlap * 3 + length_score + legal_score
-        scored.append((score, i))
+    claim_words = {w for w in re.sub(r"[^\w\s]", " ", (claim or "").lower()).split() if len(w) > 3}
+    _LEGAL = ("court", "held", "ruled", "provides", "states", "found", "evidence",
+              "statute", "liability", "immunity", "ruling", "doctrine")
+    _CAUSAL = _CAUSAL_WORDS
+
+    scored: list[tuple[float, int]] = []
+    for i, sent in enumerate(sentences):
+        if sent.text in rank_by_text:
+            base = rank_by_text[sent.text]
+        else:
+            low = sent.text.lower()
+            words = set(re.sub(r"[^\w\s]", " ", low).split())
+            overlap = len(claim_words & words) / max(len(claim_words), 1)
+            length_score = min(1.0, len(sent.text.split()) / 25)
+            legal_score = sum(1 for w in _LEGAL if w in low) * 0.18
+            causal_score = min(0.6, len(words & _CAUSAL) * 0.15)
+            stat_score = 0.4 if re.search(r"\d", sent.text) else 0.0
+            base = overlap * 3 + length_score + legal_score + causal_score + stat_score
+        pos_score = 0.5 if i == 0 else 0.0  # opening sentence often carries the thesis
+        scored.append((base + pos_score, i))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    # Take top target_ratio of candidates, minimum 2
     _ratio = max(0.05, min(1.0, target_ratio))
-    n_keep = max(2, int(round(len(candidates) * _ratio)))
-    top_candidates = sorted(idx for _, idx in scored[:n_keep])
-
-    # Build result from selected candidate spans
-    selected: list[SelectedSpan] = [candidates[i] for i in top_candidates]
+    n_keep = max(2, min(len(sentences), int(round(len(sentences) * _ratio))))
+    # Keep the highest-scoring sentences, then restore reading order for coherence.
+    keep_indices = sorted(idx for _, idx in scored[:n_keep])
+    selected: list[SelectedSpan] = [
+        SelectedSpan(
+            start=sentences[i].start, end=sentences[i].end,
+            text=sentences[i].text, sentence_index=sentences[i].index,
+        )
+        for i in keep_indices
+    ]
     if not selected:
         return EvidenceCutResult(
             original_passage=passage, selected_spans=[],
@@ -657,15 +738,34 @@ def _deterministic_cut(
 
 
 # Map user-facing cut-style names → deterministic target ratio + LLM hint.
+#
+# Only two styles are exposed to the user now: "medium" (default) and "high".
+#   - medium: a decently aggressive cut that keeps the warrant + key context
+#   - high:   a hard cut down to the core highlighted phrases
+# Legacy names ("light", "aggressive", "full") still map sensibly for back-compat.
 _CUT_STYLE_TARGET_RATIO: dict[str, float] = {
     "light": 0.85,
-    "medium": 0.60,
-    "aggressive": 0.35,
+    "medium": 0.58,
+    "high": 0.34,
+    "aggressive": 0.34,
 }
 _CUT_STYLE_LLM_HINT: dict[str, str] = {
     "light": "Cut lightly — keep most context, only remove clearly off-topic parts.",
+    "medium": (
+        "Cut to a clean, readable debate card: keep the sentences carrying the claim "
+        "and its warrant, drop throat-clearing and tangents. The kept text must read "
+        "as one coherent argument aloud."
+    ),
+    "high": (
+        "Cut aggressively — keep only the 3-5 sentences/phrases that carry the claim and "
+        "its strongest warrant. The result must still read as a coherent argument aloud, "
+        "not disconnected fragments."
+    ),
     "aggressive": "Cut aggressively — aim for 3-5 key phrases only.",
 }
+
+# Default user-facing cut style.
+DEFAULT_CUT_STYLE = "medium"
 
 
 def _full_passage_cut(passage: str, sentence_spans: list[SentenceSpan]) -> EvidenceCutResult:
@@ -844,6 +944,309 @@ def get_deterministic_highlight_spans(
     return result[:12]
 
 
+# ── Coherent (read-aloud) highlight selection ────────────────────────────────
+
+def _clause_offsets(sent_text: str, base: int) -> list[tuple[int, int, str]]:
+    """Split a sentence into clauses, returning (start, end, text) offsets in the
+    full body (base = sentence start offset). Splits on commas, semicolons,
+    colons and dashes — the natural pause points debaters cut around."""
+    parts: list[tuple[int, int]] = []
+    cur = 0
+    for m in re.finditer(r'[,;:]\s+|\s+[—–]\s+|\s+-\s+', sent_text):
+        end = m.start()
+        if end > cur:
+            parts.append((cur, end))
+        cur = m.end()
+    if cur < len(sent_text):
+        parts.append((cur, len(sent_text)))
+    out: list[tuple[int, int, str]] = []
+    for s, e in parts:
+        # Trim surrounding whitespace inside the clause
+        chunk = sent_text[s:e]
+        lead = len(chunk) - len(chunk.lstrip())
+        trail = len(chunk) - len(chunk.rstrip())
+        out.append((base + s + lead, base + e - trail, sent_text[s + lead:e - trail]))
+    return out
+
+
+def get_coherent_highlight_spans(
+    text: str,
+    claim: str = "",
+    evidence_role: str = "",
+) -> list[SelectedSpan]:
+    """Select coherent, read-aloud highlight spans within a cut body.
+
+    Debate convention: only the highlighted portion is read aloud, and it must
+    still make sense as a connected argument. So we highlight at the *clause*
+    level — for each sentence we keep the contiguous clause(s) carrying the
+    claim, a causal/legal/moral warrant, or a statistic — instead of scattering
+    single words. Total highlighted length is capped so the whole card is never
+    highlighted; the un-highlighted remainder stays as reading context.
+
+    Returns spans whose .text is an exact substring of `text`.
+    """
+    if not text or len(text) < 40:
+        return []
+
+    claim_words = {w for w in re.sub(r"[^\w\s]", " ", (claim or "").lower()).split() if len(w) > 3}
+    signal = _HIGHLIGHT_CAUSAL | _HIGHLIGHT_LEGAL | _HIGHLIGHT_MORAL | _HIGHLIGHT_IMPACT
+
+    sentences = _split_sentences(text)
+    if not sentences:
+        sentences = [SentenceSpan(text=text, start=0, end=len(text), index=0)]
+
+    raw: list[SelectedSpan] = []
+    has_signal_sentence = False
+    for sent in sentences:
+        try:
+            clauses = _clause_offsets(sent.text, sent.start)
+        except Exception:
+            clauses = [(sent.start, sent.end, sent.text)]
+        sent_len = max(1, sent.end - sent.start)
+        scored: list[tuple[float, int, int]] = []
+        for cs, ce, ct in clauses:
+            low = ct.lower()
+            words = set(re.sub(r"[^\w\s]", " ", low).split())
+            sc = len(claim_words & words) * 1.0 + len(words & signal) * 0.7
+            if re.search(r"\d", ct):
+                sc += 0.8
+            scored.append((sc, cs, ce))
+
+        # Only highlight clauses that carry real signal. Sentences with no signal
+        # stay as un-highlighted reading context (smaller, de-emphasized).
+        strong = [(sc, cs, ce) for sc, cs, ce in scored if sc >= 1.0]
+        if not strong:
+            continue
+        has_signal_sentence = True
+
+        # Keep the strongest clauses, but cap to ~75% of the sentence so a stray
+        # connective clause is left out — keeps highlights from swallowing the line.
+        strong.sort(key=lambda x: -x[0])
+        chosen: list[tuple[int, int]] = []
+        used = 0
+        for sc, cs, ce in strong:
+            length = ce - cs
+            if chosen and used + length > sent_len * 0.75:
+                break
+            chosen.append((cs, ce))
+            used += length
+
+        # Merge clauses that are adjacent WITHIN this sentence so reading flows.
+        for cs, ce in sorted(chosen):
+            if raw and raw[-1].sentence_index == sent.index and cs <= raw[-1].end + 2:
+                prev = raw[-1]
+                new_end = max(prev.end, ce)
+                raw[-1] = SelectedSpan(
+                    start=prev.start, end=new_end, text=text[prev.start:new_end],
+                    sentence_index=sent.index, rationale="coherent_highlight",
+                )
+            else:
+                t = text[cs:ce]
+                if t.strip():
+                    raw.append(SelectedSpan(
+                        start=cs, end=ce, text=t,
+                        sentence_index=sent.index, rationale="coherent_highlight",
+                    ))
+
+    if not raw:
+        return []
+
+    # Global cap: never highlight more than ~60% of the body.
+    total = sum(s.end - s.start for s in raw)
+    cap = int(len(text) * 0.60)
+    if total > cap and len(raw) > 1:
+        out: list[SelectedSpan] = []
+        running = 0
+        for s in sorted(raw, key=lambda s: -(s.end - s.start)):
+            length = s.end - s.start
+            if not out or running + length <= cap:
+                out.append(s)
+                running += length
+        raw = sorted(out, key=lambda s: s.start)
+
+    return raw
+
+
+def _bold_within_highlights(spans: list[SelectedSpan]) -> list[SelectedSpan]:
+    """Pick the strongest highlight spans (stats / causal verbs / proper nouns)
+    to render bold — the absolute core a debater stresses when reading."""
+    bold: list[SelectedSpan] = []
+    for s in spans:
+        low = s.text.lower()
+        has_stat = bool(re.search(r"\d", s.text))
+        has_causal = any(v in low.split() for v in _BOLD_CAUSAL_VERBS)
+        words = s.text.split()
+        has_proper = any(w[:1].isupper() and w[1:2].islower() and len(w) > 2 for w in words[1:])
+        if has_stat or has_causal or has_proper:
+            bold.append(s)
+    return bold
+
+
+def highlights_are_coherent(text: str, spans: list[SelectedSpan]) -> bool:
+    """Return True when highlighted spans read as a coherent argument aloud.
+
+    Rejects highlight sets that are: too short, fragmentary (mostly <3-word
+    bits), verb-less, or that cover almost the whole card. Used to decide whether
+    to fall back from clause-level to whole-sentence highlights.
+    """
+    if not spans:
+        return False
+    joined = " ".join(s.text for s in spans).strip()
+    if len(joined) < 25:
+        return False
+    total = sum(s.end - s.start for s in spans)
+    ratio = total / max(len(text), 1)
+    if ratio > 0.9:  # essentially the whole card highlighted
+        return False
+    if not _FINITE_VERB_RE.search(joined):  # no verb → not an argument
+        return False
+    tiny = sum(1 for s in spans if len(s.text.split()) < 3)
+    if len(spans) >= 4 and tiny / len(spans) > 0.6:  # mostly orphan fragments
+        return False
+    return True
+
+
+def sentence_level_highlights(
+    text: str, claim: str = "", evidence_role: str = "",
+) -> list[SelectedSpan]:
+    """Fallback highlighter: select WHOLE sentences carrying the claim/warrant.
+
+    Used when clause-level highlights come out incoherent. Whole sentences always
+    read aloud cleanly; we keep the strongest ~60% (min 1) and cap total ≤75%.
+    """
+    if not text:
+        return []
+    sentences = _split_sentences(text)
+    if not sentences:
+        return []
+    claim_words = {w for w in re.sub(r"[^\w\s]", " ", (claim or "").lower()).split() if len(w) > 3}
+    signal = _HIGHLIGHT_CAUSAL | _HIGHLIGHT_LEGAL | _HIGHLIGHT_MORAL | _HIGHLIGHT_IMPACT
+    scored: list[tuple[float, SentenceSpan]] = []
+    for sent in sentences:
+        low = sent.text.lower()
+        words = set(re.sub(r"[^\w\s]", " ", low).split())
+        sc = len(claim_words & words) * 1.0 + len(words & signal) * 0.6
+        if re.search(r"\d", sent.text):
+            sc += 0.6
+        scored.append((sc, sent))
+    scored.sort(key=lambda x: -x[0])
+    keep_n = max(1, round(len(sentences) * 0.6))
+    chosen = sorted((s for _, s in scored[:keep_n]), key=lambda s: s.start)
+
+    # Cap total ≤75% of the body.
+    cap = int(len(text) * 0.75)
+    out: list[SelectedSpan] = []
+    running = 0
+    for sent in chosen:
+        length = sent.end - sent.start
+        if out and running + length > cap:
+            break
+        out.append(SelectedSpan(
+            start=sent.start, end=sent.end, text=text[sent.start:sent.end],
+            sentence_index=sent.index, rationale="sentence_highlight",
+        ))
+        running += length
+    return out
+
+
+def _snap_to_word_boundaries(text: str, spans: list[SelectedSpan]) -> list[SelectedSpan]:
+    """Expand each span outward to the nearest word boundary so no highlight
+    starts or ends mid-word (a common read-aloud breakage)."""
+    snapped: list[SelectedSpan] = []
+    n = len(text)
+    for s in spans:
+        start = max(0, min(s.start, n))
+        end = max(start, min(s.end, n))
+        # Move start left while the previous char and current char are both word chars.
+        while start > 0 and text[start - 1].isalnum() and text[start].isalnum():
+            start -= 1
+        # Move end right while it sits inside a word.
+        while end < n and text[end - 1].isalnum() and text[end].isalnum():
+            end += 1
+        new_text = text[start:end]
+        if new_text.strip():
+            snapped.append(SelectedSpan(
+                start=start, end=end, text=new_text,
+                sentence_index=s.sentence_index, rationale=s.rationale,
+            ))
+    # De-dup / merge any overlaps created by snapping.
+    snapped.sort(key=lambda x: x.start)
+    merged: list[SelectedSpan] = []
+    for s in snapped:
+        if merged and s.start <= merged[-1].end:
+            prev = merged[-1]
+            ne = max(prev.end, s.end)
+            merged[-1] = SelectedSpan(
+                start=prev.start, end=ne, text=text[prev.start:ne],
+                sentence_index=prev.sentence_index, rationale=prev.rationale,
+            )
+        else:
+            merged.append(s)
+    return merged
+
+
+def validate_read_aloud_card(
+    cut_body: str, spans: list[SelectedSpan],
+) -> CardCutValidation:
+    """Check that the highlighted spans read aloud as a coherent debate card.
+
+    Flags: empty/too-short highlight, no verb (not an argument), too-high ratio
+    (whole card highlighted), too-many orphan fragments, and mid-word breaks.
+    Returns a structured CardCutValidation (used to drive retries/warnings).
+    """
+    issues: list[str] = []
+    read_aloud = " ".join(s.text for s in spans).strip()
+    total = sum(s.end - s.start for s in spans)
+    ratio = total / max(len(cut_body), 1)
+    low = read_aloud.lower()
+
+    if not spans or len(read_aloud) < 25:
+        issues.append("too_short")
+    if ratio > 0.9:
+        issues.append("ratio_too_high")
+    if read_aloud and not _FINITE_VERB_RE.search(read_aloud):
+        issues.append("no_verb")
+    # Must carry at least one claim/warrant/impact cue — otherwise it's just
+    # relevant-sounding text, not an argument.
+    _ARG_CUES = (
+        "because", "therefore", "shows", "demonstrates", "proves", "means",
+        "supports", "justif", "requires", "enables", "prevents", "causes",
+        "leads", "results", "allow", "force", "violat", "violence", "right",
+        "atroc", "genocide", "war", "deaths", "killed", "percent", "million",
+        "must", "should", "court", "held", "ruled", "law", "policy", "polic",
+        "regime", "authoritarian", "repress", "strateg", "security", "power",
+        "control", "interven", "sovereign", "democra", "stabilit", "stable",
+        "leader", "threat", "rights", "economi", "economic", "treaty", "shaped",
+    )
+    if read_aloud and not any(c in low for c in _ARG_CUES):
+        issues.append("no_argument_cue")
+    # A read-aloud card should not open with a dangling connective.
+    if _TAG_CONNECTIVE_RE.match(read_aloud):
+        issues.append("connective_start")
+    # Too many ellipses → choppy.
+    if read_aloud.count("[…]") + read_aloud.count("[...]") >= 3:
+        issues.append("too_many_ellipses")
+    tiny = sum(1 for s in spans if len(s.text.split()) < 3)
+    if len(spans) >= 4 and tiny / max(len(spans), 1) > 0.6:
+        issues.append("too_fragmented")
+    # Mid-word break detection against the cut body.
+    for s in spans:
+        if 0 < s.start < len(cut_body) and cut_body[s.start - 1].isalnum() and cut_body[s.start].isalnum():
+            issues.append("midword_start")
+            break
+    for s in spans:
+        if 0 < s.end < len(cut_body) and cut_body[s.end - 1].isalnum() and cut_body[s.end].isalnum():
+            issues.append("midword_end")
+            break
+
+    return CardCutValidation(
+        passed=len(issues) == 0,
+        highlight_ratio=round(ratio, 3),
+        read_aloud_text=read_aloud,
+        issues=issues,
+    )
+
+
 # ── Page-chrome detection and stripping ──────────────────────────────────────
 
 # Patterns that indicate a line is page chrome / navigation / metadata, not evidence.
@@ -896,6 +1299,111 @@ _AUTHOR_INSTITUTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Affiliation / author-label lines: "Author: …", "Institution: …", "Department of …"
+_AFFILIATION_RE = re.compile(
+    r'^(?:'
+    r'(?:Authors?|Co-?authors?|Corresponding\s+Author|Institution|Affiliation)\b\s*[:\-—]'
+    r'|(?:Department|Faculty|School|College|Division)\s+of\s+[A-Z]'
+    r')',
+    re.IGNORECASE,
+)
+
+# Recommended/Repository-citation footer lines: "King, N. R. (2022). …"
+_CITATION_LINE_RE = re.compile(
+    r'^[A-Z][A-Za-z\'’-]+,?\s+[A-Z]\.\s*(?:[A-Z]\.\s*)*'   # "King, N. R. " / "Smith, J. "
+    r'(?:&\s*[A-Z][A-Za-z\'’-]+,?\s+[A-Z]\.\s*)*'            # optional second author
+    r'\(?(?:19|20)\d{2}[a-z]?\)?',                           # year, optionally in parens
+)
+
+# Finite-verb detector — distinguishes evidence sentences from noun-phrase titles.
+_FINITE_VERB_RE = re.compile(
+    r'\b(?:is|are|was|were|be|been|being|has|have|had|do|does|did|'
+    r'will|would|can|could|shall|should|may|might|must|'
+    r'argue[sd]?|claim[sd]?|find[s]?|found|show[sn]?|held|hold[s]?|rule[sd]?|'
+    r'state[sd]?|grant[sd]?|provide[sd]?|enable[sd]?|prevent[sd]?|require[sd]?|'
+    r'cause[sd]?|increase[sd]?|reduce[sd]?|lead[s]?|led|examine[sd]?|demonstrate[sd]?|'
+    r'emerge[sd]?|justif(?:y|ies|ied)|prove[sd]?|engage[sd]?|protect[sd]?|'
+    # Broader set so common debate/source verbs are recognized.
+    r'force[sd]?|combine[sd]?|shape[sd]?|bring|brought|brings|change[sd]?|'
+    r'rel(?:y|ies|ied)|tolerate[sd]?|maintain[sd]?|shift(?:s|ed)?|drive[sn]?|drove|'
+    r'remove[sd]?|end(?:s|ed)?|support(?:s|ed)?|allow(?:s|ed)?|kill(?:s|ed)?|'
+    r'threaten(?:s|ed)?|occur(?:s|red)?|create[sd]?|make[s]?|made|use[sd]?|put[s]?|'
+    r'set[s]?|take[sn]?|took|become[s]?|became|remain[s]?|keep[s]?|kept|stop(?:s|ped)?|'
+    r'continue[sd]?|involve[sd]?|affect[sd]?|impact(?:s|ed)?|happen(?:s|ed)?|'
+    r'raise[sd]?|seek[s]?|sought|fail(?:s|ed)?|act(?:s|ed)?|intervene[sd]?|'
+    r'collapse[sd]?|expand(?:s|ed)?|depend(?:s|ed)?|reflect(?:s|ed)?|drive[sn]?)\b',
+    re.IGNORECASE,
+)
+
+_TITLE_STOPWORDS = frozenset({
+    "and", "or", "the", "a", "an", "of", "to", "in", "on", "for", "with",
+    "at", "by", "from", "as", "but", "nor", "vs", "v", "between", "into",
+})
+
+
+def is_probable_title_line(line: str, metadata_title: str = "", claim: str = "") -> bool:
+    """Return True when a line looks like an article title, not evidence.
+
+    Titles are short capitalized noun phrases with no finite verb and no
+    sentence-ending punctuation. A line that merely overlaps the claim's words
+    (e.g. the article title shares the topic) is NOT evidence and must be
+    rejected here even if it overlaps — that overlap is exactly why titles used
+    to contaminate cuts.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    # Exact / near match to the known metadata title is always a title line.
+    if metadata_title:
+        norm = lambda s: re.sub(r'\s+', ' ', s.strip().lower()).rstrip('.')
+        if norm(stripped) == norm(metadata_title):
+            return True
+
+    words = stripped.split()
+    if not (2 <= len(words) <= 18):
+        return False
+    # Titles do not end with sentence punctuation.
+    if stripped[-1] in '.!?,:;':
+        return False
+    # Titles are noun phrases — a finite verb means it is a real sentence.
+    if _FINITE_VERB_RE.search(stripped):
+        return False
+    # Most significant words must be capitalized (title case).
+    sig = [w for w in words if w.lower() not in _TITLE_STOPWORDS and w[:1].isalpha()]
+    if not sig:
+        return False
+    capitalized = sum(1 for w in sig if w[:1].isupper())
+    return capitalized / len(sig) >= 0.7
+
+
+def is_author_metadata_line(line: str) -> bool:
+    """Return True when a line is author/affiliation/byline metadata, not evidence."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    # "Authors", "Author Note", "Corresponding Author" bare labels
+    if len(stripped) < 60 and _CHROME_SHORT_RE.match(stripped) and \
+            re.match(r'(?i)(?:authors?|corresponding\s+author|author\s+note)\b', stripped):
+        return True
+    # "Author: …", "Institution: …", "Department of …"
+    if _AFFILIATION_RE.match(stripped):
+        return True
+    # "Nathaniel R. King, University of Arkansas"
+    if len(stripped) < 120 and _AUTHOR_INSTITUTION_RE.match(stripped):
+        return True
+    # Bare author name: 2-4 title-case parts (with optional initials), no verb.
+    candidate = stripped.rstrip(',')
+    parts = candidate.split()
+    if 2 <= len(parts) <= 4 and len(candidate) < 50 and candidate[-1] not in '.!?' \
+            and not _FINITE_VERB_RE.search(candidate):
+        def _name_part(w: str) -> bool:
+            w = w.strip(',')
+            return bool(re.match(r"^[A-Z][a-z'’-]+$", w)) or bool(re.match(r'^[A-Z]\.?$', w))
+        if all(_name_part(w) for w in parts):
+            return True
+    return False
+
 
 def _is_chrome_line(line: str) -> bool:
     """Return True if a line looks like page scaffolding, not evidence."""
@@ -909,19 +1417,26 @@ def _is_chrome_line(line: str) -> bool:
     # Very short lines with mostly uppercase tend to be headers/labels
     if len(stripped) <= 30 and stripped.upper() == stripped and stripped.replace(" ", "").isalpha():
         return True
-    # Author + institution metadata lines: "Nathaniel R. King, University of Arkansas"
-    if len(stripped) < 120 and _AUTHOR_INSTITUTION_RE.match(stripped):
+    # Author / affiliation / byline metadata lines
+    if is_author_metadata_line(stripped):
+        return True
+    # Recommended/Repository citation footer lines: "King, N. R. (2022). …"
+    if _CITATION_LINE_RE.match(stripped):
         return True
     return False
 
 
-def strip_page_chrome(text: str) -> str:
+def strip_page_chrome(text: str, metadata_title: str = "") -> str:
     """Remove repository/navigation/metadata chrome from extracted article text.
 
-    Strips lines that match navigation, breadcrumb, or metadata patterns.
-    Preserves all substantive text. Never removes actual sentence content.
+    Strips lines that match navigation, breadcrumb, byline, citation-footer, or
+    article-title patterns. Preserves all substantive sentence content — only
+    short noun-phrase titles, bylines, and citation chrome are removed.
     Designed to clean up Digital Commons / law review repository pages and
     similar academic repository front-matter before card cutting.
+
+    metadata_title, when provided, lets the title detector remove the exact
+    article title even if it would not otherwise look title-like.
     """
     if not text:
         return text
@@ -939,19 +1454,31 @@ def strip_page_chrome(text: str) -> str:
             continue
 
         is_chrome = _is_chrome_line(stripped)
+        is_title = is_probable_title_line(stripped, metadata_title=metadata_title)
+        # Strong chrome (citation footers, breadcrumbs, repository labels, bylines)
+        # is unambiguous and dropped at any length.
+        is_strong_chrome = bool(
+            _CITATION_LINE_RE.match(stripped)
+            or _CHROME_LINE_RE.match(stripped)
+            or is_author_metadata_line(stripped)
+        )
 
         if not initial_chrome_done:
-            if is_chrome:
+            # Before real prose begins, drop chrome, titles, and bylines alike.
+            if is_chrome or is_title:
                 consecutive_chrome += 1
-                continue  # Drop early chrome lines
-            else:
-                # First non-chrome line — chrome zone is over
-                initial_chrome_done = True
-                consecutive_chrome = 0
+                continue
+            # First non-chrome, non-title line — chrome zone is over
+            initial_chrome_done = True
+            consecutive_chrome = 0
 
-        # After initial chrome zone: drop obvious chrome lines, but be more conservative
-        # (don't drop lines that might be real evidence mid-article)
+        # After the initial chrome zone: drop short chrome, strong chrome at any
+        # length, and short title-only lines — but never multi-sentence prose.
+        if is_strong_chrome:
+            continue
         if is_chrome and len(stripped) < 80:
+            continue
+        if is_title and len(stripped) < 80:
             continue
 
         result_lines.append(line)
@@ -1002,23 +1529,38 @@ def find_evidence_start_index(text: str, claim: str = "", slot_context: str = ""
         stripped = line.strip()
         if i < 50 and not found:
             is_chrome = _is_chrome_line(stripped)
+            is_title = is_probable_title_line(stripped, claim=claim)
+            is_author = is_author_metadata_line(stripped)
             words = stripped.split()
             n_words = len(words)
 
-            if not is_chrome and n_words >= 6:
-                # Check if this looks like evidence
+            # Titles, bylines, and chrome are never evidence — skip outright even
+            # when they overlap the claim (overlap alone is exactly the trap).
+            if not is_chrome and not is_title and not is_author and n_words >= 6:
+                # Check if this looks like a real evidence-bearing sentence.
                 line_lower = stripped.lower()
-                has_claim_overlap = bool(claim_words & set(re.sub(r'[^\w\s]', ' ', line_lower).split()))
                 has_starter = bool(_EVIDENCE_STARTERS.match(stripped))
-                is_long_sentence = n_words >= 12 and stripped.endswith('.')
+                is_long_sentence = n_words >= 10 and stripped.rstrip().endswith('.')
+                has_finite_verb = bool(_FINITE_VERB_RE.search(stripped))
                 has_causal = any(w in line_lower for w in (
                     "because", "therefore", "thus", "hence", "enables", "prevents",
                     "causes", "leads", "results", "demonstrates", "shows", "proves",
                     "genocide", "atrocity", "intervention", "violation", "rights",
                     "court", "held", "ruled", "law", "statute", "treaty",
                 ))
+                has_claim_overlap = bool(
+                    claim_words & set(re.sub(r'[^\w\s]', ' ', line_lower).split())
+                )
 
-                if has_claim_overlap or has_starter or is_long_sentence or has_causal:
+                # Require sentence structure — claim overlap is only enough when it
+                # is paired with a finite verb (so a real sentence, not a heading).
+                if (
+                    has_starter
+                    or is_long_sentence
+                    or has_causal
+                    or (has_finite_verb and n_words >= 8)
+                    or (has_claim_overlap and has_finite_verb)
+                ):
                     best_start = char_pos
                     found = True
                     break
@@ -1164,25 +1706,38 @@ def _finalize_cut(
             cut.cut_text = cleaned_body
             cut_body = cleaned_body
 
-        # Remap selected_spans to cut_body offsets
-        remapped = remap_spans_to_cut_body(cut_body, cut.selected_spans)
-        remapped_bold = remap_spans_to_cut_body(cut_body, cut.bold_spans)
+        # Highlights are a COHERENT SUBSET of the cut body (read-aloud portion),
+        # not the whole thing. Clause-level selection keeps them readable as one
+        # connected argument while leaving un-highlighted context for support.
+        highlights = get_coherent_highlight_spans(cut_body, claim, evidence_role)
+        highlights = _snap_to_word_boundaries(cut_body, highlights)
 
-        # If remapping failed (cut is same as original, so spans already in range), use as-is
-        if not remapped and cut.selected_spans:
-            # Try deterministic highlight fallback
-            remapped = get_deterministic_highlight_spans(cut_body, claim, evidence_role)
-            remapped_bold = []
-        elif remapped and not remapped_bold:
-            # Compute bold from remapped
-            remapped_bold = remap_spans_to_cut_body(cut_body, cut.bold_spans)
+        # Read-aloud validation drives retries: clause-level → whole-sentence.
+        validation = validate_read_aloud_card(cut_body, highlights)
+        if not validation.passed:
+            fallback = _snap_to_word_boundaries(
+                cut_body, sentence_level_highlights(cut_body, claim, evidence_role),
+            )
+            fb_validation = validate_read_aloud_card(cut_body, fallback)
+            # Take the fallback if it is valid, or at least no worse.
+            if fallback and (fb_validation.passed or len(fb_validation.issues) <= len(validation.issues)):
+                highlights = fallback
+                validation = fb_validation
 
-        # Final fallback: if still no highlights, generate deterministic ones
-        if not remapped and len(cut_body) > 50:
-            remapped = get_deterministic_highlight_spans(cut_body, claim, evidence_role)
+        # Edge fallbacks (very short/odd cuts).
+        if not highlights:
+            highlights = remap_spans_to_cut_body(cut_body, cut.selected_spans)
+        if not highlights and len(cut_body) > 50:
+            highlights = _snap_to_word_boundaries(
+                cut_body, get_deterministic_highlight_spans(cut_body, claim, evidence_role),
+            )
+            validation = validate_read_aloud_card(cut_body, highlights)
 
-        cut.cut_body_spans = remapped
-        cut.cut_body_bold_spans = remapped_bold
+        cut.cut_body_spans = highlights
+        cut.cut_body_bold_spans = _bold_within_highlights(highlights)
+        cut.read_aloud_validation = validation
+        if not validation.passed and "Highlights may not read as one clean argument" not in (cut.cut_warnings or []):
+            cut.cut_warnings = (cut.cut_warnings or []) + ["Highlights may not read as one clean argument — review before use."]
 
     return cut
 
@@ -1273,9 +1828,12 @@ def _generate_evidence_cut_inner(
             if phrase_cut is not None:
                 return _finalize_cut(phrase_cut, is_snippet_source, claim, evidence_role)
 
-    # Deterministic fallback: score each sentence/clause and take top ones
+    # Deterministic fallback: rank each sentence and take the top ones
     return _finalize_cut(
-        _deterministic_cut(passage, sentence_spans, claim, target_ratio=target_ratio),
+        _deterministic_cut(
+            passage, sentence_spans, claim,
+            target_ratio=target_ratio, evidence_role=evidence_role,
+        ),
         is_snippet_source, claim, evidence_role,
     )
 
@@ -1715,6 +2273,62 @@ _ROLE_CROSSFIRE_QUESTION: dict[str, str] = {
     "counter_evidence": "Doesn't this card actually cut against your own position?",
 }
 
+# Overhaul — role-aware structured debate-prep coaching templates.
+_ROLE_WARRANT: dict[str, str] = {
+    "direct_support": "The source states the claim outright, so the link from evidence to claim is explicit rather than inferred.",
+    "mechanism_support": "It explains the causal mechanism — the step-by-step reason the claim is true — which is what turns an assertion into a warrant.",
+    "example_support": "A concrete real-world case shows the claim isn't just theoretical; it has actually happened the way you say.",
+    "impact_support": "It quantifies or describes the consequence, giving the judge a reason the claim actually matters.",
+    "definition_support": "It fixes the meaning of a key term, so the rest of your argument is evaluated on your terms.",
+    "authority_support": "A credible expert/institution vouches for the claim, so the judge weighs it as informed, not speculative.",
+    "counter_evidence": "This actually cuts against you — its warrant runs the other way, so treat it as something to pre-empt.",
+}
+_ROLE_IMPACT: dict[str, str] = {
+    "direct_support": "If it stands unanswered, it locks in your core link and forces the opponent to spend time on defense.",
+    "mechanism_support": "Pair it with an impact card and the chain claim → mechanism → impact is complete, which is hard for a judge to vote against.",
+    "example_support": "Examples are sticky for judges — a clean case study often outweighs an opponent's abstract analytics.",
+    "impact_support": "This is your weighing material: bigger, more probable, or faster impacts win the final focus.",
+    "definition_support": "Controlling the definition can decide which arguments even count, shaping the whole round.",
+    "authority_support": "Strong authorship raises the bar your opponent must clear to answer the claim.",
+    "counter_evidence": "Knowing this exists lets you front-line it before the opponent reads it, blunting its surprise value.",
+}
+_ROLE_WEAKNESS: dict[str, str] = {
+    "direct_support": "It may assert more than it proves — the source could be opinion or lack underlying data.",
+    "mechanism_support": "A mechanism can be real in theory but blocked in practice, or disputed by other experts.",
+    "example_support": "A single case can be dismissed as unrepresentative or context-specific.",
+    "impact_support": "Impacts are often contested on magnitude, probability, or timeframe.",
+    "definition_support": "Opponents can offer a competing definition and call yours self-serving.",
+    "authority_support": "Authority is only as strong as the credentials — and a conflicting expert can offset it.",
+    "counter_evidence": "By design it supports the other side; reading it without framing helps your opponent.",
+}
+_ROLE_HOW_TO_ANSWER: dict[str, str] = {
+    "direct_support": "Pre-empt by pairing it with a data or example card so it isn't 'just an assertion.'",
+    "mechanism_support": "Add a card showing the mechanism is currently operative, and name why alternatives don't break it.",
+    "example_support": "Have a second example or a stat ready so it reads as a pattern, not a one-off.",
+    "impact_support": "Pre-load weighing: explain why your magnitude/probability/timeframe beats theirs.",
+    "definition_support": "Justify your definition on grounds of fairness and predictability, not convenience.",
+    "authority_support": "Be ready to state the author's specific credentials and why they outweigh a rival source.",
+    "counter_evidence": "Frame it explicitly as a pre-empt and immediately read your answer so the judge hears the response first.",
+}
+_ROLE_CROSSFIRE_ANSWER: dict[str, str] = {
+    "direct_support": "Point to the exact highlighted line and restate the claim it proves — don't get drawn into the source's tone.",
+    "mechanism_support": "Walk them through the causal steps slowly; make them concede each link.",
+    "example_support": "Concede the case is specific, then explain why the underlying reason generalizes.",
+    "impact_support": "Re-anchor on your weighing: magnitude, probability, timeframe — and ask them to compare directly.",
+    "definition_support": "Defend the definition on fairness/ground, and ask what their interpretation excludes.",
+    "authority_support": "Name the credential and the institution; ask what makes their source more qualified.",
+    "counter_evidence": "Acknowledge it, then read the line from your answer that resolves it.",
+}
+_ROLE_PAIRING: dict[str, str] = {
+    "direct_support": "an impact card, so you have both the link and why it matters.",
+    "mechanism_support": "an impact card — the mechanism explains how, the impact explains why it matters.",
+    "example_support": "an analytic or data card so the example reads as a representative pattern.",
+    "impact_support": "a link/mechanism card so the impact is actually caused by your side of the resolution.",
+    "definition_support": "a substantive contention that depends on the term you just defined.",
+    "authority_support": "a data or example card so credibility is backed by substance.",
+    "counter_evidence": "your strongest frontline card that directly answers it.",
+}
+
 # Part 9 — slot-function-aware "why this card" lead-ins
 _SLOT_FUNCTION_WHY: dict[str, str] = {
     "legal/doctrinal support": "This card provides legal/doctrinal backing for {claim}.",
@@ -1727,6 +2341,158 @@ _SLOT_FUNCTION_WHY: dict[str, str] = {
     "direct support": "This card directly supports {claim}.",
     "authority/credibility support": "This card lends expert/institutional credibility to {claim}.",
 }
+
+
+# Salient named entities debate cards usually hinge on (cases, places, laws,
+# treaties, institutions). Used to make debate-prep notes concrete, not generic.
+_KNOWN_CASE_ENTITIES = (
+    "Bosnia", "Kosovo", "Rwanda", "Dayton", "Srebrenica", "Darfur", "Libya",
+    "Syria", "Cambodia", "Somalia", "Haiti", "Iraq", "Ukraine", "Sudan",
+    "NATO", "United Nations", "Security Council", "Section 230", "FOSTA",
+    "Responsibility to Protect", "R2P", "Geneva Convention", "Genocide Convention",
+    "European Union", "World Bank", "Supreme Court",
+)
+
+
+def extract_case_entities(passage: str, topic: str = "", limit: int = 2) -> list[str]:
+    """Pull the most salient proper-noun cases/entities from a passage.
+
+    Prefers known debate cases/laws/places, then capitalized multi-word proper
+    nouns. Deterministic and dependency-free. Returns up to `limit` entities.
+    """
+    if not passage:
+        return []
+    found: list[str] = []
+    seen: set[str] = set()
+    # 1. Known case/law/place entities (highest signal)
+    for ent in _KNOWN_CASE_ENTITIES:
+        if re.search(r"\b" + re.escape(ent) + r"\b", passage) and ent.lower() not in seen:
+            found.append(ent)
+            seen.add(ent.lower())
+            if len(found) >= limit:
+                return found
+    # 2. Capitalized multi-word proper nouns not at sentence start. Use a
+    # non-newline whitespace class so an entity never spans a line break (which
+    # would glue an end-of-line word to a heading on the next line).
+    for m in re.finditer(r"(?<=[a-z,][^\S\n])([A-Z][a-z]+(?:[^\S\n]+[A-Z][a-z]+){0,2})", passage):
+        cand = m.group(1).strip()
+        low = cand.lower()
+        if low in seen or len(cand) < 4:
+            continue
+        # Skip if it's just the topic word
+        if topic and low == topic.strip().lower():
+            continue
+        found.append(cand)
+        seen.add(low)
+        if len(found) >= limit:
+            break
+    return found[:limit]
+
+
+def _shorten_claim(claim: str, max_words: int = 14) -> str:
+    words = (claim or "").split()
+    if len(words) <= max_words:
+        return (claim or "").strip().rstrip(".")
+    return " ".join(words[:max_words]).rstrip(",;:")
+
+
+def _summarize_highlight(highlighted_text: str, max_words: int = 26) -> str:
+    """Turn the read-aloud highlights into a clean clause for inline prose —
+    lower-cased lead, no quote framing, trimmed at a clause boundary."""
+    if not highlighted_text:
+        return ""
+    # First sentence (pysbd handles abbreviations like U.S. / Dr. correctly).
+    sents = segment_text(highlighted_text.strip())
+    first = sents[0].text if sents else highlighted_text.strip()
+    first = re.split(r"\s+\[…\]\s+|\s+\[\.\.\.\]\s+", first)[0].strip().rstrip(".")
+    # Drop a leading connective so the summary reads as a clean statement.
+    first = re.sub(r"^(?:In addition,?|However,?|Moreover,?|Furthermore,?|Also,?|"
+                   r"That said,?|Indeed,?|Thus,?|Therefore,?)\s+", "", first, flags=re.IGNORECASE)
+    words = first.split()
+    if len(words) > max_words:
+        window = " ".join(words[:max_words])
+        m = list(re.finditer(r"[,;:]", window))
+        first = (window[:m[-1].start()] if m and m[-1].start() > len(window) * 0.4 else window).rstrip(",;: ")
+    if first and first.split()[0] not in _KNOWN_CASE_ENTITIES and not first.split()[0].isupper():
+        first = first[0].lower() + first[1:]
+    return first
+
+
+def _card_specific_analysis(
+    evidence_role: str, claim: str, topic: str,
+    highlighted_text: str, entities: list[str],
+) -> tuple[str, str, str]:
+    """Build (warrant, impact, weighing_angle) in a natural debate-coach voice,
+    grounded in THIS card's read-aloud text + entities. No 'highlighted line'
+    framing, no 'if the judge buys this' — reads like real coaching."""
+    case = entities[0] if entities else ""
+    summary = _summarize_highlight(highlighted_text)
+    claim_short = _shorten_claim(claim) or "your claim"
+    topic_phrase = topic.strip() if topic else ""
+
+    # ── Warrant: what the evidence shows + why it supports the claim ─────────
+    if summary:
+        if evidence_role == "example_support" and case:
+            warrant = (
+                f"This card points to {case}: {summary}. That gives the claim that "
+                f"{claim_short} a concrete, real-world basis rather than just assertion."
+            )
+        elif evidence_role == "impact_support":
+            warrant = (
+                f"This evidence shows that {summary}, which establishes the stakes "
+                f"behind {claim_short}."
+            )
+        else:
+            warrant = (
+                f"This evidence shows that {summary}. That supports the claim that "
+                f"{claim_short} by spelling out the logic the opponent has to answer."
+            )
+    else:
+        warrant = _ROLE_WARRANT.get(evidence_role, "")
+
+    # ── Impact: why it matters in the round (natural, specific) ──────────────
+    if case and evidence_role in ("example_support", "impact_support"):
+        impact = (
+            f"{case} gives the argument real weight: it shows the real-world cost behind "
+            f"{claim_short}, so the opponent has to explain why {case} would not apply here "
+            f"instead of dismissing it as hypothetical."
+        )
+    elif evidence_role == "impact_support":
+        impact = (
+            f"This is strong weighing material — it puts a concrete magnitude on "
+            f"{topic_phrase or claim_short} that an opponent's analytics can't easily match."
+        )
+    elif evidence_role in ("definition_support", "authority_support"):
+        impact = (
+            f"This sets the terms of the debate on {topic_phrase or claim_short}: win the framing "
+            f"here and the opponent's offense is evaluated on your ground."
+        )
+    elif topic_phrase:
+        impact = (
+            f"Winning this card moves {claim_short} forward on {topic_phrase} and forces the "
+            f"opponent to answer the mechanism instead of just trading impacts."
+        )
+    else:
+        impact = _ROLE_IMPACT.get(evidence_role, "")
+
+    # ── Weighing angle (debate-native, specific) ─────────────────────────────
+    if evidence_role in ("impact_support", "example_support"):
+        weighing = (
+            (f"Weigh on probability: {case} already happened, so it is empirically grounded "
+             f"rather than speculative.") if case else
+            "Weigh on probability and reversibility — a documented harm beats a hypothetical one."
+        )
+    elif evidence_role in ("mechanism_support", "direct_support"):
+        weighing = (
+            f"Weigh on strength of link: this lays out exactly how {claim_short} happens, so it "
+            f"controls the internal link the opponent is likely to skip."
+        )
+    else:
+        weighing = (
+            f"Weigh on framing: use this to set how the judge should evaluate "
+            f"{topic_phrase or claim_short} before impacts are compared."
+        )
+    return warrant, impact, weighing
 
 
 def derive_card_intelligence(
@@ -1744,6 +2510,10 @@ def derive_card_intelligence(
     slot_label: str = "",
     slot_target_claim: str = "",
     slot_function: str = "",
+    topic: str = "",
+    passage: str = "",
+    source_title: str = "",
+    highlighted_text: str = "",
 ) -> CardIntelligence:
     """Derive debate-intelligence annotations from card metadata without an LLM call.
 
@@ -1841,6 +2611,54 @@ def derive_card_intelligence(
     if crossfire_question and "[opponent's impact]" in crossfire_question:
         crossfire_question = crossfire_question.replace("[opponent's impact]", "your opponent's impact")
 
+    # ── Structured debate-prep coaching (RoundLab's own words) ────────────────
+    entities_for_analysis = extract_case_entities(passage, topic) if passage else []
+    warrant_analysis, impact_analysis, weighing_angle = _card_specific_analysis(
+        evidence_role, best_supported_claim or claim, topic,
+        highlighted_text, entities_for_analysis,
+    )
+    potential_weakness = _ROLE_WEAKNESS.get(evidence_role, "")
+    how_to_answer_weakness = _ROLE_HOW_TO_ANSWER.get(evidence_role, "")
+    crossfire_answer = _ROLE_CROSSFIRE_ANSWER.get(evidence_role, "")
+    crossfire_question = _ROLE_CROSSFIRE_QUESTION.get(evidence_role, "") or crossfire_question
+
+    # ── Make prep specific to the actual case/entity in the source ────────────
+    entities = extract_case_entities(passage, topic) if passage else []
+    case = entities[0] if entities else ""
+    topic_phrase = (topic.strip() + "-") if topic else ""
+    if case:
+        if evidence_role in ("example_support",):
+            potential_weakness = (
+                f"{case} may be treated as a {topic_phrase}specific case rather than proof "
+                f"that this holds in general."
+            )
+            how_to_answer_weakness = (
+                f"Reframe {case} as a mechanism card — explain why the dynamic that worked in "
+                f"{case} generalizes, instead of defending it as a one-off."
+            )
+            crossfire_answer = (
+                f"Concede {case} is one case, then walk them through the mechanism that makes it "
+                f"representative rather than unique."
+            )
+            if not crossfire_question:
+                crossfire_question = f"What specifically about {case} would not repeat elsewhere?"
+        elif evidence_role in ("impact_support",) and re.search(r"\d", passage):
+            how_to_answer_weakness = (
+                f"Pre-load weighing around the {case} figures: argue your magnitude/probability/"
+                f"timeframe beats the opponent's."
+            )
+        elif evidence_role in ("authority_support",):
+            crossfire_question = f"What are {case}'s credentials on this specific question?" if "Court" not in case else crossfire_question
+
+    # Overclaim / snippet are the most concrete weaknesses — surface first.
+    if overclaim_warning:
+        potential_weakness = overclaim_warning
+    elif is_snippet_source and not potential_weakness:
+        potential_weakness = "Only a snippet of the source was captured — verify the full passage."
+
+    pairing_tail = _ROLE_PAIRING.get(evidence_role, "")
+    best_pairing = f"Pair with {pairing_tail}" if pairing_tail else ""
+
     return CardIntelligence(
         why_this_card=why,
         supports_claim_because=supports,
@@ -1852,6 +2670,13 @@ def derive_card_intelligence(
         save_readiness_reasons=reasons,
         opponent_response=opponent_response,
         crossfire_question=crossfire_question,
+        warrant_analysis=warrant_analysis,
+        impact_analysis=impact_analysis,
+        potential_weakness=potential_weakness,
+        how_to_answer_weakness=how_to_answer_weakness,
+        crossfire_answer=crossfire_answer,
+        best_pairing=best_pairing,
+        weighing_angle=weighing_angle,
     )
 
 
@@ -1924,7 +2749,7 @@ def _fallback_passage(article: ExtractedArticle, topic: str, claim_goal: str) ->
     stripped_at_ev_start = article.extracted_text[ev_start:] if ev_start > 0 else article.extracted_text
 
     # Strip page chrome before splitting into paragraphs
-    clean_text = strip_page_chrome(stripped_at_ev_start)
+    clean_text = strip_page_chrome(stripped_at_ev_start, metadata_title=article.metadata.title or "")
     paragraphs = _split_paragraphs(clean_text)
     if not paragraphs:
         # Fallback to chrome-stripped first 600 chars
@@ -2002,35 +2827,108 @@ def _first_sentence_with(passage: str, terms: tuple) -> str:
 
 
 def _truncate_words(text: str, max_words: int = 20) -> str:
-    """Truncate to max_words on a word boundary (never mid-word)."""
+    """Truncate to max_words, preferring a clause boundary so the tag never ends
+    mid-thought (cut at the last comma/semicolon within the window if present)."""
     words = text.split()
     if len(words) <= max_words:
         return text.strip().rstrip(".")
-    return " ".join(words[:max_words]).rstrip(",;:").rstrip()
+    window = " ".join(words[:max_words])
+    # Prefer cutting at the last clause boundary inside the window.
+    m = list(re.finditer(r"[,;:]", window))
+    if m and m[-1].start() > len(window) * 0.4:
+        return window[:m[-1].start()].rstrip(",;: ").rstrip()
+    return window.rstrip(",;:").rstrip()
 
 
 def _deterministic_tag(passage: str, claim: str, evidence_role: str) -> str:
-    """Build a grounded debate tag from the passage without an LLM."""
-    candidate = ""
-    if evidence_role == "mechanism_support":
-        candidate = _first_sentence_with(passage, _MECHANISM_VERBS)
-    elif evidence_role == "example_support":
-        candidate = _first_sentence_with(passage, _CASE_VERBS)
-    elif evidence_role == "impact_support":
-        candidate = _first_sentence_with(passage, _IMPACT_TERMS)
+    """Build a grounded, claim-like debate tag from the passage without an LLM.
 
-    if not candidate:
-        # Fall back to the first substantial sentence of the passage.
-        sents = _split_sentences(passage)
-        candidate = next((s.text for s in sents if len(s.text.split()) >= 5), "")
-    if not candidate:
-        candidate = (claim or passage)[:120]
+    Prefers a COMPLETE sentence (starts with a capital, contains a finite verb)
+    that carries the claim/role signal — so the tag reads as a real claim and
+    never starts mid-phrase. Falls back to the claim itself.
+    """
+    role_terms = {
+        "mechanism_support": _MECHANISM_VERBS,
+        "example_support": _CASE_VERBS,
+        "impact_support": _IMPACT_TERMS,
+    }.get(evidence_role, ())
+    claim_words = {w for w in re.sub(r"[^\w\s]", " ", (claim or "").lower()).split() if len(w) > 3}
 
-    tag = _truncate_words(candidate, 20)
-    # Never start with "Evidence:"
+    sents = _split_sentences(passage)
+    best: str = ""
+    best_score = -1.0
+    for sent in sents:
+        text = _strip_tag_connective(sent.text.strip())
+        words = text.split()
+        if not (5 <= len(words) <= 45):
+            continue
+        low = text.lower()
+        score = 0.0
+        # Complete-sentence signals (avoid mid-phrase fragments).
+        if text[:1].isupper():
+            score += 1.0
+        if _FINITE_VERB_RE.search(text):
+            score += 1.2
+        # Relevance signals.
+        score += len(claim_words & set(re.sub(r"[^\w\s]", " ", low).split())) * 0.8
+        if role_terms and any(t in low for t in role_terms):
+            score += 1.0
+        if re.search(r"\d", text):
+            score += 0.3
+        # Penalize sentences that open with a connective (read as fragments).
+        if _TAG_CONNECTIVE_RE.match(sent.text.strip()):
+            score -= 0.7
+        if score > best_score:
+            best_score = score
+            best = text
+
+    candidate = best
+    # Only accept a role-term-first-sentence fallback if it's a complete sentence.
+    if not candidate:
+        candidate = next((s.text for s in sents if len(s.text.split()) >= 5 and s.text[:1].isupper()), "")
+    if not candidate:
+        candidate = (claim or passage[:120]).strip()
+
+    tag = _truncate_words(_strip_tag_connective(candidate), 20)
     if tag.lower().startswith("evidence:"):
         tag = tag.split(":", 1)[1].strip()
+    # Final guard: a tag must not start mid-phrase with a lowercase fragment when
+    # we have a usable claim to fall back on.
+    if tag and tag[:1].islower() and claim:
+        return _truncate_words(claim.strip(), 20)
     return tag or (claim or "")[:120]
+
+
+# Connectives that should never lead a debate tag (they read as fragments).
+_TAG_CONNECTIVE_RE = re.compile(
+    r"^(?:In addition|However|Moreover|Furthermore|Also|That said|Indeed|"
+    r"Thus|Therefore|For example|For instance|In other words|As such|"
+    r"Meanwhile|Nevertheless|Nonetheless|Additionally|Consequently)\b[,:]?\s+",
+    re.IGNORECASE,
+)
+
+
+def _strip_tag_connective(text: str) -> str:
+    """Drop a leading connective + re-capitalize so a tag reads as a clean claim."""
+    stripped = _TAG_CONNECTIVE_RE.sub("", text).strip()
+    if stripped and stripped[:1].islower():
+        stripped = stripped[0].upper() + stripped[1:]
+    return stripped or text
+
+
+def deterministic_tagline_from_card(
+    topic: str, claim: str, highlighted_text: str, entities: list[str], evidence_role: str,
+) -> str:
+    """Public tagline builder used by the API/tests. Prefers a clean claim drawn
+    from the read-aloud text, strips leading connectives, validates length/verb,
+    and never returns a mid-phrase or connective-led fragment."""
+    source = highlighted_text or claim
+    tag = _deterministic_tag(source, claim, evidence_role)
+    tag = _strip_tag_connective(tag)
+    # Validate: must have a verb and a capital start, else fall back to the claim.
+    if not tag or not tag[:1].isupper() or not _FINITE_VERB_RE.search(tag):
+        tag = _strip_tag_connective(_truncate_words((claim or "").strip(), 18))
+    return _truncate_words(tag, 18)
 
 
 def generate_debate_tag(
@@ -2129,7 +3027,7 @@ def generate_card_draft(
     if llm_out and llm_out.body_start_idx >= 0 and llm_out.body_end_idx > llm_out.body_start_idx:
         # Strip page chrome before using LLM-selected offsets, since the LLM
         # may have selected into chrome zones if the text had lots of preamble.
-        full_text = strip_page_chrome(article.extracted_text)
+        full_text = strip_page_chrome(article.extracted_text, metadata_title=article.metadata.title or "")
         # Adjust indices — they were relative to original, so use original if chrome
         # stripping changed length, fall back to original text.
         if len(full_text) < len(article.extracted_text) * 0.5:
@@ -2178,6 +3076,93 @@ def generate_card_draft(
             slot_label, slot_target_claim, use_llm=False,
         )
 
+    # ── Rich studio fields (parity with Research Search path) ─────────────────
+    # The URL/Paste path now also produces an evidence cut, structured citation,
+    # and debate-prep intelligence so all three entry paths populate the Studio
+    # identically. Stored in draft_json (a JSON column) and surfaced by the API.
+    evidence_role = "direct_support"
+    draft_json: dict = {}
+    try:
+        cut = generate_evidence_cut(
+            passage=body_text, claim=claim_goal, evidence_role=evidence_role,
+            tag=tag, use_llm=False, preferred_cut_style=DEFAULT_CUT_STYLE,
+        )
+        citation = enrich_citation_metadata(
+            url=article.url or "",
+            author=meta.author, title=meta.title,
+            publication=meta.publication, published_date=meta.published_date,
+            extracted_text=body_text,
+        )
+        intelligence = derive_card_intelligence(
+            evidence_role=evidence_role,
+            best_supported_claim=claim_goal,
+            overclaim_warning="",
+            source_quality=source_quality or "unknown",
+            debate_usefulness_score=6.5,
+            is_snippet_source=False,
+            citation_quality=citation.citation_quality,
+            compression_ratio=cut.compression_ratio,
+            cut_style=cut.cut_style,
+            is_counter_evidence=False,
+            claim=claim_goal,
+            slot_label=slot_label,
+            slot_target_claim=slot_target_claim,
+            topic=topic,
+            passage=body_text,
+            source_title=meta.title or "",
+            highlighted_text=(
+                (cut.read_aloud_validation.read_aloud_text if cut.read_aloud_validation else "")
+                or " ".join(s.text for s in cut.cut_body_spans)
+            ),
+        )
+        # ── Optional LLM refinement (only when a key is configured) ──────────
+        # Smarter tagline / highlights / warrant / impact / debate prep. Never
+        # touches the body text; falls back silently to the deterministic cut.
+        refined_applied = False
+        try:
+            from app.services.evidence_llm_refiner import (
+                refine_card_with_llm, refined_to_intelligence, llm_refiner_available,
+            )
+            if llm_refiner_available():
+                refined = refine_card_with_llm(
+                    base_passage=body_text, current_cut=cut.cut_text_with_ellipses,
+                    topic=topic, claim=claim_goal, side=side or "", role=evidence_role,
+                    source_metadata={
+                        "author": meta.author, "publication": meta.publication,
+                        "title": meta.title, "year": meta.published_date,
+                    },
+                    entities=extract_case_entities(body_text, topic),
+                )
+                if refined is not None:
+                    if refined.tagline:
+                        tag = refined.tagline
+                    intelligence = refined_to_intelligence(refined)
+                    # LLM highlights are validated spans into the full passage.
+                    cut.cut_text_with_ellipses = refined.cut_body
+                    cut.cut_text = refined.cut_body
+                    cut.cut_body_spans = refined.read_aloud_spans
+                    cut.cut_body_bold_spans = _bold_within_highlights(refined.read_aloud_spans)
+                    cut.read_aloud_validation = refined.validation
+                    refined_applied = True
+        except Exception as exc:
+            logger.debug("LLM refiner skipped: %s", exc)
+
+        draft_json = {
+            "evidence_cut": cut.model_dump(),
+            "citation": citation.model_dump(),
+            "intelligence": intelligence.model_dump(),
+            "evidence_role": evidence_role,
+            "short_cite": citation.short_cite,
+            "mla_citation": citation.mla_citation,
+            "citation_quality": citation.citation_quality,
+            "cut_text_with_ellipses": cut.cut_text_with_ellipses,
+            "selected_spans": [s.model_dump() for s in cut.selected_spans],
+            "best_supported_claim": claim_goal,
+            "llm_refined": refined_applied,
+        }
+    except Exception as exc:
+        logger.debug("generate_card_draft rich fields failed: %s", exc)
+
     return {
         "user_id": user_id,
         "url": article.url or None,
@@ -2200,6 +3185,7 @@ def generate_card_draft(
         "extraction_confidence": round(extraction_confidence, 3),
         "generated_tag": True,
         "missing_metadata_json": missing,
+        "draft_json": draft_json,
         "card_source_type": "url" if article.url else "manual_paste",
         "status": "draft",
         "slot_id": slot_id,

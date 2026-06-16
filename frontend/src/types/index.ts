@@ -406,6 +406,10 @@ export interface EvidenceCard {
   claim_summary: string | null;
   attribution_complete: boolean;
   metadata_json: Record<string, unknown>;
+  /** Saved markup so the Library preview can re-render user formatting. */
+  highlighted_spans_json?: UserMarkupSpan[];
+  underline_spans_json?: UserMarkupSpan[];
+  card_cutting_metadata_json?: { user_markup?: UserCardMarkup } & Record<string, unknown>;
   created_at: string;
 }
 
@@ -817,6 +821,23 @@ export interface SelectedSpan {
   rationale?: string;
 }
 
+/** A persisted user markup span (offsets into the edited card body). */
+export interface UserMarkupSpan {
+  start: number;
+  end: number;
+  text?: string;
+  type: "highlight" | "underline" | "bold" | "italic";
+  reason?: string;
+}
+
+/** All user-applied card formatting, persisted on save. */
+export interface UserCardMarkup {
+  highlight: UserMarkupSpan[];
+  underline: UserMarkupSpan[];
+  bold: UserMarkupSpan[];
+  italic: UserMarkupSpan[];
+}
+
 export interface AnnotatedSpan extends SelectedSpan {
   id?: string;
   selected_by?: "ai" | "user";
@@ -906,6 +927,8 @@ export interface CardIntelligence {
   best_use:
     | "contention"
     | "rebuttal"
+    | "summary"
+    | "final_focus"
     | "frontline"
     | "weighing"
     | "impact"
@@ -919,6 +942,14 @@ export interface CardIntelligence {
   // Part 9 — slot-aware debate intelligence
   opponent_response?: string;
   crossfire_question?: string;
+  // Overhaul — structured debate-prep coaching
+  warrant_analysis?: string;
+  impact_analysis?: string;
+  potential_weakness?: string;
+  how_to_answer_weakness?: string;
+  crossfire_answer?: string;
+  best_pairing?: string;
+  weighing_angle?: string;
 }
 
 export interface RegenerateCutRequest {
@@ -997,6 +1028,13 @@ export interface CardDraft {
   body_text: string;
   highlighted_spans_json: HighlightSpan[];
   underline_spans_json: HighlightSpan[];
+  /**
+   * Full user-applied card markup captured in the Studio editor. Highlight and
+   * underline also mirror into their dedicated columns; bold and italic live
+   * only here (and are persisted into card_cutting_metadata_json on save) so no
+   * formatting edit is ever lost.
+   */
+  user_markup_json?: UserCardMarkup | null;
   author: string | null;
   publication: string | null;
   title: string | null;

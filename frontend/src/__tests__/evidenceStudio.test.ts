@@ -340,7 +340,7 @@ describe("downloadCardAsTxt", () => {
 // ── exportCardText format ─────────────────────────────────────────────────────
 
 describe("exportCardText format", () => {
-  it("copy output starts with tag then cite row then body", () => {
+  it("uses labelled TAG / SOURCE / EVIDENCE sections in order", () => {
     const card = makeCard({
       tag: "Courts grant platforms immunity under Section 230",
       short_cite: "Smith 2024",
@@ -348,11 +348,17 @@ describe("exportCardText format", () => {
       mla_citation: "Smith. 2024. https://example.com.",
     });
     const out = exportCardText(card);
-    const lines = out.split("\n").filter(Boolean);
-    // Format: tag / cite / body
-    expect(lines[0]).toContain("Courts grant");  // tag is first
-    expect(out).toContain("Smith 2024");
-    expect(out).toContain("Section 230 grants immunity.");
+    // Labelled sections present
+    expect(out).toContain("TAG:");
+    expect(out).toContain("SOURCE:");
+    expect(out).toContain("EVIDENCE:");
+    // Tag text, source, and body all present, in document order
+    const tagIdx = out.indexOf("Courts grant");
+    const srcIdx = out.indexOf("Smith 2024");
+    const bodyIdx = out.indexOf("Section 230 grants immunity.");
+    expect(tagIdx).toBeGreaterThanOrEqual(0);
+    expect(tagIdx).toBeLessThan(srcIdx);
+    expect(srcIdx).toBeLessThan(bodyIdx);
   });
 
   it("includes MLA when present", () => {

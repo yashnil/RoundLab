@@ -1,23 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { Save, Copy, Download, Quote, Trash2, ExternalLink, X, Check } from "lucide-react";
 import type { CardDraft, EvidenceCutResult, SelectedSpan } from "@/types";
 import { apiFetch } from "@/lib/api";
-import {
-  evidenceRoleBadgeStyle,
-  evidenceRoleLabel,
-  sourceQualityBadgeStyle,
-  sourceQualityLabel,
-} from "@/lib/researchHelpers";
 
-import { buildCutTextFromSpans, exportCardText, downloadCardAsTxt, hostnameOnly } from "./HighlightedCardText";
+import { copyCardRich, downloadCardAsTxt, hostnameOnly } from "./HighlightedCardText";
 import { DebateCardPreview } from "./DebateCardPreview";
-import { CardMetadataRail } from "./CardMetadataRail";
-import { CoachNotesPanel } from "./CoachNotesPanel";
-import { SaveReadinessGate, computeSaveReadiness } from "./SaveReadinessGate";
-import { SourceVerificationPanel } from "./SourceVerificationPanel";
-import { EvidenceSlotBadge } from "./EvidenceSlotBadge";
-import { CardMarkupToolbar, CardMarkupArea, useMarkupState } from "./CardMarkupToolbar";
+import { CardAnalysis } from "./CardAnalysis";
+import { DebatePrepPanel } from "./DebatePrepPanel";
+import { computeSaveReadiness } from "./SaveReadinessGate";
+import { CardMarkupToolbar, CardMarkupArea, useMarkupState, buildUserMarkupPayload, isUserSpan } from "./CardMarkupToolbar";
 
 export { hostnameOnly };
 
@@ -99,44 +92,29 @@ export function cardBorderClass(card: Pick<CardDraft, "is_counter_evidence">): s
     : "border-border";
 }
 
-// ── CutStyleControls ──────────────────────────────────────────────────────────
+// ── CutStyleControls — two styles only (Medium / High) ───────────────────────
+
+/** Map the backend cut_style onto the two user-facing styles. */
+export function activeStyleFromCut(cutStyle?: string | null): "medium" | "high" {
+  if (!cutStyle) return "medium";
+  if (cutStyle === "aggressive_cut" || cutStyle === "high") return "high";
+  return "medium";
+}
 
 function CutStyleControls({
   card,
-  onCutChanged,
+  activeStyle,
+  onStyleChange,
 }: {
   card: CardDraft;
-  onCutChanged: (result: EvidenceCutResult) => void;
+  activeStyle: "medium" | "high";
+  onStyleChange: (style: "medium" | "high", result: EvidenceCutResult) => void;
 }) {
-  const [activeCutStyle, setActiveCutStyle] = useState<string>(
-    card.evidence_cut?.cut_style ?? "medium_cut",
-  );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"medium" | "high" | null>(null);
 
-  const styles = [
-    { key: "full", label: "Full" },
-    { key: "light", label: "Light" },
-    { key: "medium", label: "Medium" },
-    { key: "aggressive", label: "Aggressive" },
-  ];
-
-  async function handleStyleChange(style: string) {
-    if (style === "full" && card.body_text) {
-      setActiveCutStyle("full");
-      onCutChanged({
-        original_passage: card.body_text,
-        selected_spans: [],
-        cut_text: card.body_text,
-        cut_text_with_ellipses: card.body_text,
-        compression_ratio: 1.0,
-        confidence: 1.0,
-        cut_style: "full",
-        validation_passed: true,
-      });
-      return;
-    }
-
-    setLoading(true);
+  async function handleStyleChange(style: "medium" | "high") {
+    if (style === activeStyle || loading) return;
+    setLoading(style);
     try {
       const data = await apiFetch<{ cut: EvidenceCutResult; cut_style_applied: string }>(
         "/research/regenerate-cut",
@@ -153,58 +131,90 @@ function CutStyleControls({
           }),
         },
       );
-      setActiveCutStyle(style);
-      onCutChanged(data.cut);
+      onStyleChange(style, data.cut);
     } catch {
-      // silently fail, keep current cut
+      // keep current cut on failure
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   }
 
+  const styles: { key: "medium" | "high"; label: string; hint: string }[] = [
+    { key: "medium", label: "Medium", hint: "Keeps the warrant + key context" },
+    { key: "high", label: "High", hint: "Hard cut to the core phrases" },
+  ];
+
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[9px] text-ink-muted uppercase tracking-wide">Cut style:</span>
-      <div className="flex gap-1">
-        {styles.map(({ key, label }) => (
+    <div className="flex items-center gap-2.5 flex-wrap">
+      <span className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Cut</span>
+      <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5">
+        {styles.map(({ key, label, hint }) => (
           <button
             key={key}
-            disabled={loading}
+            title={hint}
+            disabled={!!loading}
             onClick={() => handleStyleChange(key)}
-            className={`text-[9px] px-2 py-0.5 rounded border transition-colors ${
-              activeCutStyle.startsWith(key) ||
-              (key === "medium" && activeCutStyle === "medium_cut")
-                ? "bg-blue-100 border-blue-300 text-blue-700 font-medium"
-                : "border-border text-ink-muted hover:bg-surface-faint"
+            className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
+              activeStyle === key
+                ? "bg-gray-900 text-white"
+                : "text-gray-500 hover:text-gray-800"
             }`}
           >
-            {label}
+            {loading === key ? "…" : label}
           </button>
         ))}
-        {loading && <span className="text-[9px] text-ink-muted">…</span>}
       </div>
+      <span className="text-[10px] text-gray-400">
+        {styles.find((s) => s.key === activeStyle)?.hint}
+      </span>
     </div>
   );
 }
 
-function RoleQualityBadges({ card }: { card: CardDraft }) {
+// ── Sticky action-bar pieces ─────────────────────────────────────────────────
+
+function ReadinessPill({ readiness }: { readiness: "ready" | "review_needed" | "weak" }) {
+  const cfg = {
+    ready: { label: "Ready to save", dot: "bg-emerald-500", cls: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+    review_needed: { label: "Review needed", dot: "bg-amber-500", cls: "bg-amber-50 border-amber-200 text-amber-700" },
+    weak: { label: "Verify source", dot: "bg-rose-500", cls: "bg-rose-50 border-rose-200 text-rose-700" },
+  }[readiness];
   return (
-    <>
-      <span
-        className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${evidenceRoleBadgeStyle(
-          card.evidence_role,
-        )}`}
-      >
-        {evidenceRoleLabel(card.evidence_role)}
-      </span>
-      <span
-        className={`text-[10px] px-2 py-0.5 rounded-full border ${sourceQualityBadgeStyle(
-          card.source_quality,
-        )}`}
-      >
-        {sourceQualityLabel(card.source_quality)}
-      </span>
-    </>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${cfg.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function ActionIconButton({
+  icon, label, onClick, href, disabled, tone = "default", active,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  disabled?: boolean;
+  tone?: "default" | "danger";
+  active?: boolean;
+}) {
+  const toneCls = active
+    ? "text-emerald-600 bg-emerald-50"
+    : tone === "danger"
+      ? "text-gray-400 hover:text-rose-600 hover:bg-rose-50"
+      : "text-gray-500 hover:text-gray-900 hover:bg-gray-100";
+  const cls = `inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 ${toneCls}`;
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} title={label} className={cls}>
+        {icon}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label} className={cls}>
+      {icon}
+    </button>
   );
 }
 
@@ -217,6 +227,7 @@ export default function EvidenceStudioCard({
   onDiscard,
   forceExpanded = false,
   onOpenStudio,
+  onClose,
 }: {
   card: CardDraft;
   claimGoal?: string | null;
@@ -225,6 +236,8 @@ export default function EvidenceStudioCard({
   forceExpanded?: boolean;
   /** If provided, clicking "Open Studio" calls this instead of inline-expanding. */
   onOpenStudio?: () => void;
+  /** Modal close handler — surfaces a Close control in the sticky action bar. */
+  onClose?: () => void;
 }) {
   const displayTag = getDisplayTag(card, claimGoal);
   // isTagNarrowed: true when an overclaim was detected and the displayed tag
@@ -236,87 +249,69 @@ export default function EvidenceStudioCard({
 
   // Non-modal path always shows collapsed view; expanded view only via forceExpanded (modal).
   const expanded = forceExpanded;
-  const [isEditingCut, setIsEditingCut] = useState(false);
-  const [isSourceOpen, setIsSourceOpen] = useState(false);
-  const [editingSpans, setEditingSpans] = useState<SelectedSpan[] | null>(null);
-  const [verified, setVerified] = useState(false);
+  const initialCut = card.evidence_cut;
+  const [activeStyle, setActiveStyle] = useState<"medium" | "high">(
+    activeStyleFromCut(initialCut?.cut_style),
+  );
+  // The card body shown + the AI highlight subset for it. Both update in place
+  // when the cut style changes — there is no second editor panel.
+  const [cutBody, setCutBody] = useState<string>(
+    initialCut?.cut_text_with_ellipses || card.cut_text_with_ellipses || card.body_text || "",
+  );
+  const [aiSpans, setAiSpans] = useState<SelectedSpan[]>(
+    initialCut?.cut_body_spans ?? card.selected_spans ?? [],
+  );
+  const [aiBoldSpans, setAiBoldSpans] = useState<SelectedSpan[]>(
+    initialCut?.cut_body_bold_spans ?? [],
+  );
+  const [cutWarnings, setCutWarnings] = useState<string[]>(initialCut?.cut_warnings ?? []);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [mlaCopied, setMlaCopied] = useState(false);
 
-  // ── Markup state (user-applied highlights + underlines) ────────────────────
-  const aiHighlightSpans: SelectedSpan[] = card.evidence_cut?.cut_body_spans ?? card.selected_spans ?? [];
-  const { markup, setMarkup, resetToAI: resetMarkupToAI } = useMarkupState(aiHighlightSpans);
+  // ── Markup state (user-applied highlight/underline/bold/italic) ────────────
+  const { markup, setMarkup } = useMarkupState(aiSpans);
 
-  const activeSpans = editingSpans ?? card.selected_spans ?? [];
-
-  function handleRemoveSpan(sortedIndex: number) {
-    const base = editingSpans ?? card.selected_spans ?? [];
-    const sorted = [...base].sort((a, b) => a.start - b.start);
-    const updated = sorted.filter((_, i) => i !== sortedIndex);
-    setEditingSpans(updated);
+  function resetMarkupToAI() {
+    setMarkup({ highlightSpans: aiSpans, underlineSpans: [], boldSpans: [], italicSpans: [] });
   }
 
-  function handleResetCut() {
-    setEditingSpans(null);
-    setIsEditingCut(false);
+  // Cut-style change re-cuts the passage and swaps the body + highlights in place.
+  function handleStyleChange(style: "medium" | "high", result: EvidenceCutResult) {
+    setActiveStyle(style);
+    const body = result.cut_text_with_ellipses || result.cut_text || card.body_text || "";
+    setCutBody(body);
+    const newAi =
+      (result.cut_body_spans && result.cut_body_spans.length
+        ? result.cut_body_spans
+        : result.selected_spans) ?? [];
+    setAiSpans(newAi);
+    setAiBoldSpans(result.cut_body_bold_spans ?? []);
+    setCutWarnings(result.cut_warnings ?? []);
+    setMarkup({ highlightSpans: newAi, underlineSpans: [], boldSpans: [], italicSpans: [] });
   }
 
-  function handleCutChanged(result: EvidenceCutResult) {
-    setEditingSpans(result.selected_spans ?? []);
-  }
+  const previewCutText = cutBody;
+  // Card built with the live (possibly re-cut) body so copy/download/save match.
+  const liveCard: CardDraft = { ...card, cut_text_with_ellipses: cutBody };
 
   async function handleCopy(): Promise<void> {
-    const text = exportCardText(card, editingSpans);
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      // Fallback: create a temporary textarea and execCommand
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const success = document.execCommand("copy");
-      document.body.removeChild(ta);
-      if (!success) throw new Error("execCommand copy failed");
-    }
+    // Rich HTML (highlighted evidence) + plain-text fallback. Highlights follow
+    // the user's current markup when present, else the AI read-aloud subset.
+    const highlightSpans =
+      markup.highlightSpans.length > 0 ? markup.highlightSpans : aiSpans;
+    await copyCardRich(liveCard, highlightSpans);
   }
 
   function handleDownload() {
-    downloadCardAsTxt(card, editingSpans);
+    downloadCardAsTxt(liveCard);
   }
 
-  const previewCutText =
-    buildCutTextFromSpans(card.body_text, activeSpans) ||
-    card.cut_text_with_ellipses ||
-    card.body_text;
-
-  // In edit mode: remap current editing spans to cut-body offsets so card
-  // preview keeps highlights visible. Falls back to cut_body_spans from backend.
-  const remappedEditingSpans: SelectedSpan[] | null = (() => {
-    if (!editingSpans || !previewCutText) return null;
-    const remapped: SelectedSpan[] = [];
-    for (const span of editingSpans) {
-      const pos = previewCutText.indexOf(span.text);
-      if (pos !== -1) {
-        remapped.push({ ...span, start: pos, end: pos + span.text.length });
-      }
-    }
-    return remapped.length > 0 ? remapped : null;
-  })();
-  // Use user markup when present, else fall back to AI spans
-  const cardBodySpans =
-    markup.highlightSpans.length > 0
-      ? markup.highlightSpans
-      : (remappedEditingSpans ?? (card.evidence_cut?.cut_body_spans ?? null));
-  // Merge user bold with AI bold
-  const cardBodyBoldSpans = [
-    ...(card.evidence_cut?.cut_body_bold_spans ?? []),
-    ...markup.boldSpans,
-  ];
+  // Highlights shown = user markup (seeded from the AI subset). Bold merges
+  // AI bold + user bold; underline/italic are user-only.
+  const cardBodySpans = markup.highlightSpans.length > 0 ? markup.highlightSpans : aiSpans;
+  const cardBodyBoldSpans = [...aiBoldSpans, ...markup.boldSpans];
   const cardBodyUnderlineSpans = markup.underlineSpans;
   const cardBodyItalicSpans = markup.italicSpans ?? [];
-  const boldSpans = card.evidence_cut?.bold_spans ?? [];
 
   // ── Collapsed card — clean horizontal evidence card row ─────────────────────
   if (!expanded) {
@@ -383,217 +378,191 @@ export default function EvidenceStudioCard({
 
           {/* Right column: actions */}
           <div className="flex flex-col items-end justify-between px-3 py-3 gap-2 shrink-0 border-l border-gray-100">
-            {/* Readiness dot + label */}
-            <div className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${readinessDot}`} />
-              <span className="text-[10px] text-gray-500">{readinessLabel}</span>
-            </div>
-            {/* Open Studio — always opens modal, never inline expands */}
-            <button
-              onClick={() => onOpenStudio?.()}
-              disabled={!onOpenStudio}
-              className="text-[11px] px-3 py-1.5 rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors font-medium disabled:opacity-40"
-            >
-              Open Studio
-            </button>
-            {/* Quick save */}
-            {card.status === "draft" && !card.is_counter_evidence && readiness === "ready" && (
+            <div className="flex items-center gap-2">
+              {/* Readiness dot + label */}
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${readinessDot}`} />
+                <span className="text-[10px] text-gray-500">{readinessLabel}</span>
+              </div>
+              {/* Discard — polished icon button (replaces the raw ✕) */}
               <button
-                onClick={() => onSave(card)}
-                className="text-[10px] px-2.5 py-1 rounded-lg border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
+                onClick={() => onDiscard(card.id)}
+                aria-label="Discard card"
+                title="Discard card"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
               >
-                Save
+                <Trash2 size={13} />
               </button>
-            )}
-            {/* Discard */}
-            <button
-              onClick={() => onDiscard(card.id)}
-              aria-label="Discard card"
-              className="text-[10px] text-gray-300 hover:text-red-400 transition-colors p-0.5"
-            >
-              ✕
-            </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {/* Quick save */}
+              {card.status === "draft" && !card.is_counter_evidence && readiness === "ready" && (
+                <button
+                  onClick={() => onSave(card)}
+                  className="text-[11px] px-2.5 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors font-medium"
+                >
+                  Save
+                </button>
+              )}
+              {/* Open Studio — always opens modal, never inline expands */}
+              <button
+                onClick={() => onOpenStudio?.()}
+                disabled={!onOpenStudio}
+                className="text-[11px] px-3 py-1.5 rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+              >
+                Open Studio
+              </button>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Expanded studio — single-scroll focused editor layout ────────────────────
+  // ── Expanded studio — card surface (left) + organized rail (right) ───────────
+  function handleSaveWithMarkup(c: CardDraft) {
+    // Merge ALL user markup into the card before saving so every formatting
+    // edit (highlight/underline/bold/italic) is persisted. Highlight + underline
+    // mirror into their dedicated columns; bold + italic ride in user_markup_json.
+    const userMarkup = buildUserMarkupPayload(markup);
+    onSave({
+      ...c,
+      cut_text_with_ellipses: cutBody,
+      user_markup_json: userMarkup,
+      highlighted_spans_json: [
+        ...(c.highlighted_spans_json ?? []),
+        ...markup.highlightSpans.filter(isUserSpan).map((s) => ({
+          start: s.start, end: s.end, type: "highlight" as const, reason: "user",
+        })),
+      ],
+      underline_spans_json: [
+        ...(c.underline_spans_json ?? []),
+        ...markup.underlineSpans.filter(isUserSpan).map((s) => ({
+          start: s.start, end: s.end, type: "underline" as const, reason: "user",
+        })),
+      ],
+    });
+  }
+
+  const isDraft = card.status === "draft" && !card.is_counter_evidence;
+  const canSave = isDraft && readiness !== "weak";
+
+  async function doCopy() {
+    try {
+      await handleCopy();
+      setCopyState("copied");
+      setTimeout(() => setCopyState("idle"), 1600);
+    } catch {
+      setCopyState("error");
+      setTimeout(() => setCopyState("idle"), 2000);
+    }
+  }
+
+  function doCopyMla() {
+    if (!card.mla_citation) return;
+    navigator.clipboard?.writeText(card.mla_citation);
+    setMlaCopied(true);
+    setTimeout(() => setMlaCopied(false), 1600);
+  }
+
+  // ── One-column document editor with a sticky top action bar ────────────────
   return (
     <div className={`min-w-0 w-full bg-white ${forceExpanded ? "" : `rounded-xl border-2 ${cardBorderClass(card)} shadow-sm`}`}>
-      {/* Inline header (only shown outside modal — forceExpanded=false is now dead code) */}
-      {!forceExpanded && null}
-
-      {/* Main editor scroll area */}
-      <div className={`flex flex-col ${forceExpanded ? "lg:flex-row" : ""} gap-0`}>
-
-        {/* ── Left: card editor (main focus) ──────────────────────────── */}
-        <div className={`flex flex-col gap-5 p-5 ${forceExpanded ? "lg:flex-1 lg:border-r lg:border-gray-100" : "w-full"} min-w-0`}>
-
-          {/* Overclaim warning */}
-          {card.overclaim_warning && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <span className="text-amber-500 text-sm shrink-0">⚠</span>
-              <p className="text-[11px] text-amber-800 leading-snug">{card.overclaim_warning}</p>
-            </div>
-          )}
-
-          {/* Counter evidence notice */}
-          {card.is_counter_evidence && (
-            <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
-              <p className="text-[11px] text-orange-700">
-                ⚡ Counter-evidence — use as a pre-empt, not support.
-              </p>
-            </div>
-          )}
-
-          {/* The debate card — wrapped in CardMarkupArea for selection capture */}
-          <CardMarkupArea bodyText={previewCutText} markup={markup} onMarkupChange={setMarkup}>
-            <DebateCardPreview
-              tag={displayTag}
-              shortCite={card.short_cite}
-              containerTitle={card.citation?.container_title || card.citation?.publication_name}
-              bodyText={previewCutText}
-              spans={cardBodySpans ?? undefined}
-              boldSpans={cardBodyBoldSpans}
-              underlineSpans={cardBodyUnderlineSpans}
-              italicSpans={cardBodyItalicSpans}
-              mlacitation={card.mla_citation}
-              claimGoal={card.best_supported_claim || claimGoal}
-              isTagNarrowed={isTagNarrowed}
-            />
-          </CardMarkupArea>
-
-          {/* Markup controls bar — reset/clear all */}
-          <CardMarkupToolbar
-            markup={markup}
-            onMarkupChange={setMarkup}
-            onReset={resetMarkupToAI}
-            aiHighlightSpans={aiHighlightSpans}
-          />
-          <p className="text-[10px] text-gray-400">
-            Select text in the card above, then click Highlight, Underline, or Bold in the popup.
-          </p>
-
-          {/* Edit cut controls — only in edit mode */}
-          {!isEditingCut && (
-            <button
-              onClick={() => { setIsEditingCut(true); setIsSourceOpen(true); }}
-              className="self-start text-[11px] px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-            >
-              ✂ Edit cut
-            </button>
-          )}
-          {isEditingCut && (
-            <div className="flex flex-col gap-2 p-3 rounded-lg border border-gray-100 bg-gray-50">
-              <CutStyleControls card={card} onCutChanged={handleCutChanged} />
-              {card.evidence_cut?.cut_warnings && card.evidence_cut.cut_warnings.length > 0 && (
-                <ul className="text-[9px] text-amber-700 space-y-0.5">
-                  {card.evidence_cut.cut_warnings.map((w, i) => (
-                    <li key={i}>⚠ {w}</li>
-                  ))}
-                </ul>
-              )}
-              <button
-                onClick={handleResetCut}
-                className="self-start text-[10px] px-2 py-0.5 rounded border border-amber-200 text-amber-600 hover:bg-amber-50"
-              >
-                Reset cut
-              </button>
-            </div>
-          )}
-
-          {/* Source verification — collapsed by default */}
-          <div className="flex flex-col gap-1.5">
-            <button
-              onClick={() => setIsSourceOpen((v) => !v)}
-              className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 w-fit transition-colors py-1"
-            >
-              <span
-                className="text-[10px] transition-transform duration-150 inline-block"
-                style={{ transform: isSourceOpen ? "rotate(90deg)" : "none" }}
-              >
-                ▸
-              </span>
-              <span className="font-medium">Verify source</span>
-              {card.url && (
-                <span className="text-blue-400 truncate max-w-[160px] text-[10px]">
-                  {card.url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
-                </span>
-              )}
-            </button>
-            {isSourceOpen && (
-              <div className="rounded-lg border border-gray-100 overflow-hidden">
-                <SourceVerificationPanel
-                  card={card}
-                  editingSpans={activeSpans}
-                  boldSpans={boldSpans}
-                  onRemoveSpan={handleRemoveSpan}
-                  isEditing={isEditingCut}
-                  onEditStart={() => { setIsEditingCut(true); }}
-                  onEditReset={handleResetCut}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Action bar — bottom of editor column */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-            <SaveReadinessGate
-              card={card}
-              onSave={(c) => {
-                // Merge user markup into card before saving so spans are persisted
-                const cardWithMarkup: typeof c = {
-                  ...c,
-                  highlighted_spans_json: [
-                    ...(c.highlighted_spans_json ?? []),
-                    ...markup.highlightSpans.filter((s) => s.rationale?.startsWith("user")).map((s) => ({
-                      start: s.start, end: s.end, type: "highlight" as const, reason: "user",
-                    })),
-                  ],
-                  underline_spans_json: [
-                    ...(c.underline_spans_json ?? []),
-                    ...markup.underlineSpans.filter((s) => s.rationale?.startsWith("user")).map((s) => ({
-                      start: s.start, end: s.end, type: "underline" as const, reason: "user",
-                    })),
-                  ],
-                };
-                onSave(cardWithMarkup);
-              }}
-              onDiscard={onDiscard}
-              onCopy={handleCopy}
-              verified={verified}
-              onVerifiedChange={setVerified}
-            />
-            {showCopyMlaButton(card) && (
-              <button
-                onClick={() => navigator.clipboard?.writeText(card.mla_citation!)}
-                className="text-[11px] px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
-              >
-                Copy MLA
-              </button>
-            )}
-            <button
-              onClick={handleDownload}
-              className="text-[11px] px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
-              title="Download card as .txt"
-            >
-              ↓ Download
-            </button>
-          </div>
+      {/* Sticky action bar — stays visible while the document scrolls */}
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 sm:px-6 py-2.5 backdrop-blur">
+        <div className="flex items-center gap-3 min-w-0">
+          <ReadinessPill readiness={readiness} />
+          <CutStyleControls card={card} activeStyle={activeStyle} onStyleChange={handleStyleChange} />
         </div>
-
-        {/* ── Right rail: metadata + coach notes ───────────────────────── */}
-        {forceExpanded && (
-          <div className="lg:w-80 xl:w-96 flex flex-col gap-4 p-5 bg-gray-50/50 shrink-0">
-            <CardMetadataRail card={card} />
-            <CoachNotesPanel
-              intelligence={card.intelligence}
-              slotLabel={card.slot_label}
+        <div className="flex items-center gap-1.5">
+          {isDraft && (
+            <button
+              type="button"
+              onClick={() => handleSaveWithMarkup(card)}
+              disabled={!canSave}
+              title={canSave ? "Save to library" : "Verify the source before saving"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+            >
+              <Save size={13} /> Save
+            </button>
+          )}
+          <ActionIconButton
+            icon={copyState === "copied" ? <Check size={15} /> : <Copy size={15} />}
+            label={copyState === "copied" ? "Copied!" : "Copy card"}
+            onClick={doCopy}
+            active={copyState === "copied"}
+          />
+          <ActionIconButton icon={<Download size={15} />} label="Download .txt" onClick={handleDownload} />
+          {showCopyMlaButton(card) && (
+            <ActionIconButton
+              icon={mlaCopied ? <Check size={15} /> : <Quote size={15} />}
+              label={mlaCopied ? "MLA copied!" : "Copy MLA citation"}
+              onClick={doCopyMla}
+              active={mlaCopied}
             />
+          )}
+          {card.url && (
+            <ActionIconButton icon={<ExternalLink size={15} />} label="Open source" href={card.url} />
+          )}
+          <ActionIconButton icon={<Trash2 size={15} />} label="Discard card" onClick={() => onDiscard(card.id)} tone="danger" />
+          {onClose && (
+            <>
+              <span className="mx-0.5 h-5 w-px bg-gray-200" />
+              <ActionIconButton icon={<X size={16} />} label="Close" onClick={onClose} />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Single-column document: Tag → MLA → Card → Analysis → Debate Prep */}
+      <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 sm:px-6 py-5 sm:py-6 min-w-0">
+
+        {card.is_counter_evidence && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+            <p className="text-[11px] text-orange-700">
+              ⚡ Counter-evidence — use as a pre-empt, not support.
+            </p>
           </div>
         )}
+
+        {/* The debate card — selection capture happens directly on it (in place) */}
+        <CardMarkupArea bodyText={previewCutText} markup={markup} onMarkupChange={setMarkup}>
+          <DebateCardPreview
+            tag={displayTag}
+            shortCite={card.short_cite}
+            containerTitle={card.citation?.container_title || card.citation?.publication_name}
+            author={card.author || card.citation?.author_display}
+            year={card.citation?.year || card.published_date}
+            bodyText={previewCutText}
+            spans={cardBodySpans ?? undefined}
+            boldSpans={cardBodyBoldSpans}
+            underlineSpans={cardBodyUnderlineSpans}
+            italicSpans={cardBodyItalicSpans}
+            mlacitation={card.mla_citation}
+            claimGoal={card.best_supported_claim || claimGoal}
+            isTagNarrowed={isTagNarrowed}
+            sourceDomain={card.source_domain || (card.url ? hostnameOnly(card.url) : null)}
+            onCopyMla={card.mla_citation ? doCopyMla : undefined}
+          />
+        </CardMarkupArea>
+
+        {/* Markup reset/clear controls */}
+        <CardMarkupToolbar
+          markup={markup}
+          onMarkupChange={setMarkup}
+          onReset={resetMarkupToAI}
+          aiHighlightSpans={aiSpans}
+        />
+
+        {cutWarnings.length > 0 && (
+          <p className="text-[10px] text-amber-600/90 leading-snug">{cutWarnings[0]}</p>
+        )}
+
+        {/* RoundLab analysis (warrant + impact) directly under the card */}
+        <CardAnalysis intelligence={card.intelligence} />
+
+        {/* Debate prep, full-width below the analysis (not cramped in a rail) */}
+        <DebatePrepPanel intelligence={card.intelligence} className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5" />
       </div>
     </div>
   );

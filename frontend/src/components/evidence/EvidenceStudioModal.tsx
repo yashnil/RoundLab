@@ -63,47 +63,26 @@ export function EvidenceStudioModal({
         aria-hidden="true"
       />
 
-      {/* Modal panel — large, focused editor */}
+      {/* Modal panel — one-column document editor. The sticky action bar +
+          Close control live inside EvidenceStudioCard so they pin to the
+          scroll container as the document scrolls. */}
       <div
         ref={modalRef}
         tabIndex={-1}
         className="relative z-10 flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
         style={{
-          width: "min(1400px, 96vw)",
-          height: "min(900px, 92vh)",
+          width: "min(900px, 96vw)",
+          height: "min(940px, 92vh)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sticky header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white/95 backdrop-blur-sm shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            {card.slot_label && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium shrink-0">
-                {card.slot_label}
-              </span>
-            )}
-            <span className="text-[13px] font-semibold text-gray-800 truncate max-w-[40vw]">
-              {card.tag ? card.tag.slice(0, 80) : "Evidence card"}
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
-            aria-label="Close Evidence Studio"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overscroll-contain">
           <EvidenceStudioCard
             card={card}
             claimGoal={claimGoal}
             onSave={onSave}
             onDiscard={handleDiscard}
+            onClose={onClose}
             forceExpanded
           />
         </div>

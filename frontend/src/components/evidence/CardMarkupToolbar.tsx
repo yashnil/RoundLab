@@ -1,13 +1,57 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { SelectedSpan } from "@/types";
+import type { SelectedSpan, UserCardMarkup, UserMarkupSpan } from "@/types";
 
 export interface MarkupState {
   highlightSpans: SelectedSpan[];
   underlineSpans: SelectedSpan[];
   boldSpans: SelectedSpan[];
   italicSpans: SelectedSpan[];
+}
+
+/** A span is user-applied when its rationale was tagged "user_*" by the toolbar. */
+export function isUserSpan(s: SelectedSpan): boolean {
+  return !!s.rationale?.startsWith("user");
+}
+
+function toMarkupSpans(
+  spans: SelectedSpan[],
+  type: UserMarkupSpan["type"],
+  userOnly: boolean,
+): UserMarkupSpan[] {
+  return spans
+    .filter((s) => (userOnly ? isUserSpan(s) : true))
+    .map((s) => ({ start: s.start, end: s.end, text: s.text, type, reason: "user" }));
+}
+
+/**
+ * Build the full UserCardMarkup payload from editor markup state. Captures
+ * highlight, underline, bold AND italic so no formatting edit is dropped on save.
+ * By default only user-applied spans are included (AI highlights are not
+ * re-persisted as user edits).
+ */
+export function buildUserMarkupPayload(
+  markup: MarkupState,
+  { userOnly = true }: { userOnly?: boolean } = {},
+): UserCardMarkup {
+  return {
+    highlight: toMarkupSpans(markup.highlightSpans, "highlight", userOnly),
+    underline: toMarkupSpans(markup.underlineSpans, "underline", userOnly),
+    bold: toMarkupSpans(markup.boldSpans, "bold", userOnly),
+    italic: toMarkupSpans(markup.italicSpans ?? [], "italic", userOnly),
+  };
+}
+
+/** True when the user has applied any highlight/underline/bold/italic span. */
+export function hasAnyUserMarkup(markup: MarkupState): boolean {
+  const m = buildUserMarkupPayload(markup);
+  return (
+    m.highlight.length > 0 ||
+    m.underline.length > 0 ||
+    m.bold.length > 0 ||
+    m.italic.length > 0
+  );
 }
 
 interface CapturedSelection {
@@ -70,14 +114,16 @@ function captureSelection(container: HTMLElement, bodyText: string): CapturedSel
 
   if (finalStart >= finalEnd) return null;
 
-  // Get toolbar position from range bounding rect
+  // Toolbar is position:fixed, so use viewport coordinates directly (NOT
+  // offset by scroll). This keeps the toolbar pinned to the selection even
+  // when the card scrolls inside the modal.
   const rect = range.getBoundingClientRect();
   return {
     start: finalStart,
     end: finalEnd,
     text: selText,
-    top: rect.top + window.scrollY,
-    left: rect.left + window.scrollX + rect.width / 2,
+    top: rect.top,
+    left: rect.left + rect.width / 2,
   };
 }
 
@@ -91,6 +137,23 @@ function addSpan(spans: SelectedSpan[], span: SelectedSpan): SelectedSpan[] {
 
 function removeSpansOverlapping(spans: SelectedSpan[], start: number, end: number): SelectedSpan[] {
   return spans.filter((s) => s.end <= start || s.start >= end);
+}
+
+/** True when the [start,end] range is already covered by an existing span. */
+function rangeIsMarked(spans: SelectedSpan[], start: number, end: number): boolean {
+  return spans.some((s) => s.start <= start && s.end >= end);
+}
+
+/**
+ * Toggle a formatting span over [start,end]: if the range is already marked,
+ * remove the overlapping spans; otherwise add `span`. This is what makes the
+ * Highlight/Underline/Bold/Italic buttons behave as on/off toggles.
+ */
+function toggleSpan(spans: SelectedSpan[], span: SelectedSpan): SelectedSpan[] {
+  if (rangeIsMarked(spans, span.start, span.end)) {
+    return removeSpansOverlapping(spans, span.start, span.end);
+  }
+  return addSpan(spans, span);
 }
 
 // ── FloatingToolbar ───────────────────────────────────────────────────────────
@@ -125,11 +188,17 @@ function FloatingToolbar({
     return () => document.removeEventListener("mousedown", handler, true);
   }, [onDismiss]);
 
-  // Clamp to viewport
+  // Clamp to viewport. Prefer placing the toolbar above the selection; if there
+  // is no room above (selection near the top of a scrolled modal), flip below.
+  const TOOLBAR_H = 40;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  const above = selection.top - TOOLBAR_H - 8;
+  const top = above >= 8 ? above : Math.min(selection.top + 24, vh - TOOLBAR_H - 8);
   const style: React.CSSProperties = {
     position: "fixed",
-    top: Math.max(8, selection.top - 48),
-    left: Math.max(8, Math.min(selection.left - 100, window.innerWidth - 216)),
+    top: Math.max(8, top),
+    left: Math.max(8, Math.min(selection.left - 100, vw - 216)),
     zIndex: 9999,
   };
 
@@ -199,12 +268,20 @@ export function CardMarkupArea({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [floatingSelection, setFloatingSelection] = useState<CapturedSelection | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleMouseUp = useCallback(() => {
     if (!containerRef.current) return;
     // Small delay so DOM selection is finalized
     requestAnimationFrame(() => {
+      const sel = window.getSelection();
+      const hasSelection = !!sel && !sel.isCollapsed && !!sel.toString().trim();
       const captured = captureSelection(containerRef.current!, bodyText);
+      if (!captured && hasSelection) {
+        // There is a visible selection but it could not be mapped to body offsets.
+        setError("Could not mark this selection. Try selecting a longer phrase.");
+        setTimeout(() => setError(null), 2600);
+      }
       setFloatingSelection(captured);
     });
   }, [bodyText]);
@@ -219,36 +296,37 @@ export function CardMarkupArea({
     };
   }
 
+  function finishApply() {
+    setFloatingSelection(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
   function applyHighlight() {
     if (!floatingSelection) return;
     const span = makeSpan(floatingSelection, "user_highlight");
-    onMarkupChange({ ...markup, highlightSpans: addSpan(markup.highlightSpans, span) });
-    setFloatingSelection(null);
-    window.getSelection()?.removeAllRanges();
+    onMarkupChange({ ...markup, highlightSpans: toggleSpan(markup.highlightSpans, span) });
+    finishApply();
   }
 
   function applyUnderline() {
     if (!floatingSelection) return;
     const span = makeSpan(floatingSelection, "user_underline");
-    onMarkupChange({ ...markup, underlineSpans: addSpan(markup.underlineSpans, span) });
-    setFloatingSelection(null);
-    window.getSelection()?.removeAllRanges();
+    onMarkupChange({ ...markup, underlineSpans: toggleSpan(markup.underlineSpans, span) });
+    finishApply();
   }
 
   function applyBold() {
     if (!floatingSelection) return;
     const span = makeSpan(floatingSelection, "user_bold");
-    onMarkupChange({ ...markup, boldSpans: addSpan(markup.boldSpans, span) });
-    setFloatingSelection(null);
-    window.getSelection()?.removeAllRanges();
+    onMarkupChange({ ...markup, boldSpans: toggleSpan(markup.boldSpans, span) });
+    finishApply();
   }
 
   function applyItalic() {
     if (!floatingSelection) return;
     const span = makeSpan(floatingSelection, "user_italic");
-    onMarkupChange({ ...markup, italicSpans: addSpan(markup.italicSpans ?? [], span) });
-    setFloatingSelection(null);
-    window.getSelection()?.removeAllRanges();
+    onMarkupChange({ ...markup, italicSpans: toggleSpan(markup.italicSpans ?? [], span) });
+    finishApply();
   }
 
   function clearFormatting() {
@@ -284,6 +362,14 @@ export function CardMarkupArea({
           onClear={clearFormatting}
           onDismiss={() => setFloatingSelection(null)}
         />
+      )}
+      {error && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] rounded-lg bg-gray-900 text-white text-[11px] px-3 py-2 shadow-lg"
+        >
+          {error}
+        </div>
       )}
     </>
   );

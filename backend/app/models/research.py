@@ -52,6 +52,14 @@ class AnnotatedSpan(BaseModel):
     suffix: str = ""      # up to 20 chars after span in original text
 
 
+class CardCutValidation(BaseModel):
+    """Read-aloud coherence check for a cut's highlighted text."""
+    passed: bool = True
+    highlight_ratio: float = 0.0          # highlighted chars / cut-body chars
+    read_aloud_text: str = ""             # highlighted spans joined in order
+    issues: list[str] = []                # e.g. "no_verb", "too_fragmented"
+
+
 class EvidenceCutResult(BaseModel):
     original_passage: str
     selected_spans: list[SelectedSpan] = []
@@ -70,6 +78,29 @@ class EvidenceCutResult(BaseModel):
     # Part 4b — spans remapped to cut_text_with_ellipses offsets (for card-body highlighting)
     cut_body_spans: list[SelectedSpan] = []
     cut_body_bold_spans: list[SelectedSpan] = []
+    # Read-aloud coherence validation of the highlighted (cut_body) spans
+    read_aloud_validation: Optional["CardCutValidation"] = None
+
+
+class RefinedCardResult(BaseModel):
+    """Output of the optional LLM card refiner. Evidence body stays exact source
+    text — the LLM only chooses spans + writes coaching prose."""
+    tagline: str = ""
+    warrant: str = ""
+    impact: str = ""
+    what_this_card_proves: str = ""
+    strategic_strength: str = ""
+    potential_weakness: str = ""
+    likely_counterargument: str = ""
+    best_response: str = ""
+    crossfire_question: str = ""
+    crossfire_answer: str = ""
+    best_pairing: str = ""
+    weighing_angle: str = ""
+    best_use: str = "contention"
+    cut_body: str = ""                       # exact source text shown as the card
+    read_aloud_spans: list["SelectedSpan"] = []   # validated offsets into cut_body
+    validation: Optional["CardCutValidation"] = None
 
 
 class CitationMetadata(BaseModel):
@@ -99,8 +130,8 @@ class CardIntelligence(BaseModel):
     why_this_card: str = ""
     supports_claim_because: list[str] = []
     best_use: Literal[
-        "contention", "rebuttal", "frontline", "weighing",
-        "impact", "definition", "crossfire",
+        "contention", "rebuttal", "summary", "final_focus",
+        "frontline", "weighing", "impact", "definition", "crossfire",
     ] = "contention"
     debate_use_notes: list[str] = []
     limitations: list[str] = []
@@ -110,6 +141,14 @@ class CardIntelligence(BaseModel):
     # Part 9 — slot-aware debate intelligence
     opponent_response: str = ""   # likely counterargument from opponent
     crossfire_question: str = ""  # useful crossfire question based on card
+    # Overhaul — structured debate-prep coaching (RoundLab's own words)
+    warrant_analysis: str = ""        # why this evidence logically supports the claim
+    impact_analysis: str = ""         # why it matters / how it helps win the round
+    potential_weakness: str = ""      # the card's main limitation/vulnerability
+    how_to_answer_weakness: str = ""  # how to pre-empt / shore up that weakness
+    crossfire_answer: str = ""        # a strong answer to give in crossfire
+    best_pairing: str = ""            # what kind of card this pairs well with
+    weighing_angle: str = ""          # how to weigh this card against the opponent
 
 
 # ── Article extraction ────────────────────────────────────────────────────────
@@ -242,6 +281,19 @@ class CardDraftRequest(BaseModel):
     card_type: Optional[str] = None
 
 
+class UserMarkup(BaseModel):
+    """All user-applied card formatting. Persisted in metadata JSON (no DB columns
+    exist for bold/italic), so no formatting edit is ever silently dropped.
+
+    Spans carry offsets into the card body text the user was editing. selected_by
+    marks each span's origin so AI and user formatting can be told apart later.
+    """
+    highlight: list[dict] = []
+    underline: list[dict] = []
+    bold: list[dict] = []
+    italic: list[dict] = []
+
+
 class PatchCardDraftRequest(BaseModel):
     user_id: str
     tag: Optional[str] = None
@@ -249,6 +301,8 @@ class PatchCardDraftRequest(BaseModel):
     body_text: Optional[str] = None
     highlighted_spans_json: Optional[list[dict]] = None
     underline_spans_json: Optional[list[dict]] = None
+    # Full user markup (highlight/underline/bold/italic) — stored in draft_json
+    user_markup_json: Optional[UserMarkup] = None
     author: Optional[str] = None
     publication: Optional[str] = None
     title: Optional[str] = None

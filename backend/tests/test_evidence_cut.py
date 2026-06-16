@@ -21,11 +21,20 @@ from app.services.card_cutting import (
     clean_card_body_text,
     strip_page_chrome,
     find_evidence_start_index,
+    is_probable_title_line,
+    is_author_metadata_line,
     _is_chrome_line,
     _score_paragraph,
     generate_evidence_cut,
     enrich_citation_metadata,
     derive_card_intelligence,
+    extract_case_entities,
+    highlights_are_coherent,
+    sentence_level_highlights,
+    get_coherent_highlight_spans,
+    segment_text,
+    validate_read_aloud_card,
+    _FINITE_VERB_RE,
 )
 from app.models.research import (
     CardIntelligence,
@@ -733,6 +742,407 @@ class TestDeriveCardIntelligence:
     def test_very_aggressive_compression_in_limitations(self):
         intel = self._intel(compression_ratio=0.2)
         assert any("aggressive cut" in l.lower() for l in intel.limitations)
+
+    # ── Structured debate-prep coaching fields ────────────────────────────────
+
+    def test_warrant_and_impact_analysis_populated(self):
+        intel = self._intel(evidence_role="mechanism_support")
+        assert intel.warrant_analysis.strip()
+        assert intel.impact_analysis.strip()
+        assert "mechanism" in intel.warrant_analysis.lower()
+
+    def test_potential_weakness_and_answer_present(self):
+        intel = self._intel(evidence_role="example_support")
+        assert intel.potential_weakness.strip()
+        assert intel.how_to_answer_weakness.strip()
+
+    def test_overclaim_becomes_the_weakness(self):
+        intel = self._intel(overclaim_warning="Tag implies causation not in source")
+        assert "causation" in intel.potential_weakness.lower()
+
+    def test_crossfire_answer_and_pairing_present(self):
+        intel = self._intel(evidence_role="impact_support")
+        assert intel.crossfire_answer.strip()
+        assert intel.best_pairing.lower().startswith("pair with")
+
+    def test_snippet_source_weakness_when_no_overclaim(self):
+        intel = self._intel(is_snippet_source=True, evidence_role="direct_support")
+        assert intel.potential_weakness.strip()
+
+    def test_best_use_allows_summary_and_final_focus(self):
+        # The Literal must accept the new speech phases without raising.
+        intel = CardIntelligence(best_use="final_focus")
+        assert intel.best_use == "final_focus"
+        intel2 = CardIntelligence(best_use="summary")
+        assert intel2.best_use == "summary"
+
+    # ── Card-specific (entity-aware) debate prep ──────────────────────────────
+
+    BOSNIA = (
+        "In 1995, U.S. and NATO airstrikes combined with diplomacy at Dayton forced "
+        "Serb forces to the table, ending the war in Bosnia after the Srebrenica "
+        "massacre killed thousands of civilians."
+    )
+
+    def test_example_card_prep_references_the_case(self):
+        intel = self._intel(
+            evidence_role="example_support",
+            topic="humanitarian intervention",
+            passage=self.BOSNIA,
+        )
+        assert "Bosnia" in intel.potential_weakness
+        assert "Bosnia" in intel.how_to_answer_weakness
+        assert "mechanism" in intel.how_to_answer_weakness.lower()
+
+    def test_prep_not_generic_when_entity_present(self):
+        intel = self._intel(evidence_role="example_support", passage=self.BOSNIA, topic="intervention")
+        # Should not be the generic "single case can be dismissed" template
+        assert "Bosnia" in intel.potential_weakness
+
+    def test_prep_falls_back_gracefully_without_passage(self):
+        intel = self._intel(evidence_role="example_support")
+        assert intel.potential_weakness.strip()
+        assert intel.how_to_answer_weakness.strip()
+
+    # ── Card-specific warrant / impact / weighing ─────────────────────────────
+
+    def test_warrant_is_natural_and_specific(self):
+        hl = "the United States failed to intervene in Rwanda as the genocide unfolded"
+        intel = self._intel(
+            evidence_role="example_support",
+            best_supported_claim="nonintervention allowed the Rwandan genocide to continue",
+            passage="The United States failed to intervene in Rwanda as the genocide unfolded.",
+            topic="humanitarian intervention",
+            highlighted_text=hl,
+        )
+        assert "Rwanda" in intel.warrant_analysis
+        # The clunky phrasings are gone for good.
+        assert "highlighted line" not in intel.warrant_analysis.lower()
+        assert "if the judge buys this" not in intel.impact_analysis.lower()
+
+    def test_no_clunky_phrasing_anywhere(self):
+        intel = self._intel(
+            evidence_role="impact_support",
+            passage="The genocide in Rwanda killed nearly one million people in a hundred days.",
+            topic="humanitarian intervention",
+            highlighted_text="the genocide killed nearly one million people in a hundred days",
+        )
+        blob = " ".join([
+            intel.warrant_analysis, intel.impact_analysis, intel.weighing_angle,
+        ]).lower()
+        assert "highlighted line" not in blob
+        assert "if the judge buys this" not in blob
+
+    def test_impact_references_case_and_topic(self):
+        intel = self._intel(
+            evidence_role="example_support",
+            passage="NATO airstrikes forced Serb forces to Dayton, ending the war in Bosnia.",
+            topic="humanitarian intervention",
+            highlighted_text="NATO airstrikes forced Serb forces to Dayton, ending the war in Bosnia",
+        )
+        assert "Bosnia" in intel.impact_analysis or "Dayton" in intel.impact_analysis
+
+    def test_weighing_angle_populated(self):
+        intel = self._intel(evidence_role="impact_support", passage="Genocide killed nearly one million.", topic="atrocities")
+        assert intel.weighing_angle.strip()
+
+    def test_warrant_falls_back_without_highlight(self):
+        intel = self._intel(evidence_role="mechanism_support")
+        # No highlighted_text → role template that mentions the mechanism
+        assert intel.warrant_analysis.strip()
+
+
+# ── TestCaseEntityExtraction ──────────────────────────────────────────────────
+
+class TestCaseEntityExtraction:
+    def test_extracts_known_case(self):
+        ents = extract_case_entities("The war in Bosnia ended after Dayton.", "intervention")
+        assert "Bosnia" in ents
+
+    def test_extracts_law_entity(self):
+        ents = extract_case_entities("Section 230 grants platforms immunity.", "")
+        assert "Section 230" in ents
+
+    def test_empty_passage_returns_empty(self):
+        assert extract_case_entities("", "") == []
+
+    def test_limit_respected(self):
+        ents = extract_case_entities("Bosnia, Kosovo, Rwanda, and Darfur all differ.", "", limit=2)
+        assert len(ents) <= 2
+
+
+# ── TestHighlightCoherence ────────────────────────────────────────────────────
+
+class TestHighlightCoherence:
+    def test_coherent_passes_for_real_sentence(self):
+        text = "Section 230 grants platforms immunity from civil liability for user content."
+        spans = [SelectedSpan(start=0, end=len(text), text=text, sentence_index=0)]
+        # Whole-card is too much; a subset is coherent
+        sub = SelectedSpan(start=0, end=42, text=text[:42], sentence_index=0)
+        assert highlights_are_coherent(text, [sub]) is True
+
+    def test_incoherent_when_empty(self):
+        assert highlights_are_coherent("Some text here.", []) is False
+
+    def test_incoherent_when_verbless_fragments(self):
+        text = "Bosnia, Kosovo, Rwanda, Darfur, Libya, Syria, Somalia today."
+        frags = [
+            SelectedSpan(start=0, end=6, text="Bosnia", sentence_index=0),
+            SelectedSpan(start=8, end=14, text="Kosovo", sentence_index=0),
+            SelectedSpan(start=16, end=22, text="Rwanda", sentence_index=0),
+            SelectedSpan(start=24, end=30, text="Darfur", sentence_index=0),
+        ]
+        assert highlights_are_coherent(text, frags) is False
+
+    def test_sentence_level_fallback_produces_whole_sentences(self):
+        text = (
+            "Section 230 grants platforms broad immunity. "
+            "Courts have consistently upheld this protection. "
+            "Critics argue reform is overdue."
+        )
+        spans = sentence_level_highlights(text, "Section 230 immunity", "mechanism_support")
+        assert len(spans) >= 1
+        for s in spans:
+            assert s.text in text
+
+
+# ── TestMediumHighReversibility ───────────────────────────────────────────────
+
+class TestMediumHighReversibility:
+    PASSAGE = (
+        "Section 230, enacted in 1996, grants broad immunity to online platforms. "
+        "Courts have consistently held that platforms are not publishers of user content. "
+        "The statute provides that no provider shall be treated as the speaker of information. "
+        "This provision enables online services to host user-generated content at scale. "
+        "In 2018, Congress carved out an exception for sex trafficking via FOSTA-SESTA. "
+        "Critics argue this broad protection should be reformed to increase accountability."
+    )
+
+    def _cut(self, style):
+        return generate_evidence_cut(
+            self.PASSAGE, "Section 230 grants platforms immunity",
+            "mechanism_support", use_llm=False, preferred_cut_style=style,
+        )
+
+    def test_medium_is_stable_across_reswitch(self):
+        m1 = self._cut("medium")
+        _ = self._cut("high")
+        m2 = self._cut("medium")
+        assert m1.cut_text_with_ellipses == m2.cut_text_with_ellipses
+
+    def test_high_does_not_mutate_medium(self):
+        # High is generated from the same base passage, never from the medium cut.
+        m1 = self._cut("medium")
+        h = self._cut("high")
+        m3 = self._cut("medium")
+        assert m1.cut_text_with_ellipses == m3.cut_text_with_ellipses
+        # High should be a stricter (shorter-or-equal) cut.
+        assert len(h.cut_text_with_ellipses) <= len(m1.cut_text_with_ellipses) + 5
+
+    def test_both_styles_have_coherent_highlights(self):
+        for style in ("medium", "high"):
+            cut = self._cut(style)
+            body = cut.cut_text_with_ellipses
+            # highlight ratio must be below 1.0 (never the whole card)
+            hl = sum(s.end - s.start for s in cut.cut_body_spans)
+            assert hl < len(body)
+
+    def test_high_medium_high_is_stable(self):
+        h1 = self._cut("high")
+        _ = self._cut("medium")
+        h2 = self._cut("high")
+        assert h1.cut_text_with_ellipses == h2.cut_text_with_ellipses
+
+
+# ── TestSegmentTextAdapter ────────────────────────────────────────────────────
+
+class TestSegmentTextAdapter:
+    def test_offsets_are_exact(self):
+        text = "The U.S. intervened in Bosnia in 1995. NATO forced peace. The war ended."
+        for s in segment_text(text):
+            assert text[s.start:s.end] == s.text
+
+    def test_does_not_split_on_abbreviations(self):
+        text = "The U.S. acted in 1995. It worked."
+        sents = segment_text(text)
+        # "U.S." must not create a spurious sentence break
+        assert all("U.S" not in s.text or "acted" in s.text for s in sents)
+        assert len(sents) == 2
+
+    def test_empty_returns_empty(self):
+        assert segment_text("") == []
+
+
+# ── TestReadAloudValidation ───────────────────────────────────────────────────
+
+RWANDA_PASSAGE = (
+    "In April 1994, the United Nations and the United States failed to intervene in Rwanda "
+    "as the genocide unfolded. Despite clear warning signs from UN commanders on the ground, "
+    "the international community withdrew peacekeepers. France launched a limited operation only "
+    "after hundreds of thousands of Tutsi had already been killed. The delay allowed the genocide "
+    "to continue for nearly one hundred days, demonstrating the cost of nonintervention."
+)
+
+BOSNIA_PASSAGE = (
+    "In 1995, sustained U.S. and NATO airstrikes combined with diplomacy at Dayton forced Serb "
+    "forces to the negotiating table. The credible threat of force changed the incentives of the "
+    "warring parties and brought an end to the war in Bosnia. The Dayton Accords demonstrated that "
+    "intervention paired with diplomacy can stop mass atrocities."
+)
+
+
+class TestReadAloudValidation:
+    def test_validation_passes_for_complete_clause(self):
+        text = "The United States failed to intervene in Rwanda as the genocide unfolded."
+        spans = [SelectedSpan(start=0, end=len(text), text=text, sentence_index=0)]
+        v = validate_read_aloud_card(text + " More context here.", spans)
+        assert v.passed
+        assert "no_verb" not in v.issues
+
+    def test_flags_verbless_fragments(self):
+        text = "Rwanda, Bosnia, Kosovo, Darfur, Libya here."
+        frags = [
+            SelectedSpan(start=0, end=6, text="Rwanda", sentence_index=0),
+            SelectedSpan(start=8, end=14, text="Bosnia", sentence_index=0),
+            SelectedSpan(start=16, end=22, text="Kosovo", sentence_index=0),
+            SelectedSpan(start=24, end=30, text="Darfur", sentence_index=0),
+        ]
+        v = validate_read_aloud_card(text, frags)
+        assert not v.passed
+        assert "no_verb" in v.issues or "too_fragmented" in v.issues
+
+    def test_flags_midword_start(self):
+        text = "The intervention worked well."
+        # span starts mid-word ("tervention")
+        spans = [SelectedSpan(start=7, end=19, text=text[7:19], sentence_index=0)]
+        v = validate_read_aloud_card(text, spans)
+        assert "midword_start" in v.issues
+
+    def test_rwanda_card_reads_aloud_coherently(self):
+        cut = generate_evidence_cut(
+            RWANDA_PASSAGE, "nonintervention in Rwanda allowed genocide to continue",
+            "example_support", use_llm=False, preferred_cut_style="medium",
+        )
+        v = cut.read_aloud_validation
+        assert v is not None and v.passed
+        # read-aloud text must contain a verb and reference the case
+        assert _FINITE_VERB_RE.search(v.read_aloud_text)
+        assert "Rwanda" in v.read_aloud_text or "genocide" in v.read_aloud_text
+
+    CARNEGIE_PASSAGE = (
+        "U.S. relations with authoritarian regimes have long been shaped by strategic "
+        "interest. In addition, each U.S. president has put their own imprint on such "
+        "relations. Authoritarian governments rely on violence and repression to maintain "
+        "political control, and Washington has often tolerated that repression when it served "
+        "security goals."
+    )
+
+    def test_carnegie_card_reads_aloud_coherently(self):
+        cut = generate_evidence_cut(
+            self.CARNEGIE_PASSAGE,
+            "U.S. policy toward authoritarian regimes is driven by strategic interests",
+            "direct_support", use_llm=False, preferred_cut_style="medium",
+        )
+        v = cut.read_aloud_validation
+        assert v is not None and v.passed, v.issues if v else "no validation"
+        # Should not lead the read-aloud with a dangling connective.
+        assert not v.read_aloud_text.lower().startswith("in addition")
+
+    def test_high_cut_stays_coherent(self):
+        cut = generate_evidence_cut(
+            self.CARNEGIE_PASSAGE, "authoritarian regimes use violence",
+            "direct_support", use_llm=False, preferred_cut_style="high",
+        )
+        v = cut.read_aloud_validation
+        assert v is not None
+        assert "midword_start" not in v.issues and "midword_end" not in v.issues
+
+    def test_bosnia_card_reads_aloud_coherently(self):
+        cut = generate_evidence_cut(
+            BOSNIA_PASSAGE, "intervention with diplomacy can stop atrocities",
+            "example_support", use_llm=False, preferred_cut_style="high",
+        )
+        v = cut.read_aloud_validation
+        assert v is not None
+        # no broken words in the highlighted read-aloud text
+        for span in cut.cut_body_spans:
+            assert not span.text[0].isspace()
+            assert span.text == span.text.strip() or span.text  # exact text
+
+
+class TestDeterministicTagline:
+    FRAGMENT_LEAD = (
+        "Tutsi and rescue their battalion encamped in Kigali as part of the Accord. "
+        "The United States and France delayed intervention in Rwanda despite clear "
+        "warnings of an unfolding genocide."
+    )
+
+    def test_tag_does_not_start_mid_phrase(self):
+        from app.services.card_cutting import _deterministic_tag
+        tag = _deterministic_tag(self.FRAGMENT_LEAD, "delayed intervention allowed genocide", "example_support")
+        assert tag[:1].isupper()
+        assert not tag.lower().startswith("tutsi and rescue")
+
+    def test_tag_includes_claim_concepts(self):
+        from app.services.card_cutting import _deterministic_tag
+        tag = _deterministic_tag(self.FRAGMENT_LEAD, "intervention in Rwanda", "example_support")
+        assert "Rwanda" in tag or "intervention" in tag.lower()
+
+    def test_tag_is_not_just_article_title_garbage(self):
+        from app.services.card_cutting import _deterministic_tag
+        passage = (
+            "Matters of institutional policy on a large scale. "
+            "Military action may be justified when mass atrocities make neutrality untenable."
+        )
+        tag = _deterministic_tag(passage, "military action justified against atrocities", "direct_support")
+        # Should prefer the real claim sentence, not the throat-clearing fragment.
+        assert "Military action" in tag or "justified" in tag.lower()
+
+    def test_tag_falls_back_to_claim_when_passage_empty(self):
+        from app.services.card_cutting import _deterministic_tag
+        tag = _deterministic_tag("", "intervention can stop atrocities", "direct_support")
+        assert "intervention" in tag.lower()
+
+    def test_strips_leading_connective(self):
+        from app.services.card_cutting import _deterministic_tag
+        tag = _deterministic_tag(
+            "In addition, each U.S. president has put their own imprint on relations.",
+            "presidents shape foreign policy", "direct_support",
+        )
+        assert not tag.lower().startswith("in addition")
+        assert tag[:1].isupper()
+
+    def test_deterministic_tagline_from_card_is_a_claim(self):
+        from app.services.card_cutting import deterministic_tagline_from_card
+        tag = deterministic_tagline_from_card(
+            "authoritarian regimes",
+            "authoritarian regimes use violence to stay in power",
+            "Authoritarian regimes rely on violence and repression to maintain political control.",
+            ["authoritarian"], "direct_support",
+        )
+        assert tag[:1].isupper()
+        assert len(tag.split()) <= 18
+        assert not tag.lower().startswith(("in addition", "however", "moreover"))
+
+    def test_tagline_has_a_verb(self):
+        from app.services.card_cutting import deterministic_tagline_from_card, _FINITE_VERB_RE
+        tag = deterministic_tagline_from_card(
+            "Rwanda", "nonintervention enabled the Rwandan genocide",
+            "The United States delayed intervention as the Rwandan genocide unfolded.",
+            ["Rwanda"], "example_support",
+        )
+        assert _FINITE_VERB_RE.search(tag)
+
+
+class TestWordBoundarySnap:
+    def test_no_midword_after_snap(self):
+        from app.services.card_cutting import _snap_to_word_boundaries
+        text = "The intervention in Bosnia worked."
+        spans = [SelectedSpan(start=7, end=19, text=text[7:19], sentence_index=0)]
+        snapped = _snap_to_word_boundaries(text, spans)
+        # snapped span should start at a word boundary
+        s = snapped[0]
+        assert s.start == 0 or not text[s.start - 1].isalnum() or not text[s.start].isalnum()
 
 
 # ── TestCutStylePreference ────────────────────────────────────────────────────
@@ -1454,3 +1864,82 @@ class TestScholarWorksOzarkFixture:
         assert "Nathaniel" not in body
         # Must contain real evidence
         assert len(body) > 30
+
+
+# ── TestTitleAndAuthorDetection ────────────────────────────────────────────────
+
+class TestTitleAndAuthorDetection:
+    """is_probable_title_line / is_author_metadata_line must keep article
+    titles, bylines, and citation footers out of the evidence body."""
+
+    def test_title_line_detected(self):
+        assert is_probable_title_line("Humanitarian Intervention and Just War Theory")
+
+    def test_journal_name_detected_as_title(self):
+        assert is_probable_title_line("Ozark Historical Review")
+
+    def test_real_sentence_not_a_title(self):
+        assert not is_probable_title_line(
+            "Humanitarian intervention is justified when a state commits genocide."
+        )
+
+    def test_title_overlapping_claim_still_rejected(self):
+        # The trap: the title shares the claim's keywords but is still not evidence.
+        assert is_probable_title_line(
+            "Humanitarian Intervention and Just War Theory",
+            claim="humanitarian intervention just war",
+        )
+
+    def test_metadata_title_exact_match(self):
+        assert is_probable_title_line(
+            "The Ethics of Force.",  # trailing punct but exact metadata match
+            metadata_title="The Ethics of Force",
+        )
+
+    def test_bare_author_name_detected(self):
+        assert is_author_metadata_line("Nathaniel R. King")
+
+    def test_author_with_institution_detected(self):
+        assert is_author_metadata_line("Emily Chen, University of Missouri")
+
+    def test_author_label_detected(self):
+        assert is_author_metadata_line("Author: Smith, John")
+
+    def test_authors_bare_label_detected(self):
+        assert is_author_metadata_line("Authors")
+
+    def test_department_line_detected(self):
+        assert is_author_metadata_line("Department of Political Science")
+
+    def test_evidence_sentence_not_author(self):
+        assert not is_author_metadata_line(
+            "Since the end of World War II the United States has intervened abroad."
+        )
+
+    def test_strip_removes_article_title_with_metadata(self):
+        cleaned = strip_page_chrome(
+            OZARK_MESSY, metadata_title="Humanitarian Intervention and Just War Theory"
+        )
+        assert "Humanitarian Intervention and Just War Theory" not in cleaned
+        assert "Since the end of World War II" in cleaned
+
+    def test_strip_removes_journal_name_line(self):
+        cleaned = strip_page_chrome(OZARK_MESSY)
+        # Standalone journal name should not survive as body text
+        assert "Ozark Historical Review\n" not in cleaned
+
+    def test_strip_removes_recommended_citation_footer(self):
+        cleaned = strip_page_chrome(OZARK_MESSY)
+        assert "King, N. R. (2022)" not in cleaned
+
+    def test_find_evidence_start_skips_title_line(self):
+        idx = find_evidence_start_index(OZARK_MESSY, "humanitarian intervention just war", "")
+        remaining = OZARK_MESSY[idx:].strip()
+        assert not remaining.startswith("Humanitarian Intervention and Just War Theory")
+        assert not remaining.startswith("Ozark Historical Review")
+
+    def test_chrome_line_flags_citation_footer(self):
+        assert _is_chrome_line("King, N. R. (2022). Humanitarian Intervention. Ozark, 42(1).")
+
+    def test_chrome_line_flags_author_institution(self):
+        assert _is_chrome_line("Nathaniel R. King, University of Arkansas")

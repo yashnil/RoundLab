@@ -23,7 +23,9 @@ import {
 import CardDraftReview from "@/components/CardDraftReview";
 import EvidenceCardDraft, { computeSaveReadiness } from "@/components/EvidenceCardDraft";
 import { EvidenceStudioModal } from "@/components/evidence/EvidenceStudioModal";
-import { SearchLoadingSteps, shouldShowResultsSummary, shouldShowEmptyState } from "@/components/EvidenceSearchPanel";
+import { SavedCardBody } from "@/components/evidence/SavedCardBody";
+import { shouldShowResultsSummary, shouldShowEmptyState } from "@/components/EvidenceSearchPanel";
+import { EvidenceSearchProgress } from "@/components/evidence/EvidenceSearchProgress";
 import type {
   EvidenceDocument,
   EvidenceCard,
@@ -114,11 +116,17 @@ function CardItem({ card }: { card: EvidenceCard }) {
               {card.claim_summary}
             </p>
           )}
-          {/* Card body excerpt — always visible, clamped to 4 lines */}
+          {/* Card body excerpt — re-renders saved user markup when expanded */}
           {card.card_text && (
-            <p className={`mt-1 text-xs leading-relaxed text-ink-muted ${open ? "whitespace-pre-wrap" : "line-clamp-4"}`}>
-              {card.card_text}
-            </p>
+            open ? (
+              <div className="mt-1">
+                <SavedCardBody card={card} />
+              </div>
+            ) : (
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted line-clamp-4">
+                {card.card_text}
+              </p>
+            )
           )}
         </div>
         <button
@@ -526,7 +534,6 @@ export default function EvidencePage() {
   const [cbError, setCbError] = useState("");
   const [cbExtractResult, setCbExtractResult] = useState<ExtractUrlResponse | null>(null);
   const [cbGenerateResult, setCbGenerateResult] = useState<GenerateCardsResponse | null>(null);
-  const [showSearchDiagnostics, setShowSearchDiagnostics] = useState(false);
   const [drafts, setDrafts] = useState<CardDraft[]>([]);
   const [draftsLoading, setDraftsLoading] = useState(false);
   const [savingDraftId, setSavingDraftId] = useState<string | null>(null);
@@ -673,7 +680,6 @@ export default function EvidencePage() {
     setCbLoading(true);
     setCbError("");
     setCbGenerateResult(null);
-    setShowSearchDiagnostics(false);
     try {
       const result = await apiFetch<GenerateCardsResponse>("/research/generate-cards", {
         method: "POST",
@@ -726,11 +732,19 @@ export default function EvidencePage() {
     setSaveError("");
     try {
       // Patch the draft with any user-modified spans before saving, so the
-      // saved evidence card preserves the user's markup edits.
-      const hasMarkupChanges =
+      // saved evidence card preserves the user's markup edits. Bold + italic
+      // have no dedicated columns, so the full markup rides in user_markup_json.
+      const m = draft.user_markup_json;
+      const hasFullMarkup =
+        !!m &&
+        ((m.highlight?.length ?? 0) > 0 ||
+          (m.underline?.length ?? 0) > 0 ||
+          (m.bold?.length ?? 0) > 0 ||
+          (m.italic?.length ?? 0) > 0);
+      const hasColumnSpans =
         (draft.highlighted_spans_json?.length ?? 0) > 0 ||
         (draft.underline_spans_json?.length ?? 0) > 0;
-      if (hasMarkupChanges) {
+      if (hasFullMarkup || hasColumnSpans) {
         await apiFetch(`/research/card-drafts/${draft.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -738,6 +752,7 @@ export default function EvidencePage() {
             user_id: userId,
             highlighted_spans_json: draft.highlighted_spans_json ?? [],
             underline_spans_json: draft.underline_spans_json ?? [],
+            ...(hasFullMarkup ? { user_markup_json: m } : {}),
           }),
         });
       }
@@ -1068,6 +1083,13 @@ export default function EvidencePage() {
                       </Button>
                     </div>
                   </div>
+                  {cbLoading && (
+                    <EvidenceSearchProgress
+                      active={cbLoading}
+                      durationMs={30_000}
+                      label="Opening source and cutting evidence"
+                    />
+                  )}
                   {cbExtractResult && (
                     <div className="flex items-center gap-2 text-xs text-ink-muted rounded border border-border bg-surface-faint px-3 py-2">
                       <CheckCircle2 size={12} className="text-ok shrink-0" />
@@ -1115,6 +1137,13 @@ export default function EvidencePage() {
                   >
                     {cbLoading ? <><Loader2 size={13} className="mr-1.5 animate-spin" />Generating…</> : "Generate Card Draft"}
                   </Button>
+                  {cbLoading && (
+                    <EvidenceSearchProgress
+                      active={cbLoading}
+                      durationMs={20_000}
+                      label="Cleaning text and cutting evidence"
+                    />
+                  )}
                 </div>
               )}
 
@@ -1158,8 +1187,8 @@ export default function EvidencePage() {
                     </div>
                   )}
 
-                  {/* Loading steps + skeletons */}
-                  {cbLoading && <SearchLoadingSteps active={cbLoading} />}
+                  {/* Animated progress card (0→100 over ~60s, holds at Finalizing) */}
+                  {cbLoading && <EvidenceSearchProgress active={cbLoading} />}
 
                   {/* Cards found — summary bar + filters + card list */}
                   {shouldShowResultsSummary(cbGenerateResult, cbLoading) && cbGenerateResult && (() => {
@@ -1202,77 +1231,76 @@ export default function EvidencePage() {
                       }
                     }
 
-                    // Weak leads slot labels
-                    const weakLeadSlots = new Set(
-                      (cbGenerateResult.weak_leads ?? []).map((l) => l.slot_label).filter(Boolean) as string[],
-                    );
+                    const filledSlots = slotReadiness.size;
+                    const totalSlots = plan?.slots?.length ?? 0;
+                    const slotPct = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
                     return (
-                      <div className="flex flex-col gap-3">
-                        {/* Compact evidence set progress — minimal chips only */}
-                        {plan && plan.slots && plan.slots.length > 0 && (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[9px] text-ink-muted font-medium">
-                              {slotReadiness.size}/{plan.slots.length} slots filled
-                            </span>
-                            {plan.slots.map((s) => {
-                              const slotState = slotReadiness.get(s.slot_label);
-                              const chipClass = slotState === "ready"
-                                ? "bg-green-50 border-green-300 text-green-700"
-                                : slotState === "review_needed"
-                                  ? "bg-amber-50 border-amber-300 text-amber-700"
-                                  : slotState === "weak"
-                                    ? "bg-orange-50 border-orange-300 text-orange-700"
-                                    : "bg-gray-50 border-gray-200 text-gray-400";
-                              return (
-                                <span
-                                  key={s.slot_id}
-                                  title={s.search_intent}
-                                  className={`text-[9px] px-1.5 py-px rounded border ${chipClass}`}
-                                >
-                                  {s.slot_label}
+                      <div className="flex flex-col gap-4">
+                        {/* Evidence packet header — clean count + thin progress, no bubbles */}
+                        <div className="flex items-center justify-between gap-4 flex-wrap">
+                          <div className="flex flex-col gap-1.5">
+                            <h3 className="text-[15px] font-semibold text-gray-900">
+                              Evidence packet
+                              <span className="ml-2 text-[12px] font-normal text-gray-400">
+                                {sorted.length} card{sorted.length === 1 ? "" : "s"}
+                              </span>
+                            </h3>
+                            {totalSlots > 0 && (
+                              <div className="flex items-center gap-2">
+                                <div className="h-1 w-28 rounded-full bg-gray-100 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-gray-800 transition-all"
+                                    style={{ width: `${slotPct}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] text-gray-400">
+                                  {filledSlots} of {totalSlots} slots filled
                                 </span>
-                              );
-                            })}
+                              </div>
+                            )}
                           </div>
-                        )}
+                          {/* Filter — calm segmented control, only shown when there's a mix */}
+                          {sorted.length > 1 && (
+                            <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5 text-[11px]">
+                              {(
+                                [
+                                  { key: "all" as const, label: "All", n: sorted.length },
+                                  { key: "ready" as const, label: "Ready", n: readyCt },
+                                  { key: "review" as const, label: "Review", n: reviewCt },
+                                  { key: "weak" as const, label: "Verify", n: weakCt },
+                                  ...(counterCt > 0 ? [{ key: "counter" as const, label: "Counter", n: counterCt }] : []),
+                                ]
+                              )
+                                .filter((f) => f.key === "all" || f.n > 0)
+                                .map(({ key, label, n }) => (
+                                  <button
+                                    key={key}
+                                    onClick={() => setCardFilter(key)}
+                                    className={`px-2.5 py-1 rounded-md transition-colors ${
+                                      cardFilter === key
+                                        ? "bg-gray-900 text-white font-medium"
+                                        : "text-gray-500 hover:text-gray-800"
+                                    }`}
+                                  >
+                                    {label} <span className="opacity-60">{n}</span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
                         {cbGenerateResult.usable_indirect_support_found &&
                           !cbGenerateResult.direct_support_found && (
-                            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
                               No direct evidence found, but mechanism/example cards support your argument&apos;s warrant.
                             </div>
                           )}
-                        {/* Filter chips */}
-                        <div className="flex gap-1.5 flex-wrap items-center">
-                          <span className="text-[9px] text-ink-muted uppercase tracking-wide">Filter:</span>
-                          {(
-                            [
-                              { key: "all" as const, label: `All (${sorted.length})`, extra: "" },
-                              { key: "ready" as const, label: `Ready (${readyCt})`, extra: "text-green-700 border-green-300" },
-                              { key: "review" as const, label: `Review (${reviewCt})`, extra: "text-amber-700 border-amber-300" },
-                              { key: "weak" as const, label: `Verify (${weakCt})`, extra: "text-red-600 border-red-300" },
-                              ...(counterCt > 0 ? [{ key: "counter" as const, label: `Counter (${counterCt})`, extra: "text-orange-700 border-orange-300" }] : []),
-                            ]
-                          ).map(({ key, label, extra }) => (
-                            <button
-                              key={key}
-                              onClick={() => setCardFilter(key)}
-                              className={`text-[9px] px-2 py-0.5 rounded border transition-colors ${
-                                cardFilter === key
-                                  ? "bg-blue-100 border-blue-400 text-blue-700 font-medium"
-                                  : `border-border text-ink-muted hover:bg-surface-faint ${extra}`
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="flex flex-col gap-2.5">
+                        <div className="flex flex-col gap-3">
                           {filtered.map((card, idx) => (
                             <div key={card.id} className="relative">
                               {idx === 0 && readyCt > 0 && cardFilter === "all" && (
-                                <span className="absolute -top-2 right-2 z-10 text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-sm">
-                                  Best
+                                <span className="absolute -top-2 left-3 z-10 text-[9px] font-semibold tracking-wide px-2 py-0.5 rounded-full bg-gray-900 text-white shadow-sm">
+                                  Best match
                                 </span>
                               )}
                               <EvidenceCardDraft
@@ -1792,7 +1820,7 @@ export default function EvidencePage() {
             )}
           </div>
           <p className="mb-3 text-xs text-ink-subtle leading-relaxed">
-            Extract block and frontline entries from uploaded documents using the "Extract blocks"
+            Extract block and frontline entries from uploaded documents using the &ldquo;Extract blocks&rdquo;
             button above. Then search your block library to find prepared responses.
             Only your uploaded files are used — no outside knowledge.
           </p>
@@ -1844,7 +1872,7 @@ export default function EvidencePage() {
               <div>
                 <p className="text-sm font-semibold text-ink">No block entries yet</p>
                 <p className="text-xs text-ink-subtle mt-0.5">
-                  Upload a blockfile or frontline document above, then click "Extract blocks"
+                  Upload a blockfile or frontline document above, then click &ldquo;Extract blocks&rdquo;
                   on a parsed document to populate your block library.
                 </p>
               </div>
@@ -1854,7 +1882,7 @@ export default function EvidencePage() {
               {blockSearchResults !== null && (
                 <p className="text-xs text-ink-subtle">
                   {blockSearchResults.length} result{blockSearchResults.length !== 1 ? "s" : ""}
-                  {" "}for "{blockSearchQuery}"
+                  {" "}for &ldquo;{blockSearchQuery}&rdquo;
                 </p>
               )}
               {(blockSearchResults ?? blockEntries).map((entry) => (

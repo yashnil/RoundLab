@@ -8,6 +8,7 @@ import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import LogoutButton from "@/components/LogoutButton";
 import { createClient } from "@/lib/supabase";
+import { APP_NAV_ITEMS, isNavItemActive } from "@/lib/navItems";
 
 interface AppNavProps {
   /** Additional actions rendered before New Session / Sign Out */
@@ -131,10 +132,14 @@ export default function AppNav({ rightSlot }: AppNavProps) {
         {/* Nav Links */}
         {showAuthContent && (
           <div className="hidden items-center gap-1 md:flex">
-            <NavLink href="/learn"     label="Learn"      isActive={pathname === "/learn"} />
-            <NavLink href="/dashboard" label="Individual" isActive={pathname === "/dashboard"} />
-            <NavLink href="/team"      label="Team"       isActive={pathname?.startsWith("/team") || false} />
-            <NavLink href="/evidence"  label="Evidence"   isActive={pathname?.startsWith("/evidence") || false} />
+            {APP_NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                isActive={isNavItemActive(item, pathname)}
+              />
+            ))}
           </div>
         )}
       </div>

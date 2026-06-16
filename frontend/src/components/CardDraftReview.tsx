@@ -8,6 +8,7 @@
  */
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import type { CardDraft } from "@/types";
 import { computeSaveReadiness } from "@/components/evidence/SaveReadinessGate";
 import { EvidenceStudioModal } from "@/components/evidence/EvidenceStudioModal";
@@ -25,7 +26,6 @@ export default function CardDraftReview({
   draft,
   onSave,
   onDiscard,
-  onPatch: _onPatch,
   saving = false,
   discarding = false,
 }: CardDraftReviewProps) {
@@ -128,14 +128,15 @@ export default function CardDraftReview({
                 {saving ? "Saving…" : "Save"}
               </button>
             )}
-            {/* Discard */}
+            {/* Discard — polished icon button */}
             <button
               onClick={() => handleDiscard(draft.id)}
               disabled={discarding}
               aria-label="Discard draft"
-              className="text-[10px] text-gray-300 hover:text-red-400 transition-colors p-0.5"
+              title="Discard draft"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
             >
-              ✕
+              <Trash2 size={13} />
             </button>
           </div>
         </div>

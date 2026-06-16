@@ -8,6 +8,7 @@ import {
   Mic, ArrowRight, Check, Zap, Sun, Moon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { APP_NAV_ITEMS } from "@/lib/navItems";
 import { fadeUp, fadeUpInView, staggerParent, staggerChild } from "@/lib/motion";
 import PipelineShowcase from "@/components/PipelineShowcase";
 import HeroDebateConsole from "@/components/HeroDebateConsole";
@@ -44,15 +45,19 @@ function MarketingNav({ isLoggedIn, theme, onThemeToggle, onSignOut }: {
         </div>
       )}
 
-      {/* App nav for logged-in users */}
+      {/* App nav for logged-in users — shares APP_NAV_ITEMS with AppNav so
+          Evidence appears consistently from the landing page too. */}
       {isLoggedIn && (
         <div className="hidden items-center gap-4 sm:flex">
-          <Link href="/dashboard" className="text-sm text-ink-subtle transition-colors hover:text-ink">
-            Individual
-          </Link>
-          <Link href="/team" className="text-sm text-ink-subtle transition-colors hover:text-ink">
-            Team
-          </Link>
+          {APP_NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="text-sm text-ink-subtle transition-colors hover:text-ink"
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
       )}
 

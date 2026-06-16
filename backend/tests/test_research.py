@@ -20,6 +20,7 @@ from app.models.research import ArticleMetadata, ExtractedArticle, HighlightSpan
 from app.services.web_article_extraction import (
     validate_url,
     _extract_metadata_from_html,
+    _build_article_metadata,
     _extract_text_beautifulsoup,
     _normalize_text,
     extract_article_from_paste,
@@ -147,6 +148,74 @@ class TestMetadataExtraction:
     def test_url_always_set(self):
         meta = _extract_metadata_from_html("<html></html>", "https://example.com/test")
         assert meta.url == "https://example.com/test"
+
+
+class TestDeepMetadataCascade:
+    """_build_article_metadata uses academic citation_* meta + JSON-LD that the
+    basic OG/name reader misses, so scholarly sources cite cleanly."""
+
+    SCHOLARLY_HTML = """
+    <html lang="en">
+    <head>
+      <title>Repository | Some Article</title>
+      <meta name="citation_title" content="Humanitarian Intervention and Just War" />
+      <meta name="citation_author" content="King, Nathaniel R." />
+      <meta name="citation_author" content="Chen, Emily" />
+      <meta name="citation_publication_date" content="2022/03/01" />
+      <meta name="citation_journal_title" content="Ozark Historical Review" />
+      <meta property="og:description" content="An excerpt." />
+    </head>
+    <body><p>Body.</p></body>
+    </html>
+    """
+
+    JSONLD_HTML = """
+    <html>
+    <head>
+      <script type="application/ld+json">
+      {"@type":"NewsArticle","headline":"Tariffs and Growth",
+       "author":{"@type":"Person","name":"Dana Lopez"},
+       "datePublished":"2023-08-04T09:00:00Z",
+       "publisher":{"@type":"Organization","name":"The Economic Times"}}
+      </script>
+    </head>
+    <body><p>Body.</p></body>
+    </html>
+    """
+
+    def test_citation_author_extracted(self):
+        pytest.importorskip("bs4", reason="bs4 not installed")
+        meta = _build_article_metadata(self.SCHOLARLY_HTML, "https://digitalcommons.example.edu/a/1")
+        assert meta.author and "King" in meta.author
+
+    def test_citation_title_preferred(self):
+        pytest.importorskip("bs4", reason="bs4 not installed")
+        meta = _build_article_metadata(self.SCHOLARLY_HTML, "https://digitalcommons.example.edu/a/1")
+        assert meta.title == "Humanitarian Intervention and Just War"
+
+    def test_citation_journal_as_publication(self):
+        pytest.importorskip("bs4", reason="bs4 not installed")
+        meta = _build_article_metadata(self.SCHOLARLY_HTML, "https://digitalcommons.example.edu/a/1")
+        assert meta.publication == "Ozark Historical Review"
+
+    def test_citation_date_normalized(self):
+        pytest.importorskip("bs4", reason="bs4 not installed")
+        meta = _build_article_metadata(self.SCHOLARLY_HTML, "https://digitalcommons.example.edu/a/1")
+        assert meta.published_date and meta.published_date.startswith("2022")
+
+    def test_jsonld_author_and_date(self):
+        pytest.importorskip("bs4", reason="bs4 not installed")
+        meta = _build_article_metadata(self.JSONLD_HTML, "https://example.com/x")
+        assert meta.author == "Dana Lopez"
+        assert meta.published_date == "2023-08-04"
+        assert meta.publication == "The Economic Times"
+
+    def test_no_fabrication_when_empty(self):
+        pytest.importorskip("bs4", reason="bs4 not installed")
+        meta = _build_article_metadata("<html><head><title>X</title></head><body></body></html>",
+                                       "https://example.com/x")
+        assert meta.author is None
+        assert meta.published_date is None
 
 
 # ── Text normalization ─────────────────────────────────────────────────────────

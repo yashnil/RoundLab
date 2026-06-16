@@ -1754,6 +1754,7 @@ def generate_candidate_cards(
 
             _cut_compression_ratio = 1.0
             _cut_style = "medium_cut"
+            _highlighted_text = ""
             try:
                 evidence_cut = generate_evidence_cut(
                     passage=chunk,
@@ -1768,6 +1769,11 @@ def generate_candidate_cards(
                 draft["selected_spans"] = [s.model_dump() for s in evidence_cut.selected_spans]
                 _cut_compression_ratio = evidence_cut.compression_ratio
                 _cut_style = evidence_cut.cut_style
+                _highlighted_text = (
+                    (evidence_cut.read_aloud_validation.read_aloud_text
+                     if evidence_cut.read_aloud_validation else "")
+                    or " ".join(s.text for s in evidence_cut.cut_body_spans)
+                )
             except Exception as exc:
                 logger.debug("evidence_cut failed: %s", exc)
 
@@ -1807,6 +1813,10 @@ def generate_candidate_cards(
                     slot_label=_slot_label,
                     slot_target_claim=_slot_target_claim,
                     slot_function=_slot_function,
+                    topic=topic or "",
+                    passage=chunk or "",
+                    source_title=draft.get("title") or "",
+                    highlighted_text=_highlighted_text,
                 )
                 draft["intelligence"] = intelligence.model_dump()
             except Exception as exc:
@@ -2142,6 +2152,7 @@ def _process_single_slot(
 
         _cut_cr = 1.0
         _cut_style = "medium_cut"
+        _highlighted_text = ""
         try:
             evidence_cut = generate_evidence_cut(
                 passage=chunk,
@@ -2156,6 +2167,11 @@ def _process_single_slot(
             draft["selected_spans"] = [s.model_dump() for s in evidence_cut.selected_spans]
             _cut_cr = evidence_cut.compression_ratio
             _cut_style = evidence_cut.cut_style
+            _highlighted_text = (
+                (evidence_cut.read_aloud_validation.read_aloud_text
+                 if evidence_cut.read_aloud_validation else "")
+                or " ".join(s.text for s in evidence_cut.cut_body_spans)
+            )
         except Exception as exc:
             logger.debug("Per-slot evidence_cut failed: %s", exc)
 
@@ -2233,6 +2249,10 @@ def _process_single_slot(
                 slot_label=slot_label,
                 slot_target_claim=slot_target_claim,
                 slot_function=slot_function,
+                topic=topic or "",
+                passage=draft.get("body_text") or "",
+                source_title=draft.get("title") or "",
+                highlighted_text=_highlighted_text,
             )
             draft["intelligence"] = intelligence.model_dump()
         except Exception as exc:

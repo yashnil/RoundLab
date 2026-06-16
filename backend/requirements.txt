@@ -1,5 +1,7 @@
 annotated-doc==0.0.4
 trafilatura>=1.6.0
+pysbd>=0.3.4
+rank-bm25>=0.2.2
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 PyMuPDF>=1.23.0

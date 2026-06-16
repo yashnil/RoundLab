@@ -160,6 +160,26 @@ def _embed_text_safe(text: str) -> Optional[list[float]]:
         return None
 
 
+def _build_card_cutting_metadata(draft: dict, draft_id: str) -> dict:
+    """Build the card_cutting_metadata_json stored on a saved evidence_card.
+
+    Includes any user markup (highlight/underline/bold/italic) captured in the
+    draft's draft_json so user formatting survives the draft → card save. Pure
+    function for unit testing.
+    """
+    draft_json = draft.get("draft_json") or {}
+    metadata = {
+        "draft_id": draft_id,
+        "research_source_id": draft.get("research_source_id"),
+        "warrant_summary": draft.get("warrant_summary"),
+        "impact_summary": draft.get("impact_summary"),
+    }
+    user_markup = draft_json.get("user_markup")
+    if user_markup:
+        metadata["user_markup"] = user_markup
+    return metadata
+
+
 def _save_draft_to_db(draft_dict: dict, sb) -> dict:
     """Insert a card draft dict into card_drafts table and return the row."""
     # Strip fields not in the DB schema (extra fields go to draft_json)
@@ -196,7 +216,7 @@ class RegenerateCutRequest(BaseModel):
     claim: str
     evidence_role: str = "direct_support"
     tag: str = ""
-    cut_style: str = "medium"  # "full" | "light" | "medium" | "aggressive"
+    cut_style: str = "medium"  # "medium" (default) | "high"
     use_llm: bool = True
 
 
@@ -409,6 +429,16 @@ async def create_card_draft(body: CardDraftRequest) -> dict:
     try:
         insert_result = sb.table("card_drafts").insert(draft_dict).execute()
         draft_row = insert_result.data[0]
+        # Surface rich studio fields from draft_json so URL/Paste drafts populate
+        # the Studio (evidence cut, citation, debate-prep) like Research Search.
+        dj = draft_row.get("draft_json") or {}
+        for _k in (
+            "evidence_cut", "citation", "intelligence", "evidence_role",
+            "short_cite", "mla_citation", "citation_quality",
+            "cut_text_with_ellipses", "selected_spans", "best_supported_claim",
+        ):
+            if _k in dj:
+                draft_row[_k] = dj[_k]
         if research_source_id:
             sb.table("research_sources").update({"status": "card_generated"}).eq(
                 "id", research_source_id
@@ -951,7 +981,7 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
 @router.patch("/card-drafts/{draft_id}")
 async def patch_card_draft(draft_id: str, body: PatchCardDraftRequest) -> dict:
     """Edit user-facing fields of a card draft."""
-    _get_draft_or_404(draft_id, body.user_id)
+    existing_draft = _get_draft_or_404(draft_id, body.user_id)
 
     updates: dict = {}
     for field in [
@@ -963,6 +993,14 @@ async def patch_card_draft(draft_id: str, body: PatchCardDraftRequest) -> dict:
         val = getattr(body, field, None)
         if val is not None:
             updates[field] = val
+
+    # Persist full user markup (highlight/underline/bold/italic) into draft_json.
+    # There are no DB columns for bold/italic, so they live in the JSON blob —
+    # never silently dropped.
+    if body.user_markup_json is not None:
+        draft_json = dict(existing_draft.get("draft_json") or {})
+        draft_json["user_markup"] = body.user_markup_json.model_dump()
+        updates["draft_json"] = draft_json
 
     if not updates:
         result = get_supabase().table("card_drafts").select("*").eq("id", draft_id).limit(1).execute()
@@ -1060,12 +1098,7 @@ async def save_card_draft(draft_id: str, body: SaveDraftRequest) -> SaveDraftRes
             "generated_tag": draft.get("generated_tag", True),
             "user_reviewed": True,
             "card_source_type": draft.get("card_source_type", "url"),
-            "card_cutting_metadata_json": {
-                "draft_id": draft_id,
-                "research_source_id": draft.get("research_source_id"),
-                "warrant_summary": draft.get("warrant_summary"),
-                "impact_summary": draft.get("impact_summary"),
-            },
+            "card_cutting_metadata_json": _build_card_cutting_metadata(draft, draft_id),
         }
         card_result = sb.table("evidence_cards").insert(card_row).execute()
         card_id = card_result.data[0]["id"]

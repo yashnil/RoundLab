@@ -53,6 +53,30 @@ export function buildCutTextFromSpans(
  * label + MLA). Slot label is included when present so exported drafts carry
  * their strategic context.
  */
+const BEST_USE_LABEL: Record<string, string> = {
+  contention: "Contention",
+  rebuttal: "Rebuttal",
+  summary: "Summary",
+  final_focus: "Final Focus",
+  frontline: "Frontline",
+  weighing: "Weighing",
+  impact: "Impact / Weighing",
+  definition: "Framework",
+  crossfire: "Crossfire",
+};
+
+/**
+ * Build the full plain-text export of a card:
+ *
+ *   TAG: …
+ *   SOURCE: Author Year — Publication / Title
+ *   EVIDENCE: …
+ *   MLA: …
+ *   ROUNDLAB ANALYSIS: Warrant / Impact
+ *   DEBATE PREP: proves / weakness / answer / counter / crossfire Q&A / use
+ *
+ * Sections with no data are omitted. Used by both Copy Card and Download.
+ */
 export function exportCardText(
   card: Pick<
     CardDraft,
@@ -63,26 +87,195 @@ export function exportCardText(
     | "body_text"
     | "mla_citation"
     | "slot_label"
+    | "author"
+    | "publication"
+    | "title"
+    | "published_date"
+    | "intelligence"
   >,
   spans?: SelectedSpan[] | null,
 ): string {
   const tag = card.tag || "Card";
-  const cite = card.short_cite || "Unknown";
-  const pub = card.citation?.container_title || card.citation?.publication_name || "";
-  const citeRow = pub ? `${cite} — ${pub}` : cite;
+  const author = card.author || card.citation?.author_display || "";
+  const yearRaw = card.citation?.year || card.published_date || "";
+  const year = /(\d{4})/.exec(yearRaw)?.[1] || "";
+  const pub =
+    card.citation?.container_title ||
+    card.citation?.publication_name ||
+    card.publication ||
+    "";
+  const title = card.title || card.citation?.title || "";
+
+  const sourceMain = [author, year].filter(Boolean).join(" ");
+  const sourceLine =
+    (sourceMain || card.short_cite || "Unknown source") + (pub ? ` — ${pub}` : "");
 
   const bodyText =
     spans && spans.length > 0
       ? buildCutTextFromSpans(card.cut_text_with_ellipses ?? card.body_text ?? "", spans)
       : card.cut_text_with_ellipses || card.body_text || "";
 
-  const parts: string[] = [];
-  if (card.slot_label) parts.push(`[${card.slot_label}]`);
-  parts.push(tag, citeRow, bodyText);
+  const lines: string[] = [];
+  if (card.slot_label) lines.push(`[${card.slot_label}]`);
+
+  lines.push("TAG:", tag, "");
+  lines.push("SOURCE:", sourceLine);
+  if (title) lines.push(title);
+  lines.push("", "EVIDENCE:", bodyText);
+
   if (card.mla_citation) {
-    parts.push(`\nMLA:\n${card.mla_citation}`);
+    lines.push("", "MLA:", card.mla_citation);
   }
-  return parts.join("\n");
+
+  const intel = card.intelligence;
+  const warrant = intel?.warrant_analysis?.trim();
+  const impact = intel?.impact_analysis?.trim();
+  if (warrant || impact) {
+    lines.push("", "ROUNDLAB ANALYSIS:");
+    if (warrant) lines.push(`Warrant: ${warrant}`);
+    if (impact) lines.push(`Impact: ${impact}`);
+  }
+
+  if (intel) {
+    const prep: string[] = [];
+    if (intel.why_this_card?.trim()) prep.push(`Proves: ${intel.why_this_card.trim()}`);
+    if (intel.potential_weakness?.trim()) prep.push(`Weakness: ${intel.potential_weakness.trim()}`);
+    if (intel.how_to_answer_weakness?.trim()) prep.push(`Response: ${intel.how_to_answer_weakness.trim()}`);
+    if (intel.opponent_response?.trim()) prep.push(`Likely counter: ${intel.opponent_response.trim()}`);
+    if (intel.crossfire_question?.trim()) prep.push(`Crossfire Q: ${intel.crossfire_question.trim()}`);
+    if (intel.crossfire_answer?.trim()) prep.push(`Crossfire A: ${intel.crossfire_answer.trim()}`);
+    if (intel.best_pairing?.trim()) prep.push(intel.best_pairing.trim());
+    if (intel.weighing_angle?.trim()) prep.push(`Weighing angle: ${intel.weighing_angle.trim()}`);
+    if (intel.best_use) prep.push(`Best use: ${BEST_USE_LABEL[intel.best_use] ?? intel.best_use}`);
+    if (prep.length) {
+      lines.push("", "DEBATE PREP:", ...prep);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ── Rich HTML clipboard ────────────────────────────────────────────────────────
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Build a formatted HTML representation of the card — bold tag, source line,
+ * MLA, highlighted evidence (background color), and Analysis / Debate Prep
+ * headings. Used for rich-clipboard copy where the browser supports text/html.
+ */
+export function exportCardHtml(
+  card: Parameters<typeof exportCardText>[0] & { body_text?: string | null; cut_text_with_ellipses?: string | null },
+  highlightSpans?: SelectedSpan[] | null,
+): string {
+  const tag = escapeHtml(card.tag || "Card");
+  const author = card.author || card.citation?.author_display || "";
+  const year = /(\d{4})/.exec(card.citation?.year || card.published_date || "")?.[1] || "";
+  const pub = card.citation?.container_title || card.citation?.publication_name || card.publication || "";
+  const sourceLine = escapeHtml(([author, year].filter(Boolean).join(" ") || card.short_cite || "Unknown source") + (pub ? ` — ${pub}` : ""));
+  const body = card.cut_text_with_ellipses || card.body_text || "";
+
+  // Highlighted evidence: wrap covered ranges in <mark>.
+  let evidenceHtml: string;
+  const spans = (highlightSpans ?? []).filter((s) => s.end > s.start).sort((a, b) => a.start - b.start);
+  if (spans.length) {
+    const parts: string[] = [];
+    let cursor = 0;
+    for (const s of spans) {
+      const a = Math.max(cursor, s.start);
+      const b = Math.min(body.length, s.end);
+      if (a > cursor) parts.push(escapeHtml(body.slice(cursor, a)));
+      if (b > a) parts.push(`<mark style="background:#fde68a;color:#1f2937">${escapeHtml(body.slice(a, b))}</mark>`);
+      cursor = Math.max(cursor, b);
+    }
+    if (cursor < body.length) parts.push(escapeHtml(body.slice(cursor)));
+    evidenceHtml = parts.join("");
+  } else {
+    evidenceHtml = escapeHtml(body);
+  }
+
+  const intel = card.intelligence;
+  const blocks: string[] = [
+    `<p style="font-size:18px;font-weight:bold;margin:0 0 4px">${tag}</p>`,
+    `<p style="color:#444;margin:0 0 6px">${sourceLine}</p>`,
+  ];
+  if (card.mla_citation) {
+    blocks.push(`<p style="font-size:11px;color:#666;margin:0 0 8px"><b>MLA:</b> ${escapeHtml(card.mla_citation)}</p>`);
+  }
+  blocks.push(`<p style="line-height:1.6;margin:0 0 8px">${evidenceHtml}</p>`);
+  const warrant = intel?.warrant_analysis?.trim();
+  const impact = intel?.impact_analysis?.trim();
+  if (warrant || impact) {
+    blocks.push(`<p style="margin:8px 0 2px"><b>RoundLab Analysis</b></p>`);
+    if (warrant) blocks.push(`<p style="margin:0 0 2px"><b>Warrant:</b> ${escapeHtml(warrant)}</p>`);
+    if (impact) blocks.push(`<p style="margin:0 0 6px"><b>Impact:</b> ${escapeHtml(impact)}</p>`);
+  }
+  if (intel) {
+    const prep: [string, string | undefined][] = [
+      ["Weakness", intel.potential_weakness],
+      ["Response", intel.how_to_answer_weakness],
+      ["Likely counter", intel.opponent_response],
+      ["Crossfire Q", intel.crossfire_question],
+      ["Crossfire A", intel.crossfire_answer],
+      ["Weighing angle", intel.weighing_angle],
+    ];
+    const rows = prep.filter(([, v]) => v?.trim()).map(([k, v]) => `<p style="margin:0 0 2px"><b>${k}:</b> ${escapeHtml(v!.trim())}</p>`);
+    if (rows.length) {
+      blocks.push(`<p style="margin:8px 0 2px"><b>Debate Prep</b></p>`, ...rows);
+    }
+  }
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1f2937">${blocks.join("")}</div>`;
+}
+
+/**
+ * Copy a card to the clipboard. Writes rich text/html + text/plain when the
+ * browser supports ClipboardItem, falling back to writeText, then execCommand.
+ * Always copies the full plain-text card so copy never silently fails.
+ */
+export async function copyCardRich(
+  card: Parameters<typeof exportCardText>[0] & { body_text?: string | null; cut_text_with_ellipses?: string | null },
+  highlightSpans?: SelectedSpan[] | null,
+): Promise<void> {
+  const plain = exportCardText(card);
+  // Rich path: text/html + text/plain via ClipboardItem.
+  try {
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.write === "function" &&
+      typeof ClipboardItem !== "undefined"
+    ) {
+      const html = exportCardHtml(card, highlightSpans);
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plain], { type: "text/plain" }),
+      });
+      await navigator.clipboard.write([item]);
+      return;
+    }
+  } catch {
+    // fall through to plain text
+  }
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(plain);
+    return;
+  }
+  // Last resort: execCommand.
+  const ta = document.createElement("textarea");
+  ta.value = plain;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(ta);
+  if (!ok) throw new Error("copy failed");
 }
 
 /**

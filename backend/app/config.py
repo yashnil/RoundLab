@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     research_enable_llm_role_classifier: bool = Field(default=True, alias="RESEARCH_ENABLE_LLM_ROLE_CLASSIFIER")
     research_enable_strict_card_validation: bool = Field(default=True, alias="RESEARCH_ENABLE_STRICT_CARD_VALIDATION")
 
+    # Optional LLM card refiner (tagline/warrant/impact/prep). Only used when an
+    # OpenAI key is configured; otherwise the deterministic pipeline runs.
+    research_enable_llm_refiner: bool = Field(default=True, alias="RESEARCH_ENABLE_LLM_REFINER")
+
+    # Optional semantic reranker for candidate passages. Off by default so local
+    # dev never pulls a model; enable explicitly when a provider is wired.
+    use_semantic_reranker: bool = Field(default=False, alias="USE_SEMANTIC_RERANKER")
+
     # Evidence Set Builder — per-slot planning + search (Parts 1-2)
     research_enable_slot_planner: bool = Field(default=True, alias="RESEARCH_ENABLE_SLOT_PLANNER")
     research_max_evidence_slots: int = Field(default=5, alias="RESEARCH_MAX_EVIDENCE_SLOTS")
@@ -50,4 +58,11 @@ def get_tavily_api_key() -> Optional[str]:
     Never logs or exposes the key value.
     """
     key = settings.tavily_api_key.strip()
+    return key if key else None
+
+
+def get_openai_api_key() -> Optional[str]:
+    """Return the OpenAI API key if configured (settings or OS env), else None."""
+    import os
+    key = (settings.openai_api_key or os.getenv("OPENAI_API_KEY", "")).strip()
     return key if key else None

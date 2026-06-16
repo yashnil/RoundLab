@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 interface Options {
   /** Fraction of element visible before triggering (0–1). Default 0.2. */
@@ -7,35 +7,50 @@ interface Options {
   rootMargin?: string;
 }
 
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReducedMotion(callback: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+  mq.addEventListener("change", callback);
+  return () => mq.removeEventListener("change", callback);
+}
+
+function getReducedMotionSnapshot(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
 /**
  * Returns [ref, hasEntered].
  *
  * hasEntered becomes true once the element crosses the viewport threshold
  * and stays true — it never resets, even if the element leaves the viewport.
  *
- * Respects prefers-reduced-motion: if the user has reduced motion enabled,
- * hasEntered starts as true so consumers skip staggered reveals.
+ * Respects prefers-reduced-motion: reduced-motion users get hasEntered=true
+ * immediately so consumers skip staggered reveals. The media query is read via
+ * useSyncExternalStore (hydration-safe, no setState-in-effect).
  */
 export function useInViewOnce<T extends HTMLElement = HTMLDivElement>(
   options: Options = {},
 ): [React.RefObject<T | null>, boolean] {
   const ref = useRef<T | null>(null);
-  const [hasEntered, setHasEntered] = useState(false);
+  const [enteredView, setEnteredView] = useState(false);
+  const prefersReducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    getReducedMotionSnapshot,
+    () => false,
+  );
 
   useEffect(() => {
-    // Respect reduced motion — skip animation, show final state immediately
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setHasEntered(true);
-      return;
-    }
-
+    if (prefersReducedMotion) return; // final state already shown
     const el = ref.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setHasEntered(true);
+          setEnteredView(true);
           observer.unobserve(el);
         }
       },
@@ -47,8 +62,8 @@ export function useInViewOnce<T extends HTMLElement = HTMLDivElement>(
 
     observer.observe(el);
     return () => observer.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefersReducedMotion]);
 
-  return [ref, hasEntered];
+  return [ref, enteredView || prefersReducedMotion];
 }

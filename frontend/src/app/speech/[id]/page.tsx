@@ -58,11 +58,9 @@ import type { AnalysisJob, AnalyzeResponse, ArgumentItem, ArgumentMap, DeliveryM
 import type { ClaimEvidenceCheck, EvidenceCheckResult, EvidenceDocument } from "@/types";
 import type { RecordState } from "@/components/RecordingStudio";
 import { useRecorder } from "@/hooks/useRecorder";
+import { useSpeechUpload } from "@/hooks/useSpeechUpload";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-const ALLOWED_EXT = ["mp3", "wav", "m4a", "webm", "ogg", "mp4"];
-const MAX_BYTES   = 50 * 1024 * 1024;
 
 const TYPE_LABEL: Record<string, string> = {
   constructive: "Constructive", rebuttal: "Rebuttal",
@@ -90,14 +88,6 @@ const STAGE_MESSAGES: Record<"transcript" | "flow" | "feedback", { title: string
   },
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function validateFile(f: File): string | null {
-  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!ALLOWED_EXT.includes(ext)) return `Unsupported ".${ext}". Allowed: ${ALLOWED_EXT.join(", ")}.`;
-  if (f.size > MAX_BYTES)         return `Too large (${(f.size / 1024 / 1024).toFixed(1)} MB). Max 50 MB.`;
-  return null;
-}
 
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -113,10 +103,7 @@ export default function SpeechPage() {
 
   const [mode,       setMode]       = useState<"record" | "upload" | "paste">("record");
   const rec = useRecorder();
-  const [selFile,    setSelFile]    = useState<File | null>(null);
-  const [fileErr,    setFileErr]    = useState("");
-  const [upErr,      setUpErr]      = useState("");
-  const [uploading,  setUploading]  = useState(false);
+  const upload = useSpeechUpload({ speechId, userId });
   const [resetting,  setResetting]  = useState(false);
 
   const [pastedText,   setPastedText]   = useState("");
@@ -315,19 +302,10 @@ export default function SpeechPage() {
     const t = rec.state.blob.type;
     const ext = t.includes("mp4") ? "mp4" : t.includes("ogg") ? "ogg" : "webm";
     const durationSeconds = Math.round(rec.state.durationMs / 1000);
-    const path = `${userId}/${speechId}/audio.${ext}`;
     let upd: Speech | null = null;
     const ok = await rec.upload(async (blob) => {
-      const sb = createClient();
-      const { error: se } = await sb.storage.from("audio").upload(path, blob, {
-        upsert: true, contentType: blob.type || "audio/webm",
-      });
-      if (se) throw new Error(`Upload failed: ${se.message}`);
-      // Use the recorder's measured duration for recordings
-      upd = await apiFetch<Speech>(`/speeches/${speechId}?user_id=${userId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: path, duration_seconds: durationSeconds > 0 ? durationSeconds : undefined }),
-      });
+      // Shared persistence path with the file-upload flow.
+      upd = await upload.persistAudio(blob, ext, durationSeconds > 0 ? durationSeconds : null);
       setSpeech(upd);
     });
     if (ok && upd) {
@@ -340,59 +318,21 @@ export default function SpeechPage() {
   // ── File upload ────────────────────────────────────────────────────────────
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFileErr(""); setUpErr("");
     const f = e.target.files?.[0] ?? null;
+    upload.selectFile(f);
     if (!f) return;
-    const ve = validateFile(f);
-    if (ve) { setFileErr(ve); setSelFile(null); e.target.value = ""; }
-    else setSelFile(f);
-  }
-
-  /** Resolve audio duration in seconds from a File by loading it into an HTMLAudioElement. */
-  async function getFileDuration(file: File): Promise<number | null> {
-    return new Promise((resolve) => {
-      try {
-        const url = URL.createObjectURL(file);
-        const audio = new Audio(url);
-        audio.onloadedmetadata = () => {
-          URL.revokeObjectURL(url);
-          const dur = audio.duration;
-          resolve(Number.isFinite(dur) && dur > 0 ? Math.round(dur) : null);
-        };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-        // Safety timeout — don't block upload on slow metadata load
-        setTimeout(() => { URL.revokeObjectURL(url); resolve(null); }, 3000);
-      } catch { resolve(null); }
-    });
+    // Reset the input so re-selecting the same file still fires change.
+    e.target.value = "";
   }
 
   async function uploadFile() {
-    if (!selFile || !userId) return;
-    setUpErr(""); setUploading(true);
-    const ext  = selFile.name.split(".").pop()!.toLowerCase();
-    const path = `${userId}/${speechId}/audio.${ext}`;
-    try {
-      // Resolve duration before uploading (non-blocking — uses 3s timeout)
-      const durationSeconds = await getFileDuration(selFile);
-
-      const sb = createClient();
-      const { error: se } = await sb.storage.from("audio").upload(path, selFile, { upsert: true });
-      if (se) { setUpErr(`Upload failed: ${se.message}`); return; }
-      const upd = await apiFetch<Speech>(`/speeches/${speechId}?user_id=${userId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_url: path, duration_seconds: durationSeconds ?? undefined }),
-      });
-      setSpeech(upd); setSelFile(null);
-
-      // Auto-start analysis after file upload completes
-      // Pass the fresh upd object to avoid stale state race conditions
+    const upd = await upload.uploadSelectedFile();
+    if (upd) {
+      setSpeech(upd);
+      // Auto-start analysis after file upload completes (fresh upd avoids stale state)
       await maybeStartAutoAnalysis(upd);
-    } catch (err: unknown) {
-      setUpErr(err instanceof Error ? err.message : "Upload failed.");
-    } finally { setUploading(false); }
+    }
   }
-
-  function clearFile() { setSelFile(null); setFileErr(""); }
 
   async function submitPastedText() {
     if (!pastedText.trim() || !userId) return;
@@ -1112,9 +1052,9 @@ export default function SpeechPage() {
                           transition={T.fast}
                         >
                           <UploadDropzone
-                            selectedFile={selFile} fileError={fileErr}
-                            uploadError={upErr}    uploading={uploading}
-                            onFileChange={onFileChange} onUpload={uploadFile} onClearFile={clearFile}
+                            selectedFile={upload.selectedFile} fileError={upload.fileError}
+                            uploadError={upload.uploadError}    uploading={upload.uploading}
+                            onFileChange={onFileChange} onUpload={uploadFile} onClearFile={upload.clearFile}
                           />
                         </motion.div>
                       ) : (

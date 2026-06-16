@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import {
-  Mic, GitBranch, FileText, ArrowRight, Target, Zap, RefreshCw,
+  Mic, GitBranch, FileText, ArrowRight, Target, Zap, RefreshCw, Clock,
 } from "lucide-react";
 import AppShell from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
 import { slideInLeft, slideInRight, staggerParent, staggerChild, EASE } from "@/lib/motion";
+import {
+  getSpeechTypeInfo, getJudgeTypeInfo, formatSpeechTarget, setupCtaLabel,
+  readLastJudgeType, rememberJudgeType,
+} from "@/lib/practiceSetup";
 import type { Speech } from "@/types";
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
@@ -119,6 +123,9 @@ export default function SessionPage() {
     if (presetType && VALID_TYPES.includes(presetType)) {
       setSpeechType(presetType);
     }
+    // Smart default: prefill the judge type the student last practiced with.
+    const lastJudge = readLastJudgeType();
+    if (lastJudge) setJudgeType(lastJudge);
   }, []);
 
   // Prefill form from source speech when in re-record mode
@@ -142,6 +149,7 @@ export default function SessionPage() {
     e.preventDefault();
     if (!userId) return;
     setError(""); setSubmitting(true);
+    rememberJudgeType(judgeType);
     try {
       const payload: Record<string, unknown> = {
         user_id:     userId,
@@ -310,6 +318,17 @@ export default function SessionPage() {
                           <option value="final_focus">Final Focus</option>
                           <option value="crossfire">Crossfire</option>
                         </select>
+                        {getSpeechTypeInfo(speechType) && (
+                          <div className="flex items-start gap-2 rounded-lg border border-hairline bg-surface-2/60 px-3 py-2">
+                            <Clock size={12} className="mt-0.5 shrink-0 text-ink-faint" aria-hidden="true" />
+                            <p className="text-xs leading-relaxed text-ink-subtle">
+                              <span className="font-medium text-ink">
+                                {formatSpeechTarget(getSpeechTypeInfo(speechType)!.targetSeconds)} target.
+                              </span>{" "}
+                              {getSpeechTypeInfo(speechType)!.purpose}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Side + Judge */}
@@ -335,6 +354,12 @@ export default function SessionPage() {
                           </select>
                         </div>
                       </div>
+                      {getJudgeTypeInfo(judgeType) && (
+                        <p className="-mt-2 text-xs leading-relaxed text-ink-subtle">
+                          <span className="font-medium text-ink">{getJudgeTypeInfo(judgeType)!.label}:</span>{" "}
+                          {getJudgeTypeInfo(judgeType)!.description}
+                        </p>
+                      )}
 
                       {/* ── Session info ── */}
                       <FormSection label="Session info" />
@@ -380,7 +405,7 @@ export default function SessionPage() {
                         >
                           <Button type="submit" disabled={submitting} className="w-full gap-2">
                             {submitting ? "Opening practice room…" : (
-                              <><span>Enter Practice Room</span><ArrowRight size={13} /></>
+                              <><span>{setupCtaLabel(isRerecordMode)}</span><ArrowRight size={13} /></>
                             )}
                           </Button>
                         </motion.div>

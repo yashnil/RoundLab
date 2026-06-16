@@ -1,12 +1,14 @@
 "use client";
 
-import type { Dispatch, SetStateAction, ChangeEvent } from "react";
+import { useEffect, type Dispatch, type SetStateAction, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Mic, RefreshCw, Upload, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
 import { T } from "@/lib/motion";
 import { StepHeader, InlineAlert, WorkspaceCard } from "@/components/speech/reportPrimitives";
+import CaptureSaveStatus from "@/components/practice/CaptureSaveStatus";
+import { deriveCaptureStatus, shouldWarnBeforeLeaving } from "@/lib/practice/captureStatus";
 import RecordingStudio, { type RecordState } from "@/components/RecordingStudio";
 import UploadDropzone from "@/components/UploadDropzone";
 import type { UseRecorder } from "@/hooks/useRecorder";
@@ -42,10 +44,35 @@ export default function SpeechCaptureWorkspace({
   handleStartRec, saveRec, handleDiscardRec, upload, onFileChange, uploadFile,
   pastedText, setPastedText, pasteErr, submitPastedText, submittingText,
 }: SpeechCaptureWorkspaceProps) {
+  const captureStatus = deriveCaptureStatus({
+    mode,
+    recorderStatus: rec.state.status,
+    uploadStatus: upload.status,
+    hasSavedAudio: !!speech.audio_url,
+    analysisActive: false,
+    analysisFailed: false,
+    pasteDirty: pastedText.trim().length > 0,
+    submittingPaste: submittingText,
+  });
+
+  // Warn before leaving while a recording/file/draft isn't saved yet.
+  useEffect(() => {
+    if (!shouldWarnBeforeLeaving(captureStatus)) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [captureStatus]);
+
   return (
               <WorkspaceCard key="audio">
                 <CardContent className="flex flex-col gap-4 px-5 py-5">
                   <StepHeader n={1} title="Audio" done={!!speech.audio_url} />
+                  {captureStatus !== "empty" && captureStatus !== "saved" && (
+                    <CaptureSaveStatus status={captureStatus} />
+                  )}
 
                 {speech.audio_url ? (
                   <div className="flex flex-col gap-3">

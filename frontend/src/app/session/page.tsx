@@ -104,7 +104,7 @@ export default function SessionPage() {
     }).finally(() => setUserLoading(false));
   }, [router]);
 
-  // Read re-record URL params client-side (avoids useSearchParams/Suspense requirement)
+  // Read URL params client-side (avoids useSearchParams/Suspense requirement)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -112,6 +112,12 @@ export default function SessionPage() {
       setIsRerecordMode(true);
       setSourceSpeechId(params.get("source_speech_id"));
       setSourceDrillId(params.get("source_drill_id"));
+    }
+    // Quick-start deep link from the dashboard: /session?type=rebuttal
+    const presetType = params.get("type");
+    const VALID_TYPES = ["constructive", "rebuttal", "summary", "final_focus", "crossfire"];
+    if (presetType && VALID_TYPES.includes(presetType)) {
+      setSpeechType(presetType);
     }
   }, []);
 

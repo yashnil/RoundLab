@@ -31,6 +31,9 @@ import DashboardCockpitBand from "@/components/DashboardCockpitBand";
 import FirstRunCommandCenter from "@/components/FirstRunCommandCenter";
 import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary, Workout, BlockCoverageResponse } from "@/types";
 import { deriveWorkoutProgress, getNextIncompleteStep } from "@/lib/workoutHelpers";
+import NextActionPanel from "@/components/dashboard/NextActionPanel";
+import QuickStartRow from "@/components/dashboard/QuickStartRow";
+import { selectNextAction } from "@/lib/dashboardHelpers";
 import { deriveDeliveryFocus, deliveryScoreColor, getPacingBandDisplay } from "@/lib/deliveryHelpers";
 import { deriveBlockReadiness } from "@/lib/blockfileHelpers";
 
@@ -292,7 +295,23 @@ export default function DashboardPage() {
             </motion.div>
           )}
 
-          {/* ── Mission Panel — cockpit top section ────────────────── */}
+          {/* ── Your next step — single most important action ──────── */}
+          {!loading && (
+            <motion.div variants={staggerChild}>
+              <NextActionPanel
+                action={selectNextAction({ speeches, progress, focusSkill: null })}
+              />
+            </motion.div>
+          )}
+
+          {/* ── Quick start — fast entry by speech type ─────────────── */}
+          {!loading && (
+            <motion.div variants={staggerChild}>
+              <QuickStartRow />
+            </motion.div>
+          )}
+
+          {/* ── Mission Panel — supporting context, now below next step ── */}
           <motion.div variants={staggerChild}>
             {loading
               ? <DashboardMissionPanelSkeleton />

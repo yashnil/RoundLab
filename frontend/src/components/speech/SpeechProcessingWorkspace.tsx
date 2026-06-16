@@ -13,6 +13,8 @@ import {
 } from "@/components/speech/reportPrimitives";
 import TranscriptPanel from "@/components/TranscriptPanel";
 import { AnalysisProgressCard } from "@/components/AnalysisProgressCard";
+import SpeechProcessingTimeline from "@/components/speech/SpeechProcessingTimeline";
+import type { ProcJobStatus } from "@/lib/practice/processingStages";
 import LoadingCard from "@/components/LoadingCard";
 import JudgeModeSelector, { type JudgeViewMode } from "@/components/JudgeModeSelector";
 import FlowEditPanel from "@/components/FlowEditPanel";
@@ -157,16 +159,33 @@ export default function SpeechProcessingWorkspace({
                 {/* Job-based analysis progress */}
                 {activeJob && (
                   <motion.div key="job-progress" {...fadeUp(0)}>
-                    <AnalysisProgressCard
-                      job={activeJob}
-                      onRetry={activeJob.status === "failed" ? retryAnalysis : undefined}
-                      retrying={retryingJob}
-                    />
-                    {unifiedAnalysisErr && (
-                      <div className="mt-2">
-                        <InlineAlert variant="danger">{unifiedAnalysisErr}</InlineAlert>
-                      </div>
-                    )}
+                    <WorkspaceCard glow>
+                      <CardContent className="flex flex-col gap-5 px-5 py-5">
+                        <StepHeader
+                          title={activeJob.status === "failed" ? "Analysis didn’t finish" : "Analyzing your speech"}
+                          done={false}
+                        />
+                        <SpeechProcessingTimeline
+                          jobStatus={activeJob.status as ProcJobStatus}
+                          hasReport={!!feedback}
+                          failed={activeJob.status === "failed"}
+                        />
+                        <div className="rounded-lg border border-hairline bg-surface-2/60 px-3.5 py-2.5">
+                          <p className="text-xs leading-relaxed text-ink-subtle">
+                            <span className="font-medium text-ink">Your recording is saved.</span>{" "}
+                            Keeping this page open is the fastest path to your report. If you leave, return
+                            to this speech to reconnect to the active analysis — RoundLab doesn’t send
+                            notifications yet.
+                          </p>
+                        </div>
+                        <AnalysisProgressCard
+                          job={activeJob}
+                          onRetry={activeJob.status === "failed" ? retryAnalysis : undefined}
+                          retrying={retryingJob}
+                        />
+                        {unifiedAnalysisErr && <InlineAlert variant="danger">{unifiedAnalysisErr}</InlineAlert>}
+                      </CardContent>
+                    </WorkspaceCard>
                   </motion.div>
                 )}
 

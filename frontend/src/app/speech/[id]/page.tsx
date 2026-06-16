@@ -11,6 +11,7 @@ import {
 import { useCopy } from "@/lib/useCopy";
 import { deriveAnalysisRecoveryState, isJobActive } from "@/lib/jobHelpers";
 import AppShell from "@/components/shell/AppShell";
+import SpeechReportNav from "@/components/speech/SpeechReportNav";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import RecordingStudio from "@/components/RecordingStudio";
 import UploadDropzone from "@/components/UploadDropzone";
@@ -1546,10 +1547,18 @@ export default function SpeechPage() {
             {/* ── For Complete Sessions: Coaching Report → Practice → Arguments → Input ── */}
             {isComplete ? (
               <>
+                <SpeechReportNav
+                  flags={{
+                    hasFeedback: !!feedback,
+                    hasFlow: !!argMap,
+                    hasDrills: drills.length > 0,
+                    hasTranscript: !!transcript,
+                  }}
+                />
                 {/* Feedback (Coaching Report) */}
                 {feedback && (
                   <WorkspaceCard key="fb-done" glow>
-                    <CardContent className="flex flex-col gap-5 px-5 py-5">
+                    <CardContent id="overview" className="flex flex-col gap-5 px-5 py-5 scroll-mt-20">
                       <StepHeader n={4} title="Coaching Report" done />
 
                       {/* Regenerate Banner - only show if report is stale */}
@@ -1926,7 +1935,7 @@ export default function SpeechPage() {
                 {/* Flow */}
                 {argMap && (
                   <WorkspaceCard key="flow-done">
-                    <CardContent className="flex flex-col gap-4 px-5 py-5">
+                    <CardContent id="flow" className="flex flex-col gap-4 px-5 py-5 scroll-mt-20">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <StepHeader n={3} title="Flow" done aside={
                           <div className="flex items-center gap-2">
@@ -2056,7 +2065,7 @@ export default function SpeechPage() {
                 {/* Input Status - Compact */}
                 {speech.audio_url && transcript && !analyzingUnified && (
                   <WorkspaceCard key="input-ready">
-                    <CardContent className="flex flex-col gap-3 px-5 py-5">
+                    <CardContent id="transcript" className="flex flex-col gap-3 px-5 py-5 scroll-mt-20">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ok/10">
                           <Check size={14} className="text-ok" />

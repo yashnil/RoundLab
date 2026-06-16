@@ -33,6 +33,7 @@ import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary, Workout, B
 import { deriveWorkoutProgress, getNextIncompleteStep } from "@/lib/workoutHelpers";
 import NextActionPanel from "@/components/dashboard/NextActionPanel";
 import QuickStartRow from "@/components/dashboard/QuickStartRow";
+import CoachingFocusCard from "@/components/dashboard/CoachingFocusCard";
 import { selectNextAction } from "@/lib/dashboardHelpers";
 import { deriveDeliveryFocus, deliveryScoreColor, getPacingBandDisplay } from "@/lib/deliveryHelpers";
 import { deriveBlockReadiness } from "@/lib/blockfileHelpers";
@@ -308,6 +309,16 @@ export default function DashboardPage() {
           {!loading && (
             <motion.div variants={staggerChild}>
               <QuickStartRow />
+            </motion.div>
+          )}
+
+          {/* ── Coaching focus — priority skill from real reports ────── */}
+          {!loading && progress && (
+            <motion.div variants={staggerChild}>
+              <CoachingFocusCard
+                skillAverages={progress.skill_averages}
+                feedbackReadyCount={progress.feedback_ready_count}
+              />
             </motion.div>
           )}
 

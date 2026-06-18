@@ -65,6 +65,13 @@ export default function SpeechPage() {
   const [pageErr,    setPageErr]    = useState("");
 
   const [mode,       setMode]       = useState<"record" | "upload" | "paste">("record");
+  // Honor the capture mode chosen in setup (/speech/[id]?capture=upload).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const c = new URLSearchParams(window.location.search).get("capture");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time URL init, hydration-safe
+    if (c === "record" || c === "upload" || c === "paste") setMode(c);
+  }, []);
   const rec = useRecorder();
   const upload = useSpeechUpload({ speechId, userId });
   const [resetting,  setResetting]  = useState(false);

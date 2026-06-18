@@ -10,6 +10,8 @@ export interface SpeechTypeInfo {
   label: string;
   /** One-line novice explanation of what this speech is for. */
   purpose: string;
+  /** The strategic objective a strong version of this speech achieves. */
+  strategicGoal: string;
   /** Typical speech length, in seconds, for the time target. */
   targetSeconds: number;
   /** Whether opponent/prior-speech context is useful for this speech. */
@@ -20,30 +22,35 @@ export const SPEECH_TYPE_INFO: Record<SpeechType, SpeechTypeInfo> = {
   constructive: {
     label: "Constructive",
     purpose: "Build your case — lay out your contentions with claims, warrants, evidence, and impacts.",
+    strategicGoal: "Establish offense the rest of the round runs on.",
     targetSeconds: 240,
     opponentContextUseful: false,
   },
   rebuttal: {
     label: "Rebuttal",
     purpose: "Answer your opponent — refute their contentions and defend your own.",
+    strategicGoal: "Win the line-by-line and keep your offense alive.",
     targetSeconds: 240,
     opponentContextUseful: true,
   },
   summary: {
     label: "Summary",
     purpose: "Narrow the round — extend what matters, drop what doesn’t, and start weighing.",
+    strategicGoal: "Collapse to your best path and begin weighing.",
     targetSeconds: 180,
     opponentContextUseful: true,
   },
   final_focus: {
     label: "Final Focus",
     purpose: "Crystallize the win — give the judge the clearest reason to vote for your side.",
+    strategicGoal: "Give the judge one clean reason to vote for you.",
     targetSeconds: 120,
     opponentContextUseful: true,
   },
   crossfire: {
     label: "Crossfire",
     purpose: "Question and answer — expose weaknesses and set up your later speeches.",
+    strategicGoal: "Expose weak links and set up later speeches.",
     targetSeconds: 180,
     opponentContextUseful: true,
   },
@@ -53,24 +60,42 @@ export interface JudgeTypeInfo {
   label: string;
   /** One-line explanation of what this judge cares about. */
   description: string;
+  /** What this judge rewards — drives the feedback emphasis. */
+  rewards: string[];
+  /** What this judge tends to punish. */
+  punishes: string[];
+  /** Compact "this report will emphasize…" preview bullets. */
+  emphasis: string[];
 }
 
 export const JUDGE_TYPE_INFO: Record<JudgeType, JudgeTypeInfo> = {
   lay: {
     label: "Lay judge",
     description: "A non-expert. Rewards clear, persuasive speaking and big-picture impacts over jargon.",
+    rewards: ["Clear, persuasive delivery", "Real-world impact explanation", "Low jargon"],
+    punishes: ["Debate jargon", "Unexplained warrants", "Speed over clarity"],
+    emphasis: ["Clarity and persuasion", "Real-world explanation", "Plain-language impacts"],
   },
   flow: {
     label: "Flow judge",
     description: "Tracks every argument. Punishes dropped responses and weak extensions; rewards clean clash.",
+    rewards: ["Clean line-by-line clash", "Clear extensions", "Signposting"],
+    punishes: ["Dropped responses", "Weak extensions", "Disorganized coverage"],
+    emphasis: ["Argument coverage", "Extensions and drops", "Direct clash"],
   },
   tech: {
     label: "Tech judge",
     description: "Demands rigorous warrants, evidence quality, and explicit weighing between impacts.",
+    rewards: ["Rigorous warrants", "Strong evidence", "Explicit weighing"],
+    punishes: ["Assertion without warrant", "Weak evidence", "No comparative weighing"],
+    emphasis: ["Warrant depth", "Evidence quality", "Comparative weighing"],
   },
   coach: {
     label: "Coach",
     description: "Full coaching lens — flags fixes and drill targets across every skill.",
+    rewards: ["Improvement over rounds", "Skill-building reps", "Honest self-assessment"],
+    punishes: ["Repeating known mistakes", "Skipped fundamentals"],
+    emphasis: ["Every skill dimension", "Concrete fixes", "Drill targets"],
   },
 };
 

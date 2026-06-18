@@ -36,6 +36,12 @@ describe("speech type info", () => {
     expect(getSpeechTypeInfo("constructive")?.label).toBe("Constructive");
     expect(getSpeechTypeInfo("nonsense")).toBeNull();
   });
+
+  it("every speech type has a strategic goal for the rich selector", () => {
+    SPEECH_TYPE_ORDER.forEach((t) => {
+      expect(SPEECH_TYPE_INFO[t].strategicGoal.length).toBeGreaterThan(0);
+    });
+  });
 });
 
 describe("judge type info", () => {
@@ -49,6 +55,14 @@ describe("judge type info", () => {
   it("getJudgeTypeInfo returns null for unknown judges", () => {
     expect(getJudgeTypeInfo("flow")?.label).toBe("Flow judge");
     expect(getJudgeTypeInfo("")).toBeNull();
+  });
+
+  it("every judge lens has rewards, punishes, and emphasis for the selector + preview", () => {
+    JUDGE_TYPE_ORDER.forEach((j) => {
+      expect(JUDGE_TYPE_INFO[j].rewards.length).toBeGreaterThan(0);
+      expect(JUDGE_TYPE_INFO[j].punishes.length).toBeGreaterThan(0);
+      expect(JUDGE_TYPE_INFO[j].emphasis.length).toBeGreaterThan(0);
+    });
   });
 });
 

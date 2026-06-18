@@ -124,6 +124,7 @@ export default function SpeechCaptureWorkspace({
                           <RecordingStudio
                             recordState={recordStudioState()} recordingSeconds={Math.round(rec.state.durationMs / 1000)}
                             recordObjectUrl={rec.state.url} recordError={rec.state.error ?? ""}
+                            level={rec.level}
                             onStartRecording={handleStartRec} onStopRecording={rec.stop}
                             onSaveRecording={saveRec}  onDiscardRecording={handleDiscardRec}
                           />

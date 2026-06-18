@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Mic, Square, Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { T, EASE } from "@/lib/motion";
+import RecordingMeter from "@/components/practice/RecordingMeter";
 
 export type RecordState =
   | "idle"
@@ -20,6 +21,8 @@ interface RecordingStudioProps {
   recordingSeconds: number;
   recordObjectUrl: string | null;
   recordError: string;
+  /** Real 0..1 input level from the recorder's analyser (drives the meter). */
+  level?: number;
   onStartRecording: () => void;
   onStopRecording: () => void;
   onSaveRecording: () => void;
@@ -29,9 +32,6 @@ interface RecordingStudioProps {
 function formatTime(s: number) {
   return `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 }
-
-// Static waveform heights — stable across renders, avoids hydration drift
-const WAVEFORM = [10, 18, 28, 16, 36, 24, 14, 30, 20, 8, 28, 18, 6, 32, 12, 22, 10, 30, 16, 22];
 
 // ── Countdown (3-2-1-Speak) ────────────────────────────────────────────────────
 
@@ -149,7 +149,7 @@ function IdleView({
 
 // ── Recording ──────────────────────────────────────────────────────────────────
 
-function RecordingView({ seconds, onStop }: { seconds: number; onStop: () => void }) {
+function RecordingView({ seconds, level, onStop }: { seconds: number; level: number; onStop: () => void }) {
   return (
     <div className="flex flex-col items-center gap-5 py-5">
 
@@ -160,7 +160,7 @@ function RecordingView({ seconds, onStop }: { seconds: number; onStop: () => voi
           animate={{ opacity: [1, 0.25, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
         />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-danger">Live Rec</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-danger">Recording</span>
       </div>
 
       {/* Timer — dominant focal object */}
@@ -176,26 +176,8 @@ function RecordingView({ seconds, onStop }: { seconds: number; onStop: () => voi
         </motion.span>
       </AnimatePresence>
 
-      {/* Waveform — taller, more bars */}
-      <div className="flex items-center gap-0.5 h-16">
-        {WAVEFORM.map((h, i) => (
-          <motion.div
-            key={i}
-            className="w-1.5 rounded-full bg-danger/55"
-            animate={{
-              height: [h, Math.max(4, h * 0.35), h],
-            }}
-            transition={{
-              duration: 0.4 + (i % 5) * 0.08,
-              repeat: Infinity,
-              repeatType: "mirror",
-              delay: i * 0.05,
-              ease: "easeInOut",
-            }}
-            style={{ minHeight: 3 }}
-          />
-        ))}
-      </div>
+      {/* Real input-level meter — reflects the live mic, not a decorative loop */}
+      <RecordingMeter level={level} bars={18} className="h-16" />
 
       {/* Stop button with pulsing rings */}
       <div className="relative flex items-center justify-center">
@@ -311,6 +293,7 @@ export default function RecordingStudio({
   recordingSeconds,
   recordObjectUrl,
   recordError,
+  level = 0,
   onStartRecording,
   onStopRecording,
   onSaveRecording,
@@ -319,7 +302,7 @@ export default function RecordingStudio({
   const [countdown, setCountdown] = useState<number | null>(null);
   const timerRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
   const onStartRef = useRef(onStartRecording);
-  onStartRef.current = onStartRecording;
+  useEffect(() => { onStartRef.current = onStartRecording; });
 
   const isCountingDown = countdown !== null;
 
@@ -342,7 +325,7 @@ export default function RecordingStudio({
 
   // Keep a ref so keyboard handler always calls the latest version
   const handleStartRef = useRef(handleStartWithCountdown);
-  handleStartRef.current = handleStartWithCountdown;
+  useEffect(() => { handleStartRef.current = handleStartWithCountdown; });
 
   // Cancel countdown helper
   function cancelCountdown() {
@@ -378,7 +361,6 @@ export default function RecordingStudio({
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCountingDown, recordState, onStopRecording, onDiscardRecording]);
 
   return (
@@ -389,7 +371,7 @@ export default function RecordingStudio({
         </motion.div>
       ) : recordState === "recording" ? (
         <motion.div key="recording" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={T.fast}>
-          <RecordingView seconds={recordingSeconds} onStop={onStopRecording} />
+          <RecordingView seconds={recordingSeconds} level={level} onStop={onStopRecording} />
         </motion.div>
       ) : recordState === "recorded" && recordObjectUrl ? (
         <motion.div key="recorded" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={T.fast}>

@@ -2,11 +2,12 @@
 
 import { useEffect, type Dispatch, type SetStateAction, type ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mic, RefreshCw, Upload, FileText } from "lucide-react";
+import { Mic, RefreshCw, Upload, FileText, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
 import { T } from "@/lib/motion";
 import { StepHeader, InlineAlert, WorkspaceCard } from "@/components/speech/reportPrimitives";
+import { derivePasteStats, MIN_WORDS, PASTE_DELIVERY_LIMITATION } from "@/lib/practice/pasteText";
 import CaptureSaveStatus from "@/components/practice/CaptureSaveStatus";
 import { deriveCaptureStatus, shouldWarnBeforeLeaving } from "@/lib/practice/captureStatus";
 import RecordingStudio, { type RecordState } from "@/components/RecordingStudio";
@@ -145,18 +146,37 @@ export default function SpeechCaptureWorkspace({
                           className="flex flex-col gap-3"
                         >
                           <div className="flex flex-col gap-2">
-                            <label className="text-xs font-medium text-ink-subtle">Paste your speech text</label>
+                            <label htmlFor="paste-speech" className="text-xs font-medium text-ink-subtle">Paste your speech text</label>
                             <textarea
+                              id="paste-speech"
                               value={pastedText}
                               onChange={(e) => setPastedText(e.target.value)}
-                              placeholder="Paste or type your speech here... (minimum 30 seconds / ~75 words)"
+                              placeholder={`Paste or type your speech here… (at least ${MIN_WORDS} words ≈ 30 seconds)`}
                               className="h-48 w-full rounded-md border border-hairline bg-surface-2 px-3 py-2 text-sm text-ink outline-none transition-colors focus-visible:border-lav/50 focus-visible:ring-2 focus-visible:ring-lav/20 resize-none"
                             />
-                            {pastedText.trim() && (
-                              <p className="text-xs text-ink-faint">
-                                {pastedText.trim().split(/\s+/).length} words
-                              </p>
-                            )}
+                            {(() => {
+                              const stats = derivePasteStats(pastedText);
+                              if (stats.words === 0) {
+                                return (
+                                  <p className="text-xs text-ink-faint">
+                                    Aim for at least {MIN_WORDS} words (~30 seconds of speaking).
+                                  </p>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                  <span className="tabular-nums text-ink-subtle">{stats.words} words</span>
+                                  <span className="tabular-nums text-ink-faint">~{stats.speakingTime} speaking</span>
+                                  {stats.meetsMinimum ? (
+                                    <span className="text-ok">Ready to analyze</span>
+                                  ) : (
+                                    <span className="text-warn">
+                                      {stats.wordsToMinimum} more word{stats.wordsToMinimum !== 1 ? "s" : ""} to the minimum
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                           {pasteErr && <InlineAlert variant="danger">{pasteErr}</InlineAlert>}
                           <Button
@@ -165,11 +185,12 @@ export default function SpeechCaptureWorkspace({
                             size="sm"
                             className="w-full"
                           >
-                            {submittingText ? "Saving..." : "Save Text & Continue"}
+                            {submittingText ? "Saving…" : "Save text & analyze"}
                           </Button>
-                          <p className="text-xs text-ink-faint leading-relaxed">
-                            Paste a speech you&apos;ve already prepared. RoundLab will analyze the text and generate flow and feedback.
-                          </p>
+                          <div className="flex items-start gap-2 rounded-lg border border-hairline bg-surface-2/60 px-3 py-2.5">
+                            <Info size={12} className="mt-0.5 shrink-0 text-ink-faint" aria-hidden="true" />
+                            <p className="text-xs leading-relaxed text-ink-subtle">{PASTE_DELIVERY_LIMITATION}</p>
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>

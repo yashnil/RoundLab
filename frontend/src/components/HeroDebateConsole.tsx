@@ -267,7 +267,7 @@ export default function HeroDebateConsole() {
             </p>
             <div className="mt-auto flex items-center gap-1.5 rounded-md border border-lav/25 bg-lav/8 px-2 py-1.5">
               <Zap size={9} className="text-lav" aria-hidden />
-              <span className="text-[9px] font-semibold text-lav">Start drill → 50 XP</span>
+              <span className="text-[9px] font-semibold text-lav">Start weighing drill</span>
             </div>
           </motion.div>
         </div>

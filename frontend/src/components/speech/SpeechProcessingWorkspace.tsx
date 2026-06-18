@@ -14,12 +14,12 @@ import {
 import TranscriptPanel from "@/components/TranscriptPanel";
 import { AnalysisProgressCard } from "@/components/AnalysisProgressCard";
 import SpeechProcessingTimeline from "@/components/speech/SpeechProcessingTimeline";
+import DebateAnatomy from "@/components/speech/DebateAnatomy";
 import type { ProcJobStatus } from "@/lib/practice/processingStages";
 import LoadingCard from "@/components/LoadingCard";
 import JudgeModeSelector, { type JudgeViewMode } from "@/components/JudgeModeSelector";
 import FlowEditPanel from "@/components/FlowEditPanel";
-import FlowTable from "@/components/FlowTable";
-import FlowBoard from "@/components/FlowBoard";
+import FlowCanvas from "@/components/speech/FlowCanvas";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import DeliveryCoachPanel, { DeliveryCoachPanelEmpty } from "@/components/DeliveryCoachPanel";
 import TournamentWorkoutPanel from "@/components/TournamentWorkoutPanel";
@@ -70,8 +70,6 @@ export interface SpeechProcessingWorkspaceProps {
   saveFlowCorrection: (args: ArgumentItem[], notes?: string) => void;
   savingCorrection: boolean;
   correctionErr: string;
-  showTableView: boolean;
-  setShowTableView: Dispatch<SetStateAction<boolean>>;
   regenErr: string;
   regenerating: boolean;
   regenerateFromFlow: () => void;
@@ -102,7 +100,7 @@ export default function SpeechProcessingWorkspace({
   unifiedAnalysisErr, retryAnalysis, retryingJob, analysisStage, argMap, genFlow,
   feedback, genFb, generateFeedback, judgeViewMode, setJudgeViewMode, flowEditMode,
   setFlowEditMode, editingArgs, setEditingArgs, setCorrectionErr, saveFlowCorrection,
-  savingCorrection, correctionErr, showTableView, setShowTableView, regenErr, regenerating,
+  savingCorrection, correctionErr, regenErr, regenerating,
   regenerateFromFlow, resetAudio, copyRFD, rfdCopied, userId, speechId, setFeedbackRated,
   drills, updateDrillStatus, updatingDrill, deliveryLoaded, deliveryMetrics, workout,
   setWorkout, startNewAttempt, blockCoverage, setBlockCoverage, hasBlockEntries, genDrills,
@@ -165,11 +163,26 @@ export default function SpeechProcessingWorkspace({
                           title={activeJob.status === "failed" ? "Analysis didn’t finish" : "Analyzing your speech"}
                           done={false}
                         />
+                        {/* Context — what's being analyzed */}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-subtle">
+                          <span className="font-semibold capitalize text-ink">{speech.speech_type.replace("_", " ")}</span>
+                          {speech.side && <span className="capitalize text-ink-faint">· {speech.side}</span>}
+                          {speech.judge_type && <span className="text-ink-faint">· {speech.judge_type} judge</span>}
+                          <span className="text-ink-faint">· {speech.audio_url ? "Audio" : "Text"}</span>
+                          {speech.topic && <span className="hidden truncate text-ink-faint sm:inline">· {speech.topic}</span>}
+                          <span className="ml-auto rounded-full border border-ok/25 bg-ok/10 px-2 py-0.5 text-[10px] font-semibold text-ok">Input saved</span>
+                        </div>
                         <SpeechProcessingTimeline
                           jobStatus={activeJob.status as ProcJobStatus}
                           hasReport={!!feedback}
                           failed={activeJob.status === "failed"}
                         />
+                        {activeJob.status !== "failed" && (
+                          <DebateAnatomy
+                            active={activeJob.status === "queued" || activeJob.status === "running"}
+                            argumentsFound={argMap?.arguments.length ?? null}
+                          />
+                        )}
                         <div className="rounded-lg border border-hairline bg-surface-2/60 px-3.5 py-2.5">
                           <p className="text-xs leading-relaxed text-ink-subtle">
                             <span className="font-medium text-ink">Your recording is saved.</span>{" "}
@@ -261,23 +274,12 @@ export default function SpeechProcessingWorkspace({
 
                             {argMap.arguments.length === 0 ? (
                               <p className="py-4 text-center text-sm text-ink-faint">No arguments extracted.</p>
-                            ) : showTableView ? (
+                            ) : (
                               <>
                                 <FlowCoachNote args={argMap.arguments} />
-                                <FlowTable args={argMap.arguments} judgeMode={judgeViewMode} />
+                                <FlowCanvas args={argMap.arguments} judgeMode={judgeViewMode} transcriptHref="#transcript" drillsHref="#drills" />
                               </>
-                            ) : (
-                              <FlowBoard args={argMap.arguments} judgeMode={judgeViewMode} />
                             )}
-
-                            {/* View toggle — demoted, secondary */}
-                            <button
-                              type="button"
-                              onClick={() => setShowTableView((v) => !v)}
-                              className="self-start text-[10px] text-ink-faint underline-offset-2 hover:text-ink-subtle hover:underline"
-                            >
-                              {showTableView ? "Switch to flow board" : "Switch to table view"}
-                            </button>
                           </>
                         )}
 

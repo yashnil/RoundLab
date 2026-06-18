@@ -49,7 +49,6 @@ export interface SpeechReportWorkspaceProps {
   deliveryLoaded: boolean;
   deliveryMetrics: DeliveryMetrics | null;
   judgeViewMode: JudgeViewMode;
-  showTableView: boolean;
   flowEditMode: boolean;
   editingArgs: ArgumentItem[];
   savingCorrection: boolean;
@@ -63,7 +62,6 @@ export interface SpeechReportWorkspaceProps {
   setFlowEditMode: Dispatch<SetStateAction<boolean>>;
   setEditingArgs: Dispatch<SetStateAction<ArgumentItem[]>>;
   setCorrectionErr: Dispatch<SetStateAction<string>>;
-  setShowTableView: Dispatch<SetStateAction<boolean>>;
   generateFeedback: () => void;
   generateDrills: () => void;
   updateDrillStatus: (drillId: string, status: DrillStatus) => void;

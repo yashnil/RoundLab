@@ -99,7 +99,6 @@ export default function SpeechPage() {
   const [, setFeedbackRated] = useState(false);
   const [copyRFD, rfdCopied] = useCopy();
 
-  const [showTableView, setShowTableView] = useState(false);
   const [judgeViewMode, setJudgeViewMode] = useState<JudgeViewMode>("coach");
 
   const [delOpen,  setDelOpen]  = useState(false);
@@ -700,14 +699,14 @@ export default function SpeechPage() {
                 freshResults={freshResults} savedChecks={savedChecks}
                 blockCoverage={blockCoverage} hasBlockEntries={hasBlockEntries}
                 deliveryLoaded={deliveryLoaded} deliveryMetrics={deliveryMetrics}
-                judgeViewMode={judgeViewMode} showTableView={showTableView}
+                judgeViewMode={judgeViewMode}
                 flowEditMode={flowEditMode} editingArgs={editingArgs}
                 savingCorrection={savingCorrection} correctionErr={correctionErr}
                 regenErr={regenErr} regenerating={regenerating}
                 setFeedbackRated={setFeedbackRated} setWorkout={setWorkout}
                 setBlockCoverage={setBlockCoverage} setJudgeViewMode={setJudgeViewMode}
                 setFlowEditMode={setFlowEditMode} setEditingArgs={setEditingArgs}
-                setCorrectionErr={setCorrectionErr} setShowTableView={setShowTableView}
+                setCorrectionErr={setCorrectionErr}
                 generateFeedback={generateFeedback} generateDrills={generateDrills}
                 updateDrillStatus={updateDrillStatus} saveFlowCorrection={saveFlowCorrection}
                 regenerateFromFlow={regenerateFromFlow} startNewAttempt={startNewAttempt}
@@ -723,7 +722,7 @@ export default function SpeechPage() {
                 flowEditMode={flowEditMode} setFlowEditMode={setFlowEditMode} editingArgs={editingArgs}
                 setEditingArgs={setEditingArgs} setCorrectionErr={setCorrectionErr}
                 saveFlowCorrection={saveFlowCorrection} savingCorrection={savingCorrection}
-                correctionErr={correctionErr} showTableView={showTableView} setShowTableView={setShowTableView}
+                correctionErr={correctionErr}
                 regenErr={regenErr} regenerating={regenerating} regenerateFromFlow={regenerateFromFlow}
                 resetAudio={resetAudio} copyRFD={copyRFD} rfdCopied={rfdCopied} userId={userId}
                 speechId={speechId} setFeedbackRated={setFeedbackRated} drills={drills}

@@ -33,6 +33,7 @@ import type { DeliveryMetrics, Speech, ProgressSummary, PilotSummary, Workout, B
 import { deriveWorkoutProgress, getNextIncompleteStep } from "@/lib/workoutHelpers";
 import NextActionPanel from "@/components/dashboard/NextActionPanel";
 import QuickStartRow from "@/components/dashboard/QuickStartRow";
+import PracticeRecipes from "@/components/dashboard/PracticeRecipes";
 import CoachingFocusCard from "@/components/dashboard/CoachingFocusCard";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import { selectNextAction } from "@/lib/dashboardHelpers";
@@ -310,6 +311,13 @@ export default function DashboardPage() {
           {!loading && (
             <motion.div variants={staggerChild}>
               <QuickStartRow />
+            </motion.div>
+          )}
+
+          {/* ── Practice recipes — primed one-click configurations ──── */}
+          {!loading && (
+            <motion.div variants={staggerChild}>
+              <PracticeRecipes />
             </motion.div>
           )}
 
@@ -780,7 +788,7 @@ export default function DashboardPage() {
                   <div className="flex flex-1 flex-col gap-1">
                     <p className="text-sm font-semibold text-ink">Generate drills to unlock personalized practice</p>
                     <p className="text-xs text-ink-subtle">
-                      You have feedback on {progress.feedback_ready_count} speech{progress.feedback_ready_count !== 1 ? "es" : ""}. Open a session and click "Generate Drills" to get 3 personalized exercises targeting your weakest skills.
+                      You have feedback on {progress.feedback_ready_count} speech{progress.feedback_ready_count !== 1 ? "es" : ""}. Open a session and click &ldquo;Generate Drills&rdquo; to get 3 personalized exercises targeting your weakest skills.
                     </p>
                   </div>
                 </CardContent>

@@ -92,6 +92,8 @@ export default function SessionPage() {
   const [side,             setSide]             = useState("");
   const [judgeType,        setJudgeType]        = useState("");
   const [topic,            setTopic]            = useState("");
+  // Practice goal carried in from a dashboard recipe (guidance only, not persisted).
+  const [presetGoal,       setPresetGoal]       = useState("");
   const [submitting,       setSubmitting]       = useState(false);
   const [error,            setError]            = useState("");
   // Re-record mode
@@ -108,6 +110,11 @@ export default function SessionPage() {
     }).finally(() => setUserLoading(false));
   }, [router]);
 
+  /* eslint-disable react-hooks/set-state-in-effect --
+     The next two effects perform one-time, hydration-safe initialization from
+     window.location and the source speech. A lazy useState initializer can't be
+     used here without a server/client hydration mismatch on window.location. */
+
   // Read URL params client-side (avoids useSearchParams/Suspense requirement)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -117,15 +124,27 @@ export default function SessionPage() {
       setSourceSpeechId(params.get("source_speech_id"));
       setSourceDrillId(params.get("source_drill_id"));
     }
-    // Quick-start deep link from the dashboard: /session?type=rebuttal
+    // Quick-start / recipe deep link from the dashboard: /session?type=rebuttal&judge=flow&goal=…
     const presetType = params.get("type");
     const VALID_TYPES = ["constructive", "rebuttal", "summary", "final_focus", "crossfire"];
     if (presetType && VALID_TYPES.includes(presetType)) {
       setSpeechType(presetType);
     }
-    // Smart default: prefill the judge type the student last practiced with.
-    const lastJudge = readLastJudgeType();
-    if (lastJudge) setJudgeType(lastJudge);
+    // A recipe can preset the judge lens and side; presets win over the smart default.
+    const presetJudge = params.get("judge");
+    const VALID_JUDGES = ["lay", "flow", "tech", "coach"];
+    const presetSide = params.get("side");
+    if (presetSide === "pro" || presetSide === "con") setSide(presetSide);
+    const presetGoalParam = params.get("goal");
+    if (presetGoalParam) setPresetGoal(presetGoalParam);
+
+    if (presetJudge && VALID_JUDGES.includes(presetJudge)) {
+      setJudgeType(presetJudge);
+    } else {
+      // Smart default: prefill the judge type the student last practiced with.
+      const lastJudge = readLastJudgeType();
+      if (lastJudge) setJudgeType(lastJudge);
+    }
   }, []);
 
   // Prefill form from source speech when in re-record mode
@@ -144,6 +163,7 @@ export default function SessionPage() {
       .catch(() => setContextError("Could not load source session context — form left blank."))
       .finally(() => setContextLoading(false));
   }, [userId, isRerecordMode, sourceSpeechId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -247,12 +267,24 @@ export default function SessionPage() {
                 )}
               </motion.div>
 
+              {/* Practice goal — carried in from a recipe (guidance only) */}
+              {!userLoading && presetGoal && (
+                <div className="flex items-start gap-2 rounded-lg border border-lav/25 bg-lav/5 px-3 py-2.5">
+                  <Target size={12} className="mt-0.5 shrink-0 text-lav" aria-hidden="true" />
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-eyebrow text-lav">Today&apos;s goal</p>
+                    <p className="text-xs leading-relaxed text-ink-subtle">{presetGoal}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Bottom note */}
               {!userLoading && (
                 <div className="hidden items-start gap-2 rounded-lg border border-hairline bg-surface-1 px-3 py-2.5 lg:flex">
                   <Zap size={12} className="mt-0.5 shrink-0 text-lav" />
                   <p className="text-xs leading-relaxed text-ink-faint">
-                    Drill attempts earn <span className="font-semibold text-lav">50 XP</span> — the fastest way to level up. After recording, RoundLab handles the rest.
+                    Pick your round context and RoundLab calibrates the judge lens. After you
+                    record, it builds the flow, ballot, and drills automatically.
                   </p>
                 </div>
               )}

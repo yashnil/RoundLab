@@ -12,6 +12,7 @@ import type { Speech, ProgressSummary, SpeechType } from "@/types";
 export type NextActionKind =
   | "retry-analysis"
   | "resume-analysis"
+  | "finish-capture"
   | "recommended-drill"
   | "re-record"
   | "first-practice"
@@ -54,6 +55,18 @@ export function findInProgressSpeech(speeches: Speech[]): Speech | null {
   return (
     [...speeches].sort(byNewest).find((s) => PROCESSING_STATUSES.has(s.status)) ??
     null
+  );
+}
+
+/**
+ * A speech that was set up but never captured — status still `pending` with no
+ * audio. The student abandoned mid-capture; their setup is saved and waiting.
+ */
+export function findUnfinishedCapture(speeches: Speech[]): Speech | null {
+  return (
+    [...speeches]
+      .sort(byNewest)
+      .find((s) => s.status === "pending" && !s.audio_url) ?? null
   );
 }
 
@@ -105,7 +118,25 @@ export function selectNextAction({
     };
   }
 
-  // 2. An in-progress speech — let the student jump back to watch it finish.
+  // 2. A speech set up but never recorded — the setup is saved and waiting.
+  //    (Checked before "in progress" because a pending speech with no audio is
+  //    not actually analyzing — it's an abandoned capture.)
+  const unfinished = findUnfinishedCapture(speeches);
+  if (unfinished) {
+    return {
+      kind: "finish-capture",
+      eyebrow: "Pick up where you left off",
+      title: "Finish your unrecorded practice",
+      description:
+        "You set this speech up but haven’t recorded it yet. Your setup is saved — open the recorder and capture it.",
+      ctaLabel: "Open recorder",
+      href: `/speech/${unfinished.id}`,
+      icon: "Mic",
+      secondary: { label: "Start fresh", href: "/session" },
+    };
+  }
+
+  // 3. An in-progress speech — let the student jump back to watch it finish.
   const inProgress = findInProgressSpeech(speeches);
   if (inProgress) {
     return {
@@ -120,7 +151,7 @@ export function selectNextAction({
     };
   }
 
-  // 3. A recommended drill targets the exact weakness from real feedback.
+  // 4. A recommended drill targets the exact weakness from real feedback.
   const drill = progress?.incomplete_drills?.[0];
   if (drill) {
     return {

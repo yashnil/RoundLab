@@ -3,6 +3,7 @@ import {
   findReRecordCandidate,
   findFailedSpeech,
   findInProgressSpeech,
+  findUnfinishedCapture,
   QUICK_START_OPTIONS,
   quickStartHref,
   formatSkill,
@@ -60,6 +61,24 @@ describe("selectNextAction priority", () => {
     const a = selectNextAction({ speeches, progress: noProgress });
     expect(a.kind).toBe("resume-analysis");
     expect(a.href).toBe("/speech/p");
+  });
+
+  it("unfinished capture (set up, never recorded) beats drills and re-record", () => {
+    const speeches = [
+      speech({ id: "done", status: "done", updated_at: "2026-06-01T00:00:00Z" }),
+      speech({ id: "setup", status: "pending", audio_url: null, updated_at: "2026-06-04T00:00:00Z" }),
+    ];
+    const progress = {
+      incomplete_drills: [{ id: "d1", title: "x", skill_target: "weighing" }],
+    } as unknown as ProgressSummary;
+    const a = selectNextAction({ speeches, progress });
+    expect(a.kind).toBe("finish-capture");
+    expect(a.href).toBe("/speech/setup");
+  });
+
+  it("a pending speech that already has audio is not 'unfinished capture'", () => {
+    const speeches = [speech({ id: "uploaded", status: "pending", audio_url: "http://x/a.mp3" })];
+    expect(findUnfinishedCapture(speeches)).toBeNull();
   });
 
   it("recommended drill beats re-record when present", () => {

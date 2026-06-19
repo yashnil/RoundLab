@@ -3,495 +3,44 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FileText, Upload, Search, Trash2, ChevronDown, ChevronUp,
-  AlertCircle, CheckCircle2, X, BookOpen, Loader2, Sparkles,
+  FileText, Upload, Search,
+  CheckCircle2, X, BookOpen, Loader2, Sparkles,
   Link2, ClipboardPaste, Globe,
 } from "lucide-react";
 import AppShell from "@/components/shell/AppShell";
 import SectionHeader from "@/components/SectionHeader";
 import { EmptyEvidenceGlyph } from "@/components/EmptyStateGlyphs";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase";
 import { apiFetch } from "@/lib/api";
-import { blockEntryTypeLabel, coverageStatusBadgeStyle } from "@/lib/blockfileHelpers";
 import {
   sourceQualityLabel,
 } from "@/lib/researchHelpers";
 import CardDraftReview from "@/components/CardDraftReview";
 import EvidenceCardDraft, { computeSaveReadiness } from "@/components/EvidenceCardDraft";
 import { EvidenceStudioModal } from "@/components/evidence/EvidenceStudioModal";
-import { SavedCardBody } from "@/components/evidence/SavedCardBody";
 import { shouldShowResultsSummary, shouldShowEmptyState } from "@/components/EvidenceSearchPanel";
 import { EvidenceSearchProgress } from "@/components/evidence/EvidenceSearchProgress";
 import ClaimDecomposition from "@/components/evidence/ClaimDecomposition";
 import ResearchSummary from "@/components/evidence/ResearchSummary";
 import ProvenanceTrail from "@/components/evidence/ProvenanceTrail";
+import { DocumentCard } from "@/components/evidence/DocumentCard";
+import { BlockEntryCard } from "@/components/evidence/BlockEntryCard";
+import { SearchResultCard } from "@/components/evidence/SearchResultCard";
+import {
+  fileSizeLabel, extFromFilename, ALLOWED_EVIDENCE_EXTS, MAX_EVIDENCE_MB,
+} from "@/lib/evidenceHelpers";
 import { RESEARCH_DEPTH_OPTIONS, type ResearchDepth } from "@/lib/claimDecomposition";
 import type {
   EvidenceDocument,
-  EvidenceCard,
-  DocumentWithCards,
   SearchResultItem,
   BlockEntry,
-  ExtractBlocksResponse,
   CardDraft,
   ExtractUrlResponse,
   GenerateCardsResponse,
 } from "@/types";
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const ALLOWED_EXTS = ["pdf", "docx", "txt", "md"];
-const MAX_MB = 20;
-
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; variant: "default" | "indigo" | "green" | "amber" | "red" }
-> = {
-  uploaded: { label: "Processing…", variant: "amber" },
-  parsed:   { label: "Ready",       variant: "green"  },
-  failed:   { label: "Failed",      variant: "red"    },
-};
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function fileSizeLabel(bytes: number | null): string {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function extFromFilename(name: string): string {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function AttributionRow({ card }: { card: EvidenceCard }) {
-  const parts: string[] = [];
-  if (card.author) parts.push(card.author);
-  if (card.source) parts.push(card.source);
-  if (card.year) parts.push(String(card.year));
-
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {parts.length > 0 ? (
-        <span className="text-xs text-ink-subtle">{parts.join(" · ")}</span>
-      ) : null}
-      {card.attribution_complete ? (
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
-          <CheckCircle2 size={9} /> Attribution complete
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-          <AlertCircle size={9} />
-          {!card.author && !card.year ? "Missing author & date" :
-           !card.author ? "Missing author" :
-           !card.year ? "Missing date" : "Incomplete"}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function CardItem({ card }: { card: EvidenceCard }) {
-  const [open, setOpen] = useState(false);
-
-  // Use tag as title; fall back to claim_summary truncated, then generic label
-  const title = card.tag && !card.tag.match(/^CARD\s+\d+$/i)
-    ? card.tag
-    : card.claim_summary
-      ? card.claim_summary.slice(0, 80) + (card.claim_summary.length > 80 ? "…" : "")
-      : "Evidence card";
-
-  return (
-    <div className="case-file-card text-sm">
-      {/* Compact header — always visible */}
-      <div className="flex items-start justify-between gap-3 px-3 py-2.5">
-        <div className="flex flex-col gap-1 min-w-0 flex-1">
-          <p className="text-xs font-semibold text-ink leading-snug">{title}</p>
-          <AttributionRow card={card} />
-          {card.claim_summary && (
-            <p className="text-xs text-ink-subtle leading-relaxed line-clamp-2">
-              {card.claim_summary}
-            </p>
-          )}
-          {/* Card body excerpt — re-renders saved user markup when expanded */}
-          {card.card_text && (
-            open ? (
-              <div className="mt-1">
-                <SavedCardBody card={card} />
-              </div>
-            ) : (
-              <p className="mt-1 text-xs leading-relaxed text-ink-muted line-clamp-4">
-                {card.card_text}
-              </p>
-            )
-          )}
-        </div>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="shrink-0 mt-0.5 text-ink-muted hover:text-ink"
-          aria-label={open ? "Collapse" : "Expand"}
-        >
-          {open
-            ? <ChevronUp size={13} />
-            : <ChevronDown size={13} />}
-        </button>
-      </div>
-
-      {/* Expanded: source note */}
-      {open && card.source && (
-        <div className="border-t border-hairline px-3 py-1.5">
-          <p className="text-xs text-ink-subtle">Source: {card.source}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BlockEntryCard({
-  entry,
-  userId,
-  onDelete,
-}: {
-  entry: BlockEntry;
-  userId: string;
-  onDelete: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const badge = coverageStatusBadgeStyle("no_available_block");
-
-  async function handleDelete() {
-    if (!confirm("Remove this block entry?")) return;
-    setDeleting(true);
-    try {
-      await apiFetch(`/block-entries/${entry.id}?user_id=${userId}`, { method: "DELETE" });
-      onDelete(entry.id);
-    } catch {
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-hairline bg-surface-1">
-      <div className="flex items-start justify-between gap-2 px-3.5 py-3">
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="text-[10px] font-semibold rounded-full px-1.5 py-0.5"
-              style={badge}
-            >
-              {blockEntryTypeLabel(entry.entry_type)}
-            </span>
-            {entry.tag && (
-              <span className="text-xs font-semibold text-ink truncate">
-                {entry.tag}
-              </span>
-            )}
-          </div>
-          {entry.opponent_claim && (
-            <p className="text-xs text-ink-subtle leading-relaxed">
-              AT: {entry.opponent_claim.length > 120 ? entry.opponent_claim.slice(0, 120) + "…" : entry.opponent_claim}
-            </p>
-          )}
-          <p className={`text-xs text-ink leading-relaxed ${expanded ? "whitespace-pre-wrap" : "line-clamp-3"}`}>
-            {entry.response_text}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="text-ink-faint hover:text-ink p-1"
-          >
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-ink-subtle hover:text-danger"
-            onClick={handleDelete}
-            disabled={deleting}
-          >
-            <Trash2 size={13} />
-          </Button>
-        </div>
-      </div>
-      {expanded && (
-        <div className="border-t border-hairline px-3.5 pb-3 pt-2.5 flex flex-col gap-2">
-          {entry.warrant_text && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint mb-0.5">Warrant</p>
-              <p className="text-xs text-ink-subtle leading-relaxed">{entry.warrant_text}</p>
-            </div>
-          )}
-          {entry.evidence_text && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint mb-0.5">Evidence</p>
-              <p className="text-xs text-ink-subtle leading-relaxed">{entry.evidence_text}</p>
-            </div>
-          )}
-          {entry.impact_text && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint mb-0.5">Impact</p>
-              <p className="text-xs text-ink-subtle leading-relaxed">{entry.impact_text}</p>
-            </div>
-          )}
-          {(entry.author || entry.source || entry.date) && (
-            <p className="text-[10px] text-ink-faint">
-              {[entry.author, entry.source, entry.date].filter(Boolean).join(" · ")}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DocumentCard({
-  doc,
-  onDelete,
-  onBlocksExtracted,
-}: {
-  doc: EvidenceDocument;
-  onDelete: (id: string) => void;
-  onBlocksExtracted?: (entries: BlockEntry[]) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [cards, setCards] = useState<EvidenceCard[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [extractResult, setExtractResult] = useState<ExtractBlocksResponse | null>(null);
-  const [extractErr, setExtractErr] = useState("");
-  const cfg = STATUS_CONFIG[doc.status] ?? STATUS_CONFIG.uploaded;
-
-  async function loadCards() {
-    if (expanded || doc.status !== "parsed") return;
-    setLoading(true);
-    try {
-      const data = await apiFetch<DocumentWithCards>(`/documents/${doc.id}?user_id=${doc.user_id}`);
-      setCards(data.cards);
-      setExpanded(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirm(`Delete "${doc.filename}"? This cannot be undone.`)) return;
-    setDeleting(true);
-    try {
-      await apiFetch(`/documents/${doc.id}?user_id=${doc.user_id}`, { method: "DELETE" });
-      onDelete(doc.id);
-    } catch {
-      setDeleting(false);
-    }
-  }
-
-  async function extractBlocks() {
-    setExtracting(true);
-    setExtractErr("");
-    try {
-      const result = await apiFetch<ExtractBlocksResponse>(
-        `/documents/${doc.id}/extract-blocks`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: doc.user_id }),
-        },
-      );
-      setExtractResult(result);
-      onBlocksExtracted?.(result.entries);
-    } catch (e: unknown) {
-      setExtractErr(e instanceof Error ? e.message : "Extraction failed");
-    } finally {
-      setExtracting(false);
-    }
-  }
-
-  return (
-    <div className="overflow-hidden rounded-[3px] border border-hairline bg-surface-1">
-      {/* File tab header */}
-      <div className="flex items-center gap-2 border-b border-hairline bg-surface-2 px-3 py-1.5">
-        <span className="file-tab capitalize">{doc.doc_type}</span>
-        <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
-        <span className="flex-1" />
-        {doc.page_count && (
-          <span className="text-[10px] text-ink-faint"
-            style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
-            {doc.page_count}pp
-          </span>
-        )}
-        {doc.file_size_bytes && (
-          <span className="text-[10px] text-ink-faint"
-            style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
-            {fileSizeLabel(doc.file_size_bytes)}
-          </span>
-        )}
-      </div>
-
-      {/* Body */}
-      <div className="p-3.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-hairline bg-surface-2">
-              <FileText size={14} className="text-ink-faint" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink">{doc.filename}</p>
-              {doc.error_message && (
-                <p className="mt-0.5 text-xs text-danger">{doc.error_message}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1 flex-wrap">
-            {doc.status === "parsed" && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={expanded ? () => setExpanded(false) : loadCards}
-                  disabled={loading}
-                >
-                  {loading ? "Loading…" : expanded ? "Hide cards" : "Show cards"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1 text-lav hover:text-lav"
-                  onClick={extractBlocks}
-                  disabled={extracting}
-                  title="Extract block and frontline entries from this document"
-                >
-                  {extracting ? (
-                    <><Loader2 size={11} className="animate-spin" />Extracting…</>
-                  ) : (
-                    <><BookOpen size={11} />Extract blocks</>
-                  )}
-                </Button>
-              </>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-ink-subtle hover:text-danger"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              <Trash2 size={13} />
-            </Button>
-          </div>
-        </div>
-
-        {extractErr && (
-          <p className="mt-2 text-xs text-danger px-0.5">{extractErr}</p>
-        )}
-
-        {extractResult && (
-          <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-ok/20 bg-ok/5 px-3 py-1.5">
-            <CheckCircle2 size={11} className="text-ok shrink-0" />
-            <p className="text-xs text-ok">
-              Extracted {extractResult.entries_extracted} entries
-              {extractResult.entries_embedded > 0 ? ` (${extractResult.entries_embedded} indexed)` : ""}.
-              They appear in the Blockfile Trainer section below.
-            </p>
-          </div>
-        )}
-
-        {expanded && cards.length > 0 && (
-          <div className="mt-3 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="section-stamp">
-                Extracted cards
-                <span className="rep-badge ml-2">{cards.length}</span>
-              </span>
-              {cards.filter(c => !c.attribution_complete).length > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs text-amber-600">
-                  <AlertCircle size={10} />
-                  {cards.filter(c => !c.attribution_complete).length} incomplete attribution
-                </span>
-              )}
-            </div>
-            {cards.map((card) => (
-              <CardItem key={card.id} card={card} />
-            ))}
-          </div>
-        )}
-        {expanded && cards.length === 0 && (
-          <p className="mt-3 text-xs text-ink-subtle">No evidence cards extracted from this document.</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SearchResultCard({ item }: { item: SearchResultItem }) {
-  const [open, setOpen] = useState(false);
-  const topCard = item.cards[0];
-  const displayTitle = (topCard?.tag && !topCard.tag.match(/^CARD\s+\d+$/i))
-    ? topCard.tag
-    : item.chunk.heading ?? null;
-
-  const sim = item.similarity;
-  const simLabel = sim !== null && sim !== undefined
-    ? (sim >= 0.70 ? "Strong match" : sim >= 0.45 ? "Possible match" : "Weak match")
-    : null;
-  const simColor = sim !== null && sim !== undefined
-    ? (sim >= 0.70 ? "text-ok" : sim >= 0.45 ? "text-warn" : "text-danger")
-    : "";
-
-  return (
-    <div className="case-file-card p-3 text-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          {/* Source document + similarity */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-ink-muted truncate">
-              {item.document_filename}
-            </p>
-            {simLabel && (
-              <span className={`text-[10px] font-semibold ${simColor}`}>
-                {simLabel} ({Math.round((sim ?? 0) * 100)}%)
-              </span>
-            )}
-          </div>
-          {/* Card tag or chunk heading */}
-          {displayTitle && (
-            <p className="text-xs font-semibold text-ink mt-0.5 leading-snug">{displayTitle}</p>
-          )}
-          {/* Attribution metadata from matched card */}
-          {topCard && (
-            <div className="flex flex-wrap gap-1 mt-0.5">
-              {topCard.author && <span className="text-xs text-ink-subtle">{topCard.author}</span>}
-              {topCard.source && <span className="text-xs text-ink-subtle">· {topCard.source}</span>}
-              {topCard.year && <span className="text-xs text-ink-subtle">· {topCard.year}</span>}
-            </div>
-          )}
-        </div>
-        <button onClick={() => setOpen((v) => !v)} className="shrink-0 text-ink-muted hover:text-ink mt-0.5">
-          {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        </button>
-      </div>
-      {/* Text excerpt */}
-      <p className={`mt-2 text-xs leading-relaxed text-ink-muted ${open ? "whitespace-pre-wrap" : "line-clamp-4"}`}>
-        {topCard?.card_text ?? item.chunk.chunk_text}
-      </p>
-      {/* Claim summary when collapsed */}
-      {!open && topCard?.claim_summary && (
-        <p className="mt-1.5 text-xs text-ink-subtle italic line-clamp-1">
-          Supports: {topCard.claim_summary}
-        </p>
-      )}
-    </div>
-  );
-}
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
@@ -825,12 +374,12 @@ export default function EvidencePage() {
     if (!file) return;
 
     const ext = extFromFilename(file.name);
-    if (!ALLOWED_EXTS.includes(ext)) {
-      setFileError(`Unsupported file type. Allowed: ${ALLOWED_EXTS.join(", ")}`);
+    if (!ALLOWED_EVIDENCE_EXTS.includes(ext)) {
+      setFileError(`Unsupported file type. Allowed: ${ALLOWED_EVIDENCE_EXTS.join(", ")}`);
       return;
     }
-    if (file.size > MAX_MB * 1024 * 1024) {
-      setFileError(`File too large. Maximum size is ${MAX_MB} MB.`);
+    if (file.size > MAX_EVIDENCE_MB * 1024 * 1024) {
+      setFileError(`File too large. Maximum size is ${MAX_EVIDENCE_MB} MB.`);
       return;
     }
     setSelectedFile(file);
@@ -1670,14 +1219,14 @@ export default function EvidencePage() {
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-ink">Click to select a file</span>
                   <span className="text-xs text-ink-subtle">
-                    {ALLOWED_EXTS.join(", ")} · max {MAX_MB} MB
+                    {ALLOWED_EVIDENCE_EXTS.join(", ")} · max {MAX_EVIDENCE_MB} MB
                   </span>
                 </div>
               )}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={ALLOWED_EXTS.map((e) => `.${e}`).join(",")}
+                accept={ALLOWED_EVIDENCE_EXTS.map((e) => `.${e}`).join(",")}
                 onChange={handleFileChange}
                 disabled={uploading}
                 className="sr-only"

@@ -765,7 +765,7 @@ export default function TeamPage() {
             <Card className="border-hairline/50">
               <CardContent className="px-5 py-3">
                 <p className="text-xs text-ink-faint">
-                  <span className="font-medium text-ink-subtle">Need to leave a team?</span> Ask your coach for now. Advanced team management is coming soon.
+                  <span className="font-medium text-ink-subtle">Need to leave a team?</span> Ask your coach to remove you — membership is managed by your team&apos;s coach.
                 </p>
               </CardContent>
             </Card>

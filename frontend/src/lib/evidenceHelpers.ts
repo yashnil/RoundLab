@@ -1,5 +1,21 @@
 import type { EvidenceRetrievalMode, EvidenceSupportLevel, SearchMode } from "@/types";
 
+// ── Document upload constraints + formatting ─────────────────────────────────────
+
+export const ALLOWED_EVIDENCE_EXTS = ["pdf", "docx", "txt", "md"];
+export const MAX_EVIDENCE_MB = 20;
+
+export function fileSizeLabel(bytes: number | null): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function extFromFilename(name: string): string {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
 // ── Similarity label ───────────────────────────────────────────────────────────
 
 export interface SimilarityDisplay {

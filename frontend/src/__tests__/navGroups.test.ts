@@ -13,7 +13,7 @@ describe("APP_NAV_GROUPS", () => {
   it("places the primary training destinations in Train", () => {
     const train = APP_NAV_GROUPS.find((g) => g.id === "train");
     const hrefs = train?.items.map((i) => i.href);
-    expect(hrefs).toEqual(["/dashboard", "/session", "/learn"]);
+    expect(hrefs).toEqual(["/dashboard", "/session", "/progress", "/learn"]);
   });
 
   it("gives every item an icon, a label, and at least one match prefix", () => {

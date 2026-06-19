@@ -16,6 +16,7 @@ import {
   Scale,
   Flag,
   MessageSquarePlus,
+  TrendingUp,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -123,8 +124,16 @@ export default function CommandMenu() {
       label: "Go to Home",
       group: "Go to",
       icon: LayoutDashboard,
-      keywords: "dashboard progress",
+      keywords: "dashboard home",
       run: go("/dashboard"),
+    },
+    {
+      id: "nav-progress",
+      label: "Open Progress",
+      group: "Go to",
+      icon: TrendingUp,
+      keywords: "progress skills trajectory weekly plan development",
+      run: go("/progress"),
     },
     {
       id: "nav-evidence",

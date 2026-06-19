@@ -14,6 +14,7 @@ import {
   GraduationCap,
   Users,
   ClipboardCheck,
+  TrendingUp,
 } from "lucide-react";
 
 export interface AppNavItem {
@@ -77,6 +78,13 @@ export const APP_NAV_GROUPS: SidebarNavGroup[] = [
         icon: Mic,
         match: ["/session", "/speech"],
         hint: "Record, upload, or paste a speech for analysis",
+      },
+      {
+        href: "/progress",
+        label: "Progress",
+        icon: TrendingUp,
+        match: ["/progress"],
+        hint: "Skill trajectory, coverage, and your weekly plan",
       },
       {
         href: "/learn",

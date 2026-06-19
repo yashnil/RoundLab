@@ -25,11 +25,12 @@ import {
 } from "@/lib/assignments";
 import type { UserTeam, TeamDashboard, Assignment, TeamReadiness, RecipientState } from "@/types";
 
-const STATE_TONE_CLS: Record<"ink" | "warn" | "ok" | "danger", string> = {
+const STATE_TONE_CLS: Record<"ink" | "warn" | "ok" | "danger" | "lav", string> = {
   ink: "border-hairline bg-surface-2 text-ink-subtle",
   warn: "border-warn/30 bg-warn/10 text-warn",
   ok: "border-ok/30 bg-ok/10 text-ok",
   danger: "border-danger/30 bg-danger/10 text-danger",
+  lav: "border-lav/30 bg-lav/10 text-lav",
 };
 
 function stateBadge(status: RecipientState) {
@@ -107,9 +108,9 @@ export default function TeamPage() {
     if (team.role === "coach") {
       apiFetch<TeamDashboard>(`/teams/${team.team_id}/dashboard?user_id=${userId}`)
         .then(setDashboard).catch(() => {});
-      fetchReadiness(team.team_id, userId).then(setReadiness).catch(() => {});
+      fetchReadiness(team.team_id).then(setReadiness).catch(() => {});
     }
-    listAssignments(team.team_id, userId).then(setAssignments).catch(() => {});
+    listAssignments(team.team_id).then(setAssignments).catch(() => {});
   }
 
   async function handleCreateTeam() {
@@ -507,9 +508,9 @@ export default function TeamPage() {
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           {[
                             { label: "Not started", value: readiness.assigned, tone: "text-ink-subtle" },
-                            { label: "Awaiting review", value: readiness.submitted, tone: "text-warn" },
+                            { label: "In progress", value: readiness.in_progress, tone: "text-lav" },
+                            { label: "Ready for review", value: readiness.ready_for_review, tone: "text-warn" },
                             { label: "Reviewed", value: readiness.reviewed, tone: "text-ok" },
-                            { label: "Revisions", value: readiness.revision_requested, tone: "text-danger" },
                           ].map((lane) => (
                             <div key={lane.label} className="flex flex-col gap-0.5 rounded-lg border border-hairline bg-surface-2/50 px-3 py-2">
                               <span className={`text-lg font-bold tabular-nums ${lane.tone}`}>{lane.value}</span>

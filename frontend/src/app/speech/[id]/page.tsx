@@ -12,6 +12,7 @@ import { useCopy } from "@/lib/useCopy";
 import { deriveAnalysisRecoveryState } from "@/lib/jobHelpers";
 import AppShell from "@/components/shell/AppShell";
 import SpeechReportWorkspace from "@/components/speech/SpeechReportWorkspace";
+import CoachReviewRail from "@/components/speech/CoachReviewRail";
 import SpeechProcessingWorkspace from "@/components/speech/SpeechProcessingWorkspace";
 import SpeechCaptureWorkspace from "@/components/speech/SpeechCaptureWorkspace";
 import SpeechLoadingState from "@/components/speech/SpeechLoadingState";
@@ -688,6 +689,9 @@ export default function SpeechPage() {
                 submitPastedText={submitPastedText} submittingText={submittingText}
               />
             )}
+
+            {/* Coach/assignment review rail — self-hides when there's no linked assignment */}
+            {isComplete && <CoachReviewRail speechId={speechId} />}
 
             {/* ── For Complete Sessions: Coaching Report → Practice → Arguments → Input ── */}
             {isComplete ? (

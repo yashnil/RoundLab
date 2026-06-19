@@ -77,7 +77,7 @@ export default function AssignmentBuilderPage() {
     setErr(""); setSubmitting(true);
     try {
       await createAssignment({
-        team_id: teamId, created_by: userId, title: title.trim(), kind,
+        team_id: teamId, title: title.trim(), kind,
         speech_type: speechType, side: side || null, judge_type: judge || null,
         topic: topic || null, goal: goal || null, success_criteria: criteria,
         due_date: dueDate || null, recipient_user_ids: Array.from(recipients),

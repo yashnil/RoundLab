@@ -43,10 +43,15 @@ describe("isOverdue", () => {
 });
 
 describe("reviewBacklog", () => {
-  it("counts only submitted recipients across assignments", () => {
-    const a1 = assignment({ recipients: [rec({ status: "submitted" }), rec({ status: "assigned" })] });
-    const a2 = assignment({ recipients: [rec({ status: "submitted" }), rec({ status: "reviewed" })] });
+  it("counts only ready-for-review recipients across assignments", () => {
+    const a1 = assignment({ recipients: [rec({ status: "ready_for_review" }), rec({ status: "processing" })] });
+    const a2 = assignment({ recipients: [rec({ status: "ready_for_review" }), rec({ status: "reviewed" })] });
     expect(reviewBacklog([a1, a2])).toBe(2);
+  });
+
+  it("does not count work still processing", () => {
+    const a = assignment({ recipients: [rec({ status: "processing" }), rec({ status: "started" })] });
+    expect(reviewBacklog([a])).toBe(0);
   });
 });
 
@@ -64,8 +69,9 @@ describe("assignmentHandoffHref", () => {
 });
 
 describe("RECIPIENT_STATE_LABEL", () => {
-  it("labels each recipient state", () => {
-    expect(RECIPIENT_STATE_LABEL.submitted).toBe("Ready for review");
+  it("labels each effective recipient state", () => {
+    expect(RECIPIENT_STATE_LABEL.ready_for_review).toBe("Ready for review");
+    expect(RECIPIENT_STATE_LABEL.processing).toBe("Processing");
     expect(RECIPIENT_STATE_LABEL.revision_requested).toBe("Revision requested");
   });
 });

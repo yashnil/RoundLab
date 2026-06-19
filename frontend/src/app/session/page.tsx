@@ -20,7 +20,7 @@ import {
 import DebateSide, { type SideValue } from "@/components/practice/DebateSide";
 import { JudgeLensSelector, JudgeLensPreview, type JudgeValue } from "@/components/practice/JudgeLens";
 import StickyActionDock from "@/components/practice/StickyActionDock";
-import { submitAssignment } from "@/lib/assignments";
+import { startAssignment } from "@/lib/assignments";
 import type { Speech, SpeechType } from "@/types";
 
 type CaptureMode = "record" | "upload" | "paste";
@@ -174,9 +174,10 @@ export default function SessionPage() {
         body: JSON.stringify(payload),
       });
       // Carry the chosen capture mode into the practice room.
-      // If this practice came from a team assignment, submit it on the student's behalf.
+      // If this practice came from a team assignment, mark it started (it becomes
+      // ready for review once analysis completes).
       if (assignmentRecipientId) {
-        try { await submitAssignment(assignmentRecipientId, userId, s.id); } catch { /* non-blocking */ }
+        try { await startAssignment(assignmentRecipientId, s.id); } catch { /* non-blocking */ }
       }
       router.push(`/speech/${s.id}?capture=${inputMethod}`);
     } catch (err: unknown) {

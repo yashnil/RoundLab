@@ -11,11 +11,12 @@ import { createClient } from "@/lib/supabase";
 import { fetchStudentProfile, RECIPIENT_STATE_LABEL, RECIPIENT_STATE_TONE } from "@/lib/assignments";
 import type { CoachStudentProfile } from "@/types";
 
-const TONE_CLS: Record<"ink" | "warn" | "ok" | "danger", string> = {
+const TONE_CLS: Record<"ink" | "warn" | "ok" | "danger" | "lav", string> = {
   ink: "border-hairline bg-surface-2 text-ink-subtle",
   warn: "border-warn/30 bg-warn/10 text-warn",
   ok: "border-ok/30 bg-ok/10 text-ok",
   danger: "border-danger/30 bg-danger/10 text-danger",
+  lav: "border-lav/30 bg-lav/10 text-lav",
 };
 
 export default function StudentProfilePage() {
@@ -35,7 +36,7 @@ export default function StudentProfilePage() {
       .then(async ({ data }) => {
         if (!data.user) { router.replace("/login"); return; }
         if (!tid || !sid) { setErr("Missing student or team."); return; }
-        setProfile(await fetchStudentProfile(tid, sid, data.user.id));
+        setProfile(await fetchStudentProfile(tid, sid));
       })
       .catch(() => setErr("Could not load this student. You may not have coach access."))
       .finally(() => setLoading(false));
@@ -43,7 +44,7 @@ export default function StudentProfilePage() {
 
   const nextAction =
     !profile ? null
-    : profile.assignments.some((a) => a.status === "submitted") ? "Review their submitted work"
+    : profile.assignments.some((a) => a.status === "ready_for_review") ? "Review their submitted work"
     : profile.assignments.some((a) => a.status === "assigned") ? "Waiting on an assigned practice"
     : profile.feedback_ready_count === 0 ? "Encourage a first practice"
     : "Assign a targeted drill or re-record";

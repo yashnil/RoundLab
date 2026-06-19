@@ -1,18 +1,18 @@
 /**
  * Assignment API wrappers + pure helpers shared by the coach overview, builder,
- * review queue, student profile, and the student handoff. Network calls go
- * through apiFetch; the pure helpers (handoff href, status labels, overdue) are
- * unit-tested.
+ * review queue, student profile, report rail, and the student handoff. Identity
+ * is carried by the Supabase token (attached in apiFetch) — no user_id params.
+ * The pure helpers (handoff href, status labels, overdue, backlog) are tested.
  */
 
 import { apiFetch } from "@/lib/api";
 import type {
   Assignment, RecipientState, ReviewQueueItem, TeamReadiness, CoachStudentProfile,
+  AssignmentForSpeech,
 } from "@/types";
 
 export interface CreateAssignmentInput {
   team_id: string;
-  created_by: string;
   title: string;
   kind: "speech" | "rerecord" | "drill";
   speech_type?: string | null;
@@ -33,37 +33,42 @@ export function createAssignment(input: CreateAssignmentInput): Promise<Assignme
   });
 }
 
-export function listAssignments(teamId: string, userId: string): Promise<Assignment[]> {
-  return apiFetch<Assignment[]>(`/teams/${teamId}/assignments?user_id=${userId}`);
+export function listAssignments(teamId: string): Promise<Assignment[]> {
+  return apiFetch<Assignment[]>(`/teams/${teamId}/assignments`);
 }
 
-export function fetchReviewQueue(teamId: string, userId: string): Promise<ReviewQueueItem[]> {
-  return apiFetch<ReviewQueueItem[]>(`/teams/${teamId}/review-queue?user_id=${userId}`);
+export function fetchReviewQueue(teamId: string): Promise<ReviewQueueItem[]> {
+  return apiFetch<ReviewQueueItem[]>(`/teams/${teamId}/review-queue`);
 }
 
-export function fetchReadiness(teamId: string, userId: string): Promise<TeamReadiness> {
-  return apiFetch<TeamReadiness>(`/teams/${teamId}/readiness?user_id=${userId}`);
+export function fetchReadiness(teamId: string): Promise<TeamReadiness> {
+  return apiFetch<TeamReadiness>(`/teams/${teamId}/readiness`);
 }
 
-export function fetchStudentProfile(teamId: string, studentId: string, userId: string): Promise<CoachStudentProfile> {
-  return apiFetch<CoachStudentProfile>(`/teams/${teamId}/students/${studentId}?user_id=${userId}`);
+export function fetchStudentProfile(teamId: string, studentId: string): Promise<CoachStudentProfile> {
+  return apiFetch<CoachStudentProfile>(`/teams/${teamId}/students/${studentId}`);
 }
 
-export function submitAssignment(recipientId: string, userId: string, speechId: string): Promise<unknown> {
-  return apiFetch(`/assignments/recipients/${recipientId}/submit`, {
+export function fetchAssignmentForSpeech(speechId: string): Promise<AssignmentForSpeech> {
+  return apiFetch<AssignmentForSpeech>(`/assignments/for-speech/${speechId}`);
+}
+
+/** Student begins their assignment with a freshly created speech. */
+export function startAssignment(recipientId: string, speechId: string): Promise<unknown> {
+  return apiFetch(`/assignments/recipients/${recipientId}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, speech_id: speechId }),
+    body: JSON.stringify({ speech_id: speechId }),
   });
 }
 
 export function reviewAssignment(
-  recipientId: string, userId: string, action: "reviewed" | "revision_requested", coachFeedback?: string,
+  recipientId: string, action: "reviewed" | "revision_requested", coachFeedback?: string,
 ): Promise<unknown> {
   return apiFetch(`/assignments/recipients/${recipientId}/review`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, action, coach_feedback: coachFeedback ?? null }),
+    body: JSON.stringify({ action, coach_feedback: coachFeedback ?? null }),
   });
 }
 
@@ -71,37 +76,46 @@ export function reviewAssignment(
 
 export const RECIPIENT_STATE_LABEL: Record<RecipientState, string> = {
   assigned: "Not started",
-  submitted: "Ready for review",
+  started: "In progress",
+  processing: "Processing",
+  ready_for_review: "Ready for review",
+  failed: "Analysis failed",
   reviewed: "Reviewed",
   revision_requested: "Revision requested",
 };
 
-export const RECIPIENT_STATE_TONE: Record<RecipientState, "ink" | "warn" | "ok" | "danger"> = {
+export const RECIPIENT_STATE_TONE: Record<RecipientState, "ink" | "warn" | "ok" | "danger" | "lav"> = {
   assigned: "ink",
-  submitted: "warn",
+  started: "lav",
+  processing: "lav",
+  ready_for_review: "warn",
+  failed: "danger",
   reviewed: "ok",
   revision_requested: "danger",
 };
 
-/** An assignment is overdue if its due date has passed and not everyone is done. */
+/** Statuses that still need someone to act before the loop is closed. */
+const OUTSTANDING: RecipientState[] = ["assigned", "started", "processing", "ready_for_review", "failed"];
+
+/** An assignment is overdue if past due and any recipient is still outstanding. */
 export function isOverdue(assignment: Assignment, now: Date = new Date()): boolean {
   if (!assignment.due_date) return false;
   const due = new Date(assignment.due_date + "T23:59:59");
   if (now <= due) return false;
-  return assignment.recipients.some((r) => r.status === "assigned" || r.status === "submitted");
+  return assignment.recipients.some((r) => OUTSTANDING.includes(r.status));
 }
 
-/** How many recipients still need the coach's attention (submitted, awaiting review). */
+/** Recipients whose analyzed work is waiting on the coach. */
 export function reviewBacklog(assignments: Assignment[]): number {
   return assignments.reduce(
-    (n, a) => n + a.recipients.filter((r) => r.status === "submitted").length,
+    (n, a) => n + a.recipients.filter((r) => r.status === "ready_for_review").length,
     0,
   );
 }
 
 /**
  * Deep-link that carries an assignment's context into the student's practice
- * route, tagging the recipient so the student can submit against it afterward.
+ * route, tagging the recipient so the practice page can mark it started.
  */
 export function assignmentHandoffHref(a: Assignment, recipientId: string): string {
   const params = new URLSearchParams();

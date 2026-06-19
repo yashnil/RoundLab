@@ -28,7 +28,7 @@ export default function ReviewQueuePage() {
         if (!data.user) { router.replace("/login"); return; }
         setUserId(data.user.id);
         if (!tid) { setErr("No team selected."); return; }
-        setQueue(await fetchReviewQueue(tid, data.user.id));
+        setQueue(await fetchReviewQueue(tid));
       })
       .catch(() => setErr("Could not load the review queue. You may not have coach access."))
       .finally(() => setLoading(false));
@@ -40,7 +40,7 @@ export default function ReviewQueuePage() {
     if (!item || !userId) return;
     setBusy(true);
     try {
-      await reviewAssignment(item.recipient_id, userId, action, feedback || undefined);
+      await reviewAssignment(item.recipient_id, action, feedback || undefined);
       // Remove the reviewed item from the queue and advance.
       setQueue((q) => q.filter((_, i) => i !== active));
       setActive((a) => Math.min(a, queue.length - 2 < 0 ? 0 : queue.length - 2));

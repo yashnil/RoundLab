@@ -8,8 +8,16 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     supabase_url: str = ""
     supabase_service_role_key: str = ""
-    # Supabase project JWT secret (HS256) — verifies access tokens server-side.
+    # ── Auth: Supabase access-token verification ────────────────────────────
+    # Modern projects sign tokens with rotating asymmetric keys (RS256/ES256)
+    # published at a JWKS endpoint; the issuer is "<supabase_url>/auth/v1".
+    # Override the derived JWKS URL / issuer only if your setup differs.
+    supabase_jwks_url: str = Field(default="", alias="SUPABASE_JWKS_URL")
+    supabase_jwt_issuer: str = Field(default="", alias="SUPABASE_JWT_ISSUER")
+    # Legacy projects sign with a shared HS256 secret. Only used when fallback is
+    # explicitly enabled — never trusted implicitly.
     supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
+    auth_allow_hs256_fallback: bool = Field(default=False, alias="AUTH_ALLOW_HS256_FALLBACK")
     cors_origins: str = "http://localhost:3000"
     environment: str = "development"
     tavily_api_key: str = ""

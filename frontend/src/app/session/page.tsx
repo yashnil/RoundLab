@@ -20,6 +20,7 @@ import {
 import DebateSide, { type SideValue } from "@/components/practice/DebateSide";
 import { JudgeLensSelector, JudgeLensPreview, type JudgeValue } from "@/components/practice/JudgeLens";
 import StickyActionDock from "@/components/practice/StickyActionDock";
+import { submitAssignment } from "@/lib/assignments";
 import type { Speech, SpeechType } from "@/types";
 
 type CaptureMode = "record" | "upload" | "paste";
@@ -80,6 +81,8 @@ export default function SessionPage() {
   const [topic, setTopic] = useState("");
   const [inputMethod, setInputMethod] = useState<CaptureMode>("record");
   const [presetGoal, setPresetGoal] = useState("");
+  // When a student starts from a team assignment, this is their recipient row id.
+  const [assignmentRecipientId, setAssignmentRecipientId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   // Re-record mode
@@ -114,6 +117,8 @@ export default function SessionPage() {
     if (presetSide === "pro" || presetSide === "con") setSide(presetSide);
     const presetGoalParam = params.get("goal");
     if (presetGoalParam) setPresetGoal(presetGoalParam);
+    const assignmentParam = params.get("assignment");
+    if (assignmentParam) setAssignmentRecipientId(assignmentParam);
     const presetInput = params.get("capture");
     if (presetInput === "record" || presetInput === "upload" || presetInput === "paste") {
       setInputMethod(presetInput);
@@ -169,6 +174,10 @@ export default function SessionPage() {
         body: JSON.stringify(payload),
       });
       // Carry the chosen capture mode into the practice room.
+      // If this practice came from a team assignment, submit it on the student's behalf.
+      if (assignmentRecipientId) {
+        try { await submitAssignment(assignmentRecipientId, userId, s.id); } catch { /* non-blocking */ }
+      }
       router.push(`/speech/${s.id}?capture=${inputMethod}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not create your practice. Please try again.");

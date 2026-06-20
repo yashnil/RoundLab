@@ -15,10 +15,11 @@ export const MARKETING_FOOTER: FooterGroup[] = [
   {
     label: "Product",
     links: [
-      { label: "How it works", href: "#how-it-works" },
-      { label: "Argument flow & ballot", href: "#product-proof" },
-      { label: "Evidence Studio", href: "#evidence" },
-      { label: "For coaches", href: "#for-coaches" },
+      { label: "Practice loop", href: "#practice" },
+      { label: "Flow & ballot", href: "#flow" },
+      { label: "Improvement", href: "#improve" },
+      { label: "Evidence", href: "#evidence" },
+      { label: "For coaches", href: "#team" },
     ],
   },
   {
@@ -52,7 +53,7 @@ export default function MarketingFooter() {
         <nav aria-label="Footer" className="grid grid-cols-2 gap-8 sm:gap-16">
           {MARKETING_FOOTER.map((group) => (
             <div key={group.label} className="flex flex-col gap-3">
-              <p className="text-eyebrow text-ink-subtle">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
                 {group.label}
               </p>
               <ul className="flex flex-col gap-2">
@@ -73,7 +74,7 @@ export default function MarketingFooter() {
       </div>
 
       <div className="border-t border-hairline">
-        <p className="mx-auto max-w-6xl px-6 py-5 text-xs text-ink-subtle">
+        <p className="mx-auto max-w-6xl px-6 py-5 text-xs text-ink-faint">
           Built for competitive Public Forum. Coaching, not case generation.
         </p>
       </div>

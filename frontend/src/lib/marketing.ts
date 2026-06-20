@@ -32,10 +32,14 @@ export const EXISTING_ROUTE_PREFIXES = [
 
 /** On-page section anchors the homepage defines. */
 export const HOME_ANCHORS = [
-  "#how-it-works",
-  "#product-proof",
+  "#practice",
+  "#flow",
+  "#judge",
+  "#improve",
   "#evidence",
-  "#for-coaches",
+  "#team",
+  "#trust",
+  "#supported",
 ] as const;
 
 /** True for an on-page anchor or a link to a route that exists. */
@@ -70,12 +74,12 @@ export interface MarketingLink {
   href: string;
 }
 
-/** Logged-out marketing nav — short, anchors to capability sections (CTAs render separately). */
+/** Logged-out marketing nav — short, anchors to capability acts (CTAs render separately). */
 export const MARKETING_NAV_LINKS: MarketingLink[] = [
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Product", href: "#product-proof" },
+  { label: "Practice", href: "#practice" },
+  { label: "Flow & ballot", href: "#flow" },
   { label: "Evidence", href: "#evidence" },
-  { label: "Coaches", href: "#for-coaches" },
+  { label: "For coaches", href: "#team" },
 ];
 
 // ── Hero proof strip — defensible product facts only (no invented metrics) ───────
@@ -184,33 +188,3 @@ export const SUPPORTED_TODAY: SupportedCapability[] = [
 /** Small, honest note about active exploration. Deliberately not framed as a roadmap. */
 export const CURRENTLY_EXPLORING =
   "We're actively refining the analysis pipeline and evidence tooling based on pilot feedback.";
-
-// ── Differentiators — debate-native product positioning ──────────────────────────
-
-export interface DifferentiatorPoint {
-  title: string;
-  body: string;
-}
-
-export const DIFFERENTIATOR_POINTS: DifferentiatorPoint[] = [
-  {
-    title: "Debate-native structure",
-    body: "Claim · Warrant · Evidence · Impact per contention — not a bullet-point summary.",
-  },
-  {
-    title: "Dropped argument detection",
-    body: "Flags concessions and extensions your opponent can exploit before a judge does.",
-  },
-  {
-    title: "Judge-specific feedback",
-    body: "The same speech analyzed differently for lay, flow, tech, and coach paradigms.",
-  },
-  {
-    title: "Weaknesses become drills",
-    body: "Every flagged issue generates a targeted rep — not a generic tip.",
-  },
-  {
-    title: "Evidence keeps its receipts",
-    body: "Source quotes are preserved exactly. The AI tag is clearly marked as separate.",
-  },
-];

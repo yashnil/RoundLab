@@ -42,16 +42,9 @@ export default function AppShell({
 }: AppShellProps) {
   return (
     <TooltipProvider delayDuration={250}>
-      {/*
-        Skip link — off-canvas at all times via absolute -left-[9999px].
-        Never reserves layout space, never flashes on hydration or route changes.
-        Pointer interactions cannot trigger it (only keyboard Tab focus).
-        focus:left-4 brings it into view; the main target has tabIndex={-1} so
-        Enter/activate moves focus to main content correctly.
-      */}
       <a
         href="#main-content"
-        className="absolute -left-[9999px] top-3 z-[100] rounded-md bg-lav px-3 py-2 text-sm font-medium text-white focus:left-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
       >
         Skip to content
       </a>
@@ -61,10 +54,8 @@ export default function AppShell({
           <ProductHeader leftSlot={headerLeft} rightSlot={headerRight} />
           <main
             id="main-content"
-            tabIndex={-1}
             className={cn(
               "mx-auto w-full flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0",
-              "focus-visible:outline-none",
               maxWidthClasses[maxWidth],
               !bare && "px-4 py-6 sm:px-6 lg:px-8",
             )}

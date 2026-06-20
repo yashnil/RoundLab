@@ -12,3 +12,9 @@ build/
 # Local environment files
 backend/.env
 frontend/.env.local
+
+.claude/worktrees/
+.claude/projects/
+test-results/
+frontend/test-results/
+frontend/playwright-report/

@@ -36,12 +36,9 @@ export const HOME_ANCHORS = [
   "#judge",
   "#product-proof",
   "#practice",
-  "#flow",
-  "#improve",
   "#evidence",
   "#team",
   "#trust",
-  "#supported",
 ] as const;
 
 /** True for an on-page anchor or a link to a route that exists. */
@@ -78,9 +75,9 @@ export interface MarketingLink {
 
 /** Logged-out marketing nav — short, anchors to capability acts (CTAs render separately). */
 export const MARKETING_NAV_LINKS: MarketingLink[] = [
-  { label: "Practice", href: "#practice" },
-  { label: "Flow & ballot", href: "#flow" },
-  { label: "Evidence", href: "#evidence" },
+  { label: "Practice",    href: "#practice" },
+  { label: "Flow & ballot", href: "#judge" },
+  { label: "Evidence",    href: "#evidence" },
   { label: "For coaches", href: "#team" },
 ];
 
@@ -141,6 +138,10 @@ export const TRUST_POINTS: TrustPoint[] = [
   {
     title: "Honest about limits",
     body: "Delivery analysis needs audio; pasted text gets structure feedback only. The report says what it can and can't judge.",
+  },
+  {
+    title: "Every judgment is inspectable",
+    body: "RoundLab shows what it inferred, which speech or source material informed it, and what remains uncertain—so feedback is reviewable rather than a black box.",
   },
 ];
 

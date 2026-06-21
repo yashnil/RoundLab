@@ -1,8 +1,8 @@
-import { Shield, FileLock, Users, Lock, AlertCircle } from "lucide-react";
+import { Shield, FileLock, Users, Lock, AlertCircle, Eye } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TRUST_POINTS } from "@/lib/marketing";
 
-const ICONS: LucideIcon[] = [Shield, FileLock, Users, Lock, AlertCircle];
+const ICONS: LucideIcon[] = [Shield, FileLock, Users, Lock, AlertCircle, Eye];
 
 export default function TrustGrid() {
   return (

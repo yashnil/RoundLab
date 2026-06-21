@@ -11,17 +11,13 @@ import { fadeUp, fadeUpInView } from "@/lib/motion";
 import { HOME_PROOF_POINTS } from "@/lib/marketing";
 import PipelineShowcase from "@/components/PipelineShowcase";
 import HeroDebateConsole from "@/components/HeroDebateConsole";
-import ArgumentHealthMatrix from "@/components/ArgumentHealthMatrix";
-import JudgeLensSection from "@/components/marketing/JudgeLensSection";
 import MarketingNav from "@/components/marketing/MarketingNav";
 import MarketingFooter from "@/components/marketing/MarketingFooter";
-import WorkflowRail from "@/components/marketing/WorkflowRail";
-import ImprovementLanes from "@/components/marketing/ImprovementLanes";
 import EvidenceProvenanceStrip from "@/components/marketing/EvidenceProvenanceStrip";
 import TeamWorkflowStrip from "@/components/marketing/TeamWorkflowStrip";
 import TrustGrid from "@/components/marketing/TrustGrid";
-import SupportedTodayGrid from "@/components/marketing/SupportedTodayGrid";
 import SpeechFlowSection from "@/components/marketing/SpeechFlowSection";
+import JudgeLensSection from "@/components/marketing/JudgeLensSection";
 import DebateProofSection from "@/components/marketing/DebateProofSection";
 import { useInViewOnce } from "@/hooks/useInViewOnce";
 
@@ -54,43 +50,6 @@ function pickGreeting(firstName: string | null): string {
     return greeting(firstName);
   }
   return GREETINGS_WITHOUT_NAME[Math.floor(Math.random() * GREETINGS_WITHOUT_NAME.length)];
-}
-
-// ── Reusable section heading ─────────────────────────────────────────────────────
-
-function SectionHead({
-  stamp,
-  title,
-  blurb,
-  align = "left",
-}: {
-  stamp: string;
-  title: string;
-  blurb?: string;
-  align?: "left" | "center";
-}) {
-  return (
-    <motion.div
-      {...fadeUpInView(0)}
-      className={
-        "mb-8 flex flex-col gap-2 " +
-        (align === "center" ? "items-center text-center" : "")
-      }
-    >
-      <p className="section-stamp">{stamp}</p>
-      <h2 className="text-headline text-ink">{title}</h2>
-      {blurb && (
-        <p
-          className={
-            "text-sm leading-relaxed text-ink-subtle " +
-            (align === "center" ? "max-w-2xl" : "max-w-lg")
-          }
-        >
-          {blurb}
-        </p>
-      )}
-    </motion.div>
-  );
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -281,37 +240,20 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── The loop — connected story, distinct per step ───────────────── */}
-      <section className="mx-auto max-w-5xl px-6 py-16">
-        <SectionHead
-          stamp="The practice loop"
-          title="Every rep runs the same loop"
-          blurb="Speak, get flowed, read the ballot, drill the weak link, and re-record. One loop, automatic."
-          align="center"
-        />
-        <motion.div {...fadeUpInView(0.06)}>
-          <WorkflowRail />
-        </motion.div>
-      </section>
-
-      {/* ── Speech-to-flow — interactive transcript annotation ──────────── */}
-      <SpeechFlowSection />
-
-      {/* ── Judge lens — same C1 speech, three judge perspectives ────────── */}
-      <JudgeLensSection />
-
-      {/* ── Coaching story — decisive moment, drill, transformation ─────── */}
-      <DebateProofSection />
-
-      {/* ── Practice — capture + analysis ───────────────────────────────── */}
+      {/* ── Pipeline — fast visual overview of the complete loop ─────────── */}
       <section id="practice" className="scroll-mt-16 border-t border-hairline bg-surface-1/40">
         <div className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHead
-            stamp="Capture"
-            title="Watch a speech become a flow"
-            blurb="Record, upload, or paste. RoundLab transcribes, extracts claim–warrant–evidence–impact structure, and assembles the report automatically."
-            align="center"
-          />
+          <motion.div
+            {...fadeUpInView(0)}
+            className="mb-8 flex flex-col items-center gap-2 text-center"
+          >
+            <p className="section-stamp">Capture</p>
+            <h2 className="text-headline text-ink">Watch a speech become a flow</h2>
+            <p className="max-w-2xl text-sm leading-relaxed text-ink-subtle">
+              Record, upload, or paste. RoundLab transcribes, extracts
+              claim–warrant–evidence–impact structure, and assembles the report automatically.
+            </p>
+          </motion.div>
           <motion.div
             {...fadeUpInView(0.08)}
             className="beam-top overflow-hidden rounded-2xl border border-hairline bg-surface-1/90 backdrop-blur-sm"
@@ -339,49 +281,26 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Flow — diagnostic board ─────────────────────────────────────── */}
-      <section id="flow" className="scroll-mt-16 border-t border-hairline">
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHead
-            stamp="Flow"
-            title="See exactly where the chain breaks"
-            blurb="A diagnostic board across every contention — strong links, weak warrants, and missing evidence, before a flow judge finds them."
-          />
-          <motion.div
-            {...fadeUpInView(0.06)}
-            className="rounded-2xl border border-hairline bg-surface-1 p-5"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-heading text-ink">Flow diagnostic board</p>
-              <span className="text-[10px] text-ink-faint">● strong · ⚠ weak · ✗ missing</span>
-            </div>
-            <ArgumentHealthMatrix />
-          </motion.div>
-        </div>
-      </section>
+      {/* ── A: Speech to flow — interactive transcript annotation ────────── */}
+      <SpeechFlowSection />
 
-      {/* ── Improvement — before/after re-record ────────────────────────── */}
-      <section id="improve" className="scroll-mt-16 border-t border-hairline">
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <SectionHead
-            stamp="Improve"
-            title="Improvement you can point to"
-            blurb="Re-record after a drill and RoundLab shows the new behavior — a named warrant, real weighing — not just a higher number."
-          />
-          <motion.div {...fadeUpInView(0.06)}>
-            <ImprovementLanes />
-          </motion.div>
-        </div>
-      </section>
+      {/* ── B: Judge lens — same C1 argument, three judge perspectives ───── */}
+      <JudgeLensSection />
+
+      {/* ── C: Coaching story — decisive moment, drill, transformation ───── */}
+      <DebateProofSection />
 
       {/* ── Evidence — provenance trail ─────────────────────────────────── */}
-      <section id="evidence" className="scroll-mt-16 border-t border-hairline bg-surface-1/40">
+      <section id="evidence" className="scroll-mt-16 border-t border-hairline">
         <div className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHead
-            stamp="Evidence"
-            title="Research that keeps its receipts"
-            blurb="Evidence Studio cuts read-aloud cards and preserves the exact source quote — with the AI tag and citation kept visibly separate."
-          />
+          <motion.div {...fadeUpInView(0)} className="mb-8 flex flex-col gap-2">
+            <p className="section-stamp">Evidence</p>
+            <h2 className="text-headline text-ink">Research that keeps its receipts</h2>
+            <p className="max-w-lg text-sm leading-relaxed text-ink-subtle">
+              Evidence Studio cuts read-aloud cards and preserves the exact source quote — with
+              the AI tag and citation kept visibly separate.
+            </p>
+          </motion.div>
           <motion.div {...fadeUpInView(0.06)}>
             <EvidenceProvenanceStrip />
           </motion.div>
@@ -389,13 +308,16 @@ export default function LandingPage() {
       </section>
 
       {/* ── Team — coach workflow ───────────────────────────────────────── */}
-      <section id="team" className="scroll-mt-16 border-t border-hairline">
+      <section id="team" className="scroll-mt-16 border-t border-hairline bg-surface-1/40">
         <div className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHead
-            stamp="For coaches"
-            title="Built for the whole squad"
-            blurb="Assign practice, review submissions fast, and turn a team-wide skill gap into the next assigned drill."
-          />
+          <motion.div {...fadeUpInView(0)} className="mb-8 flex flex-col gap-2">
+            <p className="section-stamp">For coaches</p>
+            <h2 className="text-headline text-ink">Built for the whole squad</h2>
+            <p className="max-w-lg text-sm leading-relaxed text-ink-subtle">
+              Assign practice, review submissions fast, and turn a team-wide skill gap into the
+              next assigned drill.
+            </p>
+          </motion.div>
           <motion.div {...fadeUpInView(0.06)}>
             <TeamWorkflowStrip />
           </motion.div>
@@ -403,55 +325,44 @@ export default function LandingPage() {
       </section>
 
       {/* ── Trust — coaching, not cheating ──────────────────────────────── */}
-      <section id="trust" className="scroll-mt-16 border-t border-hairline bg-surface-1/40">
+      <section id="trust" className="scroll-mt-16 border-t border-hairline">
         <div className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHead
-            stamp="Trust"
-            title="Why students and coaches trust it"
-            blurb="RoundLab is a coach, not a shortcut — and it's explicit about what's source, what's AI, and what it can't judge."
-          />
+          <motion.div {...fadeUpInView(0)} className="mb-8 flex flex-col gap-2">
+            <p className="section-stamp">Trust</p>
+            <h2 className="text-headline text-ink">Why students and coaches trust it</h2>
+            <p className="max-w-lg text-sm leading-relaxed text-ink-subtle">
+              RoundLab is a coach, not a shortcut — and it&apos;s explicit about what&apos;s
+              source, what&apos;s AI, and what it can&apos;t judge.
+            </p>
+          </motion.div>
           <motion.div {...fadeUpInView(0.06)}>
             <TrustGrid />
           </motion.div>
         </div>
       </section>
 
-      {/* ── Supported today — replaces the stale roadmap ────────────────── */}
-      <section id="supported" className="scroll-mt-16 border-t border-hairline">
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <SectionHead
-            stamp="Available now"
-            title="What RoundLab supports today"
-            blurb="Every capability below is live — tap any one to open it."
-          />
-          <motion.div {...fadeUpInView(0.06)}>
-            <SupportedTodayGrid />
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── Convert ─────────────────────────────────────────────────────── */}
-      <section className="border-t border-hairline bg-surface-1/50">
-        <div className="mx-auto max-w-lg px-6 py-20 text-center">
-          <motion.div {...fadeUpInView()} className="flex flex-col items-center gap-5">
-            <div
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lav"
-              style={{ boxShadow: "0 0 28px -4px oklch(0.510 0.156 278 / 0.55)" }}
-            >
-              <Mic size={20} className="text-white" aria-hidden />
+      {/* ── Final CTA — restrained, narrative complete ───────────────────── */}
+      <section className="border-t border-hairline" aria-label="Call to action">
+        <div className="mx-auto max-w-2xl px-6 py-24 text-center">
+          <motion.div {...fadeUpInView()} className="flex flex-col items-center gap-6">
+            <h2 className="text-headline text-ink max-w-xl">
+              Your next speech should know what the last one missed.
+            </h2>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/login"
+                className="glow-lav flex items-center gap-2 rounded-xl bg-lav px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-lav-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lav/50 focus-visible:ring-offset-2"
+              >
+                Start practicing <ArrowRight size={14} aria-hidden />
+              </Link>
+              <Link
+                href="/demo"
+                className="rounded-xl border border-hairline px-6 py-3.5 text-sm font-medium text-ink-muted transition-colors hover:border-hairline-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lav/50 focus-visible:ring-offset-2"
+              >
+                See a sample report
+              </Link>
             </div>
-            <h2 className="text-headline text-ink">Start your first practice rep</h2>
-            <p className="max-w-xs text-sm leading-relaxed text-ink-subtle">
-              Record a PF speech and get a flow, a judge-style ballot, and three drills in under a
-              minute. Free to start, no coach required.
-            </p>
-            <Link
-              href="/login"
-              className="glow-lav flex items-center gap-2 rounded-md bg-lav px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-lav-hi"
-            >
-              Start practicing <ArrowRight size={14} />
-            </Link>
-            <p className="text-xs text-ink-faint">No credit card required</p>
+            <p className="text-xs text-ink-faint">Free to start · No coach required</p>
           </motion.div>
         </div>
       </section>

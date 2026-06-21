@@ -1,1205 +1,705 @@
 # RoundLab
 
-**AI flow coach for novice and JV Public Forum debaters.**
+**AI-powered speech and debate training for Public Forum debaters.**
 
-RoundLab is a full-stack practice platform that closes the coaching gap for students without consistent access to a coach. Record a speech, receive judge-style feedback, complete skill-targeted drills, and track measurable improvement across sessions.
+RoundLab is a full-stack practice platform that turns recorded speeches into argument flows, judge-style ballots, targeted drills, and longitudinal skill improvement. It closes the coaching gap for students who practice without consistent access to a coach.
+
+**Status:** Active development · Pilot-ready core features · Pre-public launch
+
+**Primary users:** Novice and JV Public Forum debaters; debate coaches and program coordinators
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Product Philosophy](#product-philosophy)
-3. [Feature Matrix](#feature-matrix)
-4. [System Architecture](#system-architecture)
-5. [AI Analysis Pipeline](#ai-analysis-pipeline)
-6. [Tech Stack](#tech-stack)
-7. [Database Schema](#database-schema)
-8. [Project Structure](#project-structure)
-9. [Setup](#setup)
-10. [Environment Variables](#environment-variables)
-11. [Running Tests](#running-tests)
-12. [API Reference](#api-reference)
-13. [Frontend Pages and Components](#frontend-pages-and-components)
-14. [Evaluation Harness](#evaluation-harness)
-15. [Delivery Coach](#delivery-coach)
-16. [Evidence Library](#evidence-library)
-17. [Shareable Coach Reports](#shareable-coach-reports)
-18. [Gamification](#gamification)
-19. [Team Features](#team-features)
-20. [First-Run Onboarding and Demo Mode](#first-run-onboarding-and-demo-mode)
-21. [Async Analysis Jobs](#async-analysis-jobs)
-22. [Pilot Testing Protocol](#pilot-testing-protocol)
-23. [Analytics Events](#analytics-events)
-24. [Current Limitations](#current-limitations)
-25. [Roadmap](#roadmap)
-26. [Deployment](#deployment)
-27. [Screenshots](#screenshots)
-28. [Contributing](#contributing)
-29. [License](#license)
-30. [Status](#status)
+1. [Product Overview](#product-overview)
+2. [Core Features](#core-features)
+3. [Homepage Product Story](#homepage-product-story)
+4. [Architecture](#architecture)
+5. [Repository Structure](#repository-structure)
+6. [Local Development Setup](#local-development-setup)
+7. [Environment Variables](#environment-variables)
+8. [Database and Migrations](#database-and-migrations)
+9. [Testing](#testing)
+10. [Accessibility and Responsive Design](#accessibility-and-responsive-design)
+11. [Design System](#design-system)
+12. [Deployment](#deployment)
+13. [Development Workflow](#development-workflow)
+14. [Current Status](#current-status)
+15. [Roadmap](#roadmap)
+16. [Contributing](#contributing)
+17. [Security and Privacy](#security-and-privacy)
+18. [License](#license)
 
 ---
 
-## Overview
+## Product Overview
 
-RoundLab processes PF debate speeches through a seven-step AI pipeline and returns four artifacts: a structured argument flow, a judge-style coaching report scored against PF rubrics, three personalized practice drills, and a delivery analysis with a pacing timeline. Students can re-record after completing a drill and view a side-by-side improvement comparison.
+### The problem
 
-**Core workflow:**
+Most Public Forum debaters practice without a coach in the room. They record rounds, re-watch them without structured feedback, and improve slowly — or not at all. Generic AI writing tools produce case text but do not diagnose what went wrong in a live speech.
 
-1. Record or upload a 45–90 second PF speech (constructive, rebuttal, summary, final focus, crossfire)
-2. Whisper transcribes the audio
-3. The pipeline extracts every claim, warrant, evidence citation, and impact
-4. A coaching report scores the speech on five rubric dimensions with actionable priorities
-5. Three drills are generated, each targeting a detected skill gap
-6. A delivery analysis measures pacing, filler words, and phrase repetition
-7. Students complete drills, re-record, and review the improvement delta
-
----
-
-## Product Philosophy
-
-RoundLab is built for **practice**, not case generation.
-
-The app is designed to feel like a coach, not a shortcut. Every feature decision centers on one question: does this help the student improve their debate skills through deliberate repetition? The XP system rewards drill completion over speech uploads. The feedback format mirrors a ballot. The drills mirror what a coach would actually assign.
-
-RoundLab does not write cases, generate arguments on demand, or fabricate evidence. It evaluates speeches the student already gave and helps them deliver those arguments better.
-
----
-
-## Feature Matrix
-
-| Feature | Status | Description |
-|---|---|---|
-| Audio recording (browser MediaRecorder) | Implemented | Records directly in-browser; falls back to file upload |
-| File upload | Implemented | MP3, WAV, M4A, WebM, OGG, MP4 (max 50 MB) |
-| Whisper transcription | Implemented | Word count validated; word count too low triggers warning |
-| Argument flow extraction | Implemented | Claim, warrant, evidence, impact per argument |
-| PF rubric-calibrated scoring | Implemented | Five dimensions, speech-type-specific weights |
-| Judge-style coaching report | Implemented | Priority cards, ballot summary, before/after diagnosis |
-| Personalized drill generation | Implemented | Three drills per speech; skill-targeted; time limit set by LLM |
-| Drill attempt re-recording | Implemented | Records over parent speech; comparison view available |
-| Delivery analysis | Implemented | Pacing, filler words, repeated phrases, 5-segment timeline |
-| Delivery Coach panel | Implemented | Score, pacing band, filler breakdown, expandable timeline |
-| Evidence Library | Implemented | Upload PDF/DOCX/TXT, extract evidence cards, keyword/semantic/hybrid search |
-| Evidence RAG | Implemented | pgvector semantic search; text-embedding-3-small embeds each chunk; cosine similarity ranking |
-| Evidence support checking | Implemented | Semantic retrieval path (RPC → ranked chunks → LLM); keyword fallback; never uses outside knowledge |
-| Async background pipeline | Implemented | Jobs run in background; frontend polls for progress |
-| Team management | Implemented | Create/join teams; coach dashboard with student progress |
-| Gamification | Implemented | XP ledger, levels, badges, skill averages |
-| Progress dashboard | Implemented | XP bar, level, incomplete drills, skill trends |
-| Pilot analytics | Implemented | product_events table, drill_ratings, output_feedback, /pilot page |
-| First-run onboarding | Implemented | Command center for zero-speech state; contextual help panels |
-| Demo mode | Implemented | /demo page with static sample data; no login required |
-| Judge lens comparison | Implemented | Rerun feedback with different judge type; side-by-side delta |
-| Re-record comparison | Implemented | Improvement delta across score, delivery score, filler count |
-| Flow editing | Implemented | Users can correct extracted arguments before locking report |
-| Dark/light mode | Implemented | Full oklch theme system; toggles persist via localStorage |
-| PWA manifest | Implemented | Installable on mobile; viewport and safe-area configured |
-| Shareable coach reports | Implemented | Token-gated share link; configurable sections; browser print-to-PDF; copy practice plan as plain text |
-| Tournament Prep Workout Mode | Implemented | Deterministic 3–6 step workout generated from feedback/delivery/evidence; step-by-step with mark-complete; dashboard "Today's Prep" card |
-| Blockfile / Frontline Trainer | Implemented | Upload blockfiles/frontlines; extract AT:/Block:/Frontline: entries; semantic block coverage check per speech; Practice Hub grouping; Evidence Library Trainer section |
-| Practice Hub | Implemented | Speech report grouped into practice modules (Delivery Coach, Workout, Block Coverage, Drills); "Practice Hub" section header; Next Best Action card; no numeric step labels |
-| Research-to-Card Evidence Builder | Implemented | URL extraction (SSRF-safe), manual paste, Tavily web search; LLM passage selection by char indices; body_text always exact source; span verification; user review required; saves to Evidence Library; Card Builder tab in Evidence Library |
-
----
-
-## System Architecture
-
-```mermaid
-graph TB
-    subgraph Browser["Browser / PWA"]
-        FE["Next.js 15 App Router\nTypeScript + Tailwind CSS v4"]
-    end
-    subgraph APILayer["FastAPI Service — Python 3.12"]
-        ROUTER["REST Routes\n+ Pydantic v2 validation"]
-        JOBS["Background Jobs\nanalysis_jobs table polling"]
-        PIPELINE["Analysis Pipeline\nLangGraph orchestration"]
-        DELIVERY["Delivery Analysis\ndeterministic — no LLM"]
-    end
-    subgraph SupabaseCluster["Supabase"]
-        AUTH["Auth\nPKCE + Google OAuth"]
-        DB[("PostgreSQL\n19 tables + RLS")]
-        STORE["Storage\naudio bucket + documents bucket"]
-    end
-    subgraph OpenAI["OpenAI APIs"]
-        WHISPER["whisper-1\nTranscription"]
-        GPT["gpt-4o-mini\nStructured reasoning"]
-        EMBED["text-embedding-3-small\nEvidence embeddings"]
-    end
-
-    FE -->|"JWT session"| AUTH
-    FE -->|"REST + JSON"| ROUTER
-    FE -->|"signed upload URL"| STORE
-    ROUTER --> DB
-    ROUTER --> JOBS
-    JOBS --> PIPELINE
-    PIPELINE -->|"audio bytes"| WHISPER
-    PIPELINE -->|"structured prompt"| GPT
-    PIPELINE --> DELIVERY
-    PIPELINE --> DB
-    AUTH --> DB
-```
-
-All AI calls go through the backend service. The frontend never holds the OpenAI key. The Supabase service role key lives only in the backend environment and must never be exposed to the frontend.
-
----
-
-## AI Analysis Pipeline
-
-The pipeline is orchestrated by LangGraph and runs as a background job. Progress is written to the `analysis_jobs` table; the frontend polls for updates via the jobs API.
-
-```mermaid
-flowchart TD
-    START([Audio uploaded to Supabase Storage])
-    S1["Step 1 — Transcription\nwhisper-1 · 10% progress"]
-    S15["Step 1.5 — Delivery Analysis\ndeterministic · non-fatal · 25% progress"]
-    S2["Step 2 — Argument Extraction\ngpt-4o-mini structured output · 40% progress"]
-    S3["Step 3 — Debate Signal Detection\ngpt-4o-mini · 55% progress"]
-    S4["Step 4 — Feedback Generation\ngpt-4o-mini PF rubric · 70% progress"]
-    S5["Step 5 — Drill Generation\ngpt-4o-mini + deterministic delivery drills · 85% progress"]
-    S6["Step 6 — Evidence Support Check\noptional — only if user has uploaded evidence · 95% progress"]
-    DONE([Status → feedback_ready · 100% progress])
-
-    START --> S1 --> S15 --> S2 --> S3 --> S4 --> S5 --> S6 --> DONE
-```
-
-**Key design decisions:**
-
-- **Delivery analysis is non-fatal.** If it fails, the pipeline continues and the coaching report is unaffected.
-- **Argument extraction uses structured output.** The LLM returns a typed Pydantic schema — no free-form parsing.
-- **Debate signal detection runs separately** from argument extraction so signals can inform feedback without contaminating flow structure.
-- **Drill generation is two-pass.** The LLM generates up to three debate-skill drills; then a deterministic pass appends a delivery drill if clarity flags are present. Only one delivery drill is added per speech and only if no delivery-skill drill already exists.
-- **Evidence support checking is gated.** It runs only when the user has at least one document uploaded and fails silently if the document library is empty.
-
-### Argument extraction schema
-
-Each argument in the flow is stored as a structured object:
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Application-assigned identifier (e.g. `arg_1`) |
-| `claim` | string | The specific assertion made |
-| `warrant` | string or null | The logical mechanism that supports the claim |
-| `evidence` | string or null | Citation or data referenced |
-| `impact` | string or null | Consequence or significance |
-| `argument_type` | enum | `offense`, `defense`, `weighing`, `response`, `unclear` |
-
-### Feedback scoring dimensions (constructive example)
-
-| Dimension | Max points |
-|---|---|
-| Case Structure | 20 |
-| Warranting | 25 |
-| Evidence Use | 20 |
-| Impact Development | 20 |
-| Clarity | 15 |
-
-Weights shift per speech type. Rebuttal emphasizes clash and coverage. Summary focuses on extensions and weighing. Final Focus prioritizes ballot story and crystallization.
-
----
-
-## Tech Stack
-
-| Layer | Technology | Version |
-|---|---|---|
-| Frontend framework | Next.js (App Router) | 15.x |
-| Frontend language | TypeScript | 5.x |
-| Styling | Tailwind CSS | v4 |
-| UI primitives | Radix UI / shadcn | latest |
-| Animation | Motion (formerly Framer Motion) | latest |
-| Backend framework | FastAPI | 0.136.x |
-| Backend language | Python | 3.12 |
-| Schema validation | Pydantic | v2 |
-| AI orchestration | LangGraph | latest |
-| Transcription | OpenAI Whisper (whisper-1) | API |
-| Reasoning | OpenAI gpt-4o-mini | API |
-| Auth | Supabase Auth (PKCE + Google OAuth) | latest |
-| Database | Supabase PostgreSQL | 15.x |
-| File storage | Supabase Storage | latest |
-| PDF parsing | PyMuPDF | 1.23+ |
-| DOCX parsing | python-docx | 1.1+ |
-| Vector search | pgvector (PostgreSQL extension) | 0.7+ |
-| Embeddings | OpenAI text-embedding-3-small | API (1536 dims) |
-| Frontend tests | Jest + ts-jest | latest |
-| Backend tests | pytest | latest |
-
----
-
-## Database Schema
-
-RoundLab uses 22 tables in Supabase PostgreSQL, plus the `pgvector` extension for semantic search. All tables have row-level security (RLS) enabled. Users can read and write only their own rows unless they are a coach in a team.
-
-```mermaid
-erDiagram
-    profiles ||--o{ speeches : "records"
-    speeches ||--o| transcripts : "has one"
-    speeches ||--o| argument_maps : "has one"
-    speeches ||--o| feedback_reports : "has one"
-    speeches ||--o{ drills : "generates"
-    speeches ||--o| delivery_metrics : "has one"
-    speeches ||--o{ analysis_jobs : "tracks"
-    drills ||--o{ drill_attempts : "has"
-    drills ||--o{ drill_ratings : "rated by"
-    profiles ||--o{ team_members : "joins"
-    teams ||--o{ team_members : "contains"
-    profiles ||--o{ documents : "uploads"
-    documents ||--o{ document_chunks : "splits into"
-    document_chunks ||--o{ evidence_cards : "extracts"
-    speeches ||--o{ claim_evidence_checks : "checked against"
-    speeches ||--o{ shared_reports : "shared via"
-    profiles ||--o{ product_events : "logs"
-    profiles ||--o{ output_feedback : "submits"
-    profiles ||--o{ user_xp_events : "earns"
-```
-
-| Table | Purpose |
-|---|---|
-| `profiles` | One row per authenticated user; mirrors `auth.users` |
-| `speeches` | Core entity; one row per recorded or uploaded speech |
-| `transcripts` | Whisper output text and word count |
-| `argument_maps` | Structured argument flow extracted by the pipeline |
-| `feedback_reports` | Judge-style coaching report with scores and priorities |
-| `drills` | Personalized practice exercises generated per speech |
-| `drill_attempts` | User responses and re-recordings for drills |
-| `drill_ratings` | User helpfulness ratings (helpful / somewhat / not_helpful) per drill |
-| `delivery_metrics` | Pacing, filler words, repeated phrases, delivery score, timeline |
-| `analysis_jobs` | Background pipeline progress tracking (status, step, progress_pct) |
-| `teams` | Coach-created teams with 6-character invite code |
-| `team_members` | User-team membership with role (student or coach) |
-| `documents` | Uploaded case/evidence files (PDF, DOCX, TXT, MD) |
-| `document_chunks` | Text chunks split from documents; each chunk stores a `vector(1536)` embedding for semantic search |
-| `evidence_cards` | Extracted tag, author, year, source, and card text |
-| `claim_evidence_checks` | LLM support classification for a claim; stores matched chunk IDs, top similarity score, retrieved snippets, support rationale, and retrieval mode |
-| `product_events` | Internal analytics events (best-effort, never blocks user flows) |
-| `output_feedback` | User confusion reports on AI outputs |
-| `user_xp_events` | XP ledger; one row per XP-earning action |
-| `shared_reports` | Share link records with configurable include flags and optional expiry; private by default |
-| `workouts` | Tournament prep workout per speech; JSONB step list; status machine (not_started → in_progress → completed); speech-type-specific final step |
-| `block_entries` | Extracted block/frontline entries from user-uploaded files; pgvector(1536) embedding with HNSW index; entry types: block/frontline/answer/turn/defense/weighing/overview |
-| `block_coverage_checks` | Per-argument block coverage result for a speech; status: covered/partially_covered/missing/no_available_block; stores similarity score, rationale, missing piece, drill suggestion |
-
----
-
-## Project Structure
+### RoundLab's coaching loop
 
 ```
-RoundLab/
-├── frontend/
-│   ├── src/
-│   │   ├── app/                     # Next.js App Router pages
-│   │   │   ├── page.tsx             # Homepage / landing
-│   │   │   ├── dashboard/           # Progress dashboard
-│   │   │   ├── session/             # Create new speech session
-│   │   │   ├── speech/[id]/         # Speech workspace (flow, report, drills)
-│   │   │   ├── team/                # Team management + coach dashboard
-│   │   │   ├── evidence/            # Evidence Library
-│   │   │   ├── drills/              # Standalone drills view
-│   │   │   ├── demo/                # Public demo (no login required)
-│   │   │   ├── evals/               # Eval quality dashboard
-│   │   │   ├── pilot/               # Pilot analytics (current user only)
-│   │   │   ├── learn/               # Onboarding reference
-│   │   │   ├── share/[token]/       # Public shared report (no login required)
-│   │   │   └── login/               # Supabase Auth
-│   │   ├── components/              # React components
-│   │   │   ├── ui/                  # Radix-based primitives
-│   │   │   ├── AppNav.tsx           # Navigation with theme toggle
-│   │   │   ├── ArgumentCard.tsx     # Flow visualization card
-│   │   │   ├── ArgumentChain.tsx    # Multi-arg chain component
-│   │   │   ├── DeliveryCoachPanel.tsx # Delivery score, timeline, filler breakdown
-│   │   │   ├── DrillCard.tsx        # Drill display with attempt recorder
-│   │   │   ├── EvidenceSupportPanel.tsx # Evidence claim check results
-│   │   │   ├── FirstRunCommandCenter.tsx # Zero-speech onboarding state
-│   │   │   ├── FlowBoard.tsx        # Horizontal flow sheet carousel
-│   │   │   ├── FlowTable.tsx        # Classic vertical flow table
-│   │   │   ├── ImprovementComparisonCard.tsx # Re-record delta view
-│   │   │   ├── ScoreCard.tsx        # Feedback score ring + breakdown
-│   │   │   ├── CoachReportView.tsx  # Print-friendly shared report renderer
-│   │   │   ├── ShareReportModal.tsx # Share link creator/manager
-│   │   │   └── ...
-│   │   ├── lib/
-│   │   │   ├── api.ts               # Backend fetch wrapper
-│   │   │   ├── analytics.ts         # logEvent() — fire-and-forget event logger
-│   │   │   ├── deliveryHelpers.ts   # Pacing band display, score color, WPM format
-│   │   │   ├── evidenceHelpers.ts   # Similarity labels, search mode display, support level display
-│   │   │   ├── firstRunHelpers.ts   # deriveFirstRunState() — 9-state machine
-│   │   │   ├── reportHelpers.ts     # speechTypeLabel, judgeTypeLabel, scoreColor, formatDelta, formatPracticePlan, buildShareUrl
-│   │   │   ├── supabase.ts          # Supabase client (PKCE OAuth)
-│   │   │   └── motion.ts            # Animation presets
-│   │   ├── types/
-│   │   │   └── index.ts             # All TypeScript interfaces
-│   │   └── __tests__/               # Jest unit tests
-│   ├── public/
-│   │   └── manifest.json            # PWA manifest
-│   └── tailwind.config.ts
-├── backend/
-│   └── app/
-│       ├── main.py                  # FastAPI app + CORS configuration
-│       ├── config.py                # Pydantic settings (reads .env)
-│       ├── api/                     # Route handlers
-│       │   ├── speeches.py          # Speech CRUD + pipeline triggers + delivery endpoints
-│       │   ├── drills.py            # Drill management + attempt recording
-│       │   ├── users.py             # Progress summary + XP + badges
-│       │   ├── teams.py             # Team create/join/dashboard
-│       │   ├── documents.py         # Evidence library endpoints
-│       │   ├── jobs.py              # Analysis job polling
-│       │   ├── pilot.py             # Pilot metrics
-│       │   ├── output_feedback.py   # Confusion reports
-│       │   └── shared_reports.py    # Share link CRUD + public report endpoint
-│       ├── models/                  # Pydantic response schemas
-│       ├── services/
-│       │   ├── analysis_pipeline.py # LangGraph orchestration (7 steps)
-│       │   ├── delivery_analysis.py # Deterministic pacing + filler analysis
-│       │   ├── argument_extraction.py
-│       │   ├── debate_signal_detection.py
-│       │   ├── feedback_generation.py
-│       │   ├── drill_generation.py  # LLM drills + make_delivery_drill()
-│       │   ├── embeddings.py        # embed_text / embed_texts / vector_to_pg_str (text-embedding-3-small)
-│       │   ├── evidence_extraction.py
-│       │   ├── evidence_support_check.py # Semantic retrieval path + keyword fallback
-│       │   ├── drill_attempt_scoring.py
-│       │   ├── deterministic_scoring.py
-│       │   ├── xp_ledger.py
-│       │   └── supabase_client.py
-│       ├── scripts/
-│       │   └── embed_existing_documents.py  # Backfill embeddings for pre-RAG documents
-│       └── tests/                   # pytest suite (763 tests)
-├── evals/                           # Labeled eval fixtures + runner
-│   ├── fixtures/                    # JSON fixture files
-│   ├── run_evals.py
-│   └── results/                     # latest.json + timestamped archives
-├── supabase/
-│   └── migrations/                  # 21 ordered SQL migration files
-└── docs/                            # Product requirements, rubric, samples
+Record or upload a speech
+  → Transcribe
+  → Segment into argument moves (claim · warrant · evidence · impact · response)
+  → Reconstruct argument graph (what's contested, extended, dropped, conceded)
+  → Evaluate through judge-specific lenses (flow / lay / parent priorities)
+  → Identify the decisive weakness
+  → Prescribe targeted drill
+  → Student re-records
+  → Track improvement across sessions
 ```
+
+### Why it's different
+
+- **Debate-native, not generic.** The system understands Public Forum structure: contentions, crossfire, weighing, extensions, drops. Feedback is expressed in debate language, not SAT-prep language.
+- **Coaching, not cheating.** RoundLab grades and drills your own speeches. It does not write your case or cut your cards. Evidence is never rewritten.
+- **Judge-conditioned evaluation.** The same speech is scored through multiple judge priority frameworks simultaneously — not just a single algorithmic score.
+- **Causal improvement tracking.** Progress is shown as a change in specific debate behavior (warrant named, weighing added, extension strengthened), not just a higher number.
 
 ---
 
-## Setup
+## Core Features
 
-### Prerequisites
+### Implemented
 
-- Node.js 22+
-- Python 3.12+
-- A Supabase project (cloud or local via `supabase start`)
-- An OpenAI API key with access to Whisper and gpt-4o-mini
+| Feature | Description |
+|---------|-------------|
+| Speech recording and upload | Record via browser mic, upload audio file, or paste a transcript |
+| Transcription | Whisper-based transcription with speaker-turn segmentation |
+| Argument flow extraction | Claim · warrant · evidence · impact structure per contention |
+| Argument graph | Which arguments are contested, extended, dropped, or conceded |
+| Judge-style ballot | Five scoring dimensions with contention-level feedback |
+| Multiple judge lenses | Evaluate the same speech through flow, lay, and parent judge priorities |
+| Targeted drills | Three drills per speech, each targeting the specific diagnosed weakness |
+| Speech reports | Full report: flow, ballot, skills breakdown, transcript, drills |
+| Re-record comparison | Side-by-side before/after showing added debate behaviors |
+| Progress tracking | Skill trends across sessions; per-dimension improvement charts |
+| Delivery analysis | WPM, pacing timeline, filler word detection, delivery score |
+| Tournament workout mode | Pre-round targeted practice sequences |
+| Blockfile/frontline trainer | Coverage check against stored block entries |
+| Evidence Studio | Research sources, cut read-aloud cards, preserve exact source quotes |
+| Source credibility | Extraction, citation metadata, MLA formatting |
+| Team and coach tools | Assignments, submission review queue, team overview |
+| Async analysis jobs | Background pipeline with polling and recovery UI |
+| Google authentication | Via Supabase Auth |
+| Interactive demo page | Full sample speech report at `/demo` |
+| Pilot program tools | Pilot checklist, confusion reports, drill ratings |
+| Shareable coach reports | Coach-annotated reports with share link |
 
-### Backend
+### Experimental
 
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
+| Feature | Status |
+|---------|--------|
+| LLM evidence refiner | Optional; disabled in tests; controlled by `research_enable_llm_refiner` config |
+| Semantic reranking | CrossEncoder seam wired but guarded; uses BM25 by default |
+| Axe-core accessibility audit | Playwright-integrated; catching violations as they surface |
 
-Create `backend/.env`:
+### Planned (not yet implemented)
 
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-key
-OPENAI_API_KEY=sk-...
-ENVIRONMENT=development
-LOG_LEVEL=INFO
-CORS_ORIGINS=http://localhost:3000
-```
+- Full-round mode (1AC through Final Focus in sequence)
+- Expanded judge adaptation depth (more judge profiles)
+- Evidence-link ingestion from user-provided URLs at research time
+- Scheduling and practice reminders
+- Public speaking support beyond PF
 
-> **Security:** `SUPABASE_KEY` is the service role key. It bypasses row-level security. It must never be exposed to the browser or committed to version control.
+---
 
-Start the server:
+## Homepage Product Story
 
-```bash
-uvicorn app.main:app --reload
-# API: http://localhost:8000
-# Health: GET http://localhost:8000/health
+The public homepage (`/`) demonstrates RoundLab's coaching loop through a single continuous debate example: **C1 Economic Burden Shift** (refugee resettlement, fiscal burden, weighing gap). Each section uses this same argument so visitors experience the full causal chain.
+
+### Interactive sections (in order)
+
+| Section | Anchor | What it demonstrates |
+|---------|--------|---------------------|
+| Hero | — | Three-line headline with interactive HeroDebateConsole showing live analysis output |
+| Pipeline showcase | `#practice` | Animated `Audio → Transcript → Flow → Ballot → Drill` fast-loop overview; starts on in-view |
+| Speech-to-flow | `#speech-to-flow` | Bidirectional transcript ↔ flow-node highlighting; coaching gap callout; interactive phrase annotation |
+| Judge lens | `#judge` | Three-judge ARIA tab simulator (Flow / Lay / Parent); roving tabIndex keyboard nav; ballot artifact with decisive issue, ballot note, and correction |
+| Coaching story | `#product-proof` | Decisive moment card (C1 chain status) → drill bridge (gap-trigger, drill prompt) → transformation card (before/after re-record with causal connectors) |
+| Evidence | `#evidence` | Evidence Studio provenance strip |
+| For coaches | `#team` | Team workflow strip |
+| Trust | `#trust` | Six trust principles (incl. inspectability) |
+
+The homepage does not scroll-hijack, uses no perpetual animations, and remains fully navigable without JavaScript completing.
+
+---
+
+## Architecture
+
+```text
+Browser
+  ↓
+Next.js frontend (Vercel)
+  ↓
+FastAPI backend (Render / Railway)
+  ├── Supabase Auth (Google OAuth, JWT verification)
+  ├── Supabase Postgres (user data, speeches, reports, teams)
+  ├── Supabase Storage (audio files)
+  ├── Whisper API (transcription)
+  ├── OpenAI API (argument analysis, judge evaluation, drill generation)
+  ├── Evidence pipeline
+  │     ├── Trafilatura / BeautifulSoup (web extraction)
+  │     ├── BM25 + optional CrossEncoder (candidate ranking)
+  │     └── pysbd (sentence segmentation)
+  └── LangGraph (pipeline orchestration — AI analysis flow)
 ```
 
 ### Frontend
+
+- **Framework:** Next.js 15+ (App Router)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS with custom design tokens (see `frontend/src/app/globals.css`)
+- **Components:** shadcn/ui primitives + hand-authored components
+- **Animation:** motion/react (framer-motion v11+) with `reducedSafe()` wrapper
+- **Auth client:** `@supabase/supabase-js`
+- **State:** React state + `useSyncExternalStore` for theme; no global state library
+
+### Backend
+
+- **Framework:** FastAPI 0.136+
+- **Language:** Python 3.11+
+- **AI orchestration:** LangGraph (argument analysis pipeline)
+- **LLM provider:** OpenAI (GPT-4 class models; structured outputs via Pydantic)
+- **Transcription:** Whisper API
+- **Text extraction:** trafilatura, beautifulsoup4, pysbd, rank-bm25
+- **Database client:** Supabase Python client (service-role for RLS bypass in server context)
+
+### Infrastructure
+
+- **Auth/DB/Storage:** Supabase (Postgres with Row Level Security)
+- **Frontend hosting:** Vercel (root directory: `frontend/`)
+- **Backend hosting:** Render or Railway (root directory: `backend/`, start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
+
+---
+
+## Repository Structure
+
+```text
+RoundLab/
+├── frontend/                   Next.js frontend
+│   ├── src/
+│   │   ├── app/                App Router pages and layouts
+│   │   │   ├── page.tsx        Public homepage
+│   │   │   ├── dashboard/      Student dashboard
+│   │   │   ├── session/        Speech recording/upload
+│   │   │   ├── speech/         Speech report view
+│   │   │   ├── evidence/       Evidence Studio
+│   │   │   ├── team/           Coach and team pages
+│   │   │   └── demo/           Interactive demo report
+│   │   ├── components/
+│   │   │   ├── marketing/      Homepage section components
+│   │   │   ├── shell/          AppShell, sidebar, mobile nav
+│   │   │   ├── ui/             Primitives (button, dialog, tabs, etc.)
+│   │   │   ├── evidence/       Evidence Studio sub-components
+│   │   │   └── speech/         Speech report sub-components
+│   │   ├── lib/                Utilities, supabase client, motion helpers
+│   │   └── hooks/              Custom React hooks
+│   ├── src/__tests__/          Jest unit tests
+│   ├── e2e/                    Playwright end-to-end tests
+│   └── public/                 Static assets, PWA manifest
+│
+├── backend/                    FastAPI backend
+│   ├── app/
+│   │   ├── main.py             FastAPI app entry point, router registration
+│   │   ├── config.py           Pydantic settings (env var loading)
+│   │   ├── api/                Route handlers (one file per resource)
+│   │   ├── models/             Pydantic request/response models
+│   │   ├── pipeline/           AI analysis pipeline modules
+│   │   └── services/           Business logic (delivery analysis, drill gen, etc.)
+│   └── tests/                  pytest backend tests
+│
+├── supabase/
+│   └── migrations/             SQL migration files (timestamped, applied in order)
+│
+├── docs/                       Design docs, rubrics, planning docs
+│   ├── ROUNDLAB_DESIGN_DIRECTION.md
+│   ├── VISUAL_REVIEW_CHECKLIST.md
+│   ├── ai-pipeline.md
+│   ├── debate-rubric.md
+│   ├── product-requirements.md
+│   └── project-plan.md
+│
+├── DESIGN.md                   Design system reference for contributors
+├── DEPLOYMENT.md               Full deployment checklist and env var reference
+└── README.md                   This file
+```
+
+---
+
+## Local Development Setup
+
+### Prerequisites
+
+- Node.js 18+
+- Python 3.11+
+- A Supabase project (free tier is sufficient for development)
+- OpenAI API key
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd RoundLab
+```
+
+### 2. Frontend setup
 
 ```bash
 cd frontend
 npm install
 ```
 
-Create `frontend/.env.local`:
+Copy and fill in the frontend environment file:
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```bash
+cp .env.example .env.local
+# Edit .env.local with your values
 ```
+
+Start the development server:
 
 ```bash
 npm run dev
 # Opens at http://localhost:3000
 ```
 
-### Database Setup
-
-Apply migrations in the order listed below. Use the Supabase Dashboard SQL Editor or the CLI after `supabase link`:
+### 3. Backend setup
 
 ```bash
-supabase db push
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Manual order if applying individually:
+Copy and fill in the backend environment file:
 
-```
-20260524000000_initial_schema.sql          # Core tables
-20260601000000_add_drill_fields.sql        # Drill metadata
-20260602000000_add_teams.sql               # Teams + team_members
-20260602100000_add_feedback_rating.sql     # Feedback rating fields
-20260604000000_add_xp_ledger.sql           # XP events + scoring version
-20260606000000_add_drill_time_limit.sql    # time_limit_seconds on drills
-20260607000000_add_rerecord_fields.sql     # parent_speech_id + parent_drill_id
-20260608100000_add_evidence_tables.sql     # Evidence Library Phase 1
-20260608110000_fix_document_storage_policies.sql
-20260609000000_add_pilot_tables.sql        # product_events, drill_ratings, output_feedback
-20260609100000_expand_drill_order_constraint.sql
-20260609200000_relax_drills_order_check.sql
-20260609300000_add_analysis_jobs.sql       # analysis_jobs table
-20260609400000_add_argument_map_correction.sql
-20260609500000_add_delivery_metrics.sql    # delivery_metrics table
-20260609600000_add_pgvector_embeddings.sql # pgvector extension, embedding column on document_chunks, match_document_chunks RPC, RAG audit columns on claim_evidence_checks
-20260609700000_add_shared_reports.sql      # shared_reports table with token, include flags, expiry, RLS policies
+```bash
+cp .env.example .env
+# Edit .env with your values
 ```
 
-**Storage buckets** — create these in Supabase Dashboard under Storage:
+Start the backend:
 
-| Bucket | Access | Purpose |
-|---|---|---|
-| `audio` | Public read | Speech recording playback |
-| `documents` | Private | Uploaded case/evidence files |
+```bash
+uvicorn app.main:app --reload
+# Runs at http://localhost:8000
+```
+
+### 4. Supabase migrations
+
+Apply all migration files in the `supabase/migrations/` directory in timestamp order via the Supabase SQL editor or CLI. See `DEPLOYMENT.md` for the full Supabase setup checklist.
+
+### 5. Verify the setup
+
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend health: [http://localhost:8000/health](http://localhost:8000/health)
+- Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `frontend/.env.local`
 
 ---
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
-
-| Variable | Required | Description |
-|---|---|---|
-| `SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_KEY` | Yes | Service role key — backend only, never expose to browser |
-| `OPENAI_API_KEY` | Yes | OpenAI key with Whisper + gpt-4o-mini access |
-| `ENVIRONMENT` | No | `development` or `production` (enables dev-only routes) |
-| `LOG_LEVEL` | No | Default: `INFO` |
-| `CORS_ORIGINS` | No | Comma-separated allowed origins; default: `http://localhost:3000` |
-
 ### Frontend (`frontend/.env.local`)
 
-| Variable | Required | Description |
-|---|---|---|
-| `NEXT_PUBLIC_API_URL` | Yes | Backend base URL |
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Anon key — safe for browser |
+| Variable | Purpose | Browser-safe |
+|----------|---------|--------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Yes (`NEXT_PUBLIC_`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key (public) | Yes (`NEXT_PUBLIC_`) |
+| `NEXT_PUBLIC_API_URL` | Backend API base URL | Yes (`NEXT_PUBLIC_`) |
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+### Backend (`backend/.env`)
+
+| Variable | Purpose | Notes |
+|----------|---------|-------|
+| `SUPABASE_URL` | Supabase project URL | Server-only |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key (bypasses RLS) | **Never expose to browser** |
+| `OPENAI_API_KEY` | OpenAI API key for analysis and transcription | Server-only |
+| `CORS_ORIGINS` | Comma-separated allowed origins | e.g. `http://localhost:3000` |
+| `ENVIRONMENT` | `development`, `staging`, or `production` | Enables dev-only endpoints when `development` |
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+OPENAI_API_KEY=sk-your-openai-key-here
+CORS_ORIGINS=http://localhost:3000
+ENVIRONMENT=development
+```
+
+### Optional integrations
+
+| Variable | Purpose | Where set |
+|----------|---------|-----------|
+| `TAVILY_API_KEY` | Research search provider (Evidence Studio) | Backend |
+| `EXA_API_KEY` | Alternative search provider | Backend |
+| `FIRECRAWL_API_KEY` | Page extraction fallback | Backend |
+| `COHERE_API_KEY` | Optional semantic reranking | Backend |
 
 ---
 
-## Running Tests
+## Database and Migrations
 
-### Backend (pytest)
+RoundLab uses Supabase Postgres with Row Level Security (RLS). Every user-owned table is scoped by `user_id` with RLS policies that enforce ownership.
+
+The service-role key used in the backend bypasses RLS for server-side operations. It must never enter the browser.
+
+### Migration files
+
+Located at `supabase/migrations/`. Apply in timestamp order:
+
+```
+20260524000000_initial_schema.sql        Core tables: speeches, transcripts, argument_maps, feedback_reports, drills
+20260601000000_add_drill_fields.sql
+20260602000000_add_teams.sql             Team/coach tables and RLS
+20260602100000_add_feedback_rating.sql
+20260604000000_add_xp_ledger.sql
+20260606000000_add_drill_time_limit.sql
+20260607000000_add_rerecord_fields.sql
+20260608100000_add_evidence_tables.sql   Evidence Studio tables
+20260608110000_fix_document_storage_policies.sql
+20260609000000_add_pilot_tables.sql
+...                                      (21 migrations total as of Phase D)
+20260618000000_add_assignments.sql       Coach assignment system
+```
+
+Apply via the Supabase Dashboard SQL editor or Supabase CLI:
 
 ```bash
-cd backend
-source .venv/bin/activate
-pytest                                      # all 763 tests
-pytest tests/ -q                            # quiet output
-pytest tests/test_delivery_analysis.py -v  # delivery tests only
-pytest tests/test_evidence_rag.py -v       # Evidence RAG tests
-pytest tests/test_embeddings.py -v         # embeddings service tests
-pytest tests/test_shared_reports.py -v     # share report endpoint tests
-pytest tests/test_schema_validation.py -v  # schema tests
+supabase db push   # if using Supabase CLI with linked project
 ```
+
+See `DEPLOYMENT.md` for the complete Supabase setup walkthrough including the required `audio` storage bucket.
+
+---
+
+## Testing
+
+All commands must be run from the `frontend/` directory unless otherwise noted.
 
 ### Frontend (Jest)
 
 ```bash
 cd frontend
-npm test                                    # all 418 tests
-npm test -- --testPathPattern delivery      # filter by name
-npm test -- --testPathPattern shareReport   # share report logic tests
-npm test -- --watch                         # watch mode
+npx jest --no-coverage       # full suite
+npx jest --watchAll          # watch mode
+npx jest --testPathPatterns="marketing"   # single suite
 ```
 
-### Type checking
+### TypeScript
 
 ```bash
 cd frontend
-npx tsc --noEmit                            # type check without emitting
+npx tsc --noEmit
 ```
 
 ### Production build
 
 ```bash
 cd frontend
-npm run build                               # full Next.js build
+npm run build
 ```
 
-### Evaluation harness
+### Playwright (end-to-end)
+
+Playwright runs the frontend dev server automatically during tests.
+
+```bash
+cd frontend
+npx playwright test                          # all projects
+npx playwright test e2e/speechFlow.spec.ts   # single spec
+npx playwright test --list                   # see all test names
+```
+
+**Projects:** `chromium`, `mobile-chrome`, `tablet`
+
+### Backend (pytest)
 
 ```bash
 cd backend
 source .venv/bin/activate
-python -m evals.run_evals --mock            # no API cost
-python -m evals.run_evals                   # real LLM calls
-python -m evals.run_evals --fixture good_constructive
+python -m pytest tests/                      # full suite
+python -m pytest tests/test_auth.py          # single file
 ```
 
----
+### Current test baseline (Phase D — point in time)
 
-## API Reference
+| Suite | Count |
+|-------|-------|
+| Frontend Jest — passing | 1,452 |
+| Playwright — unique test definitions | 118 |
+| Playwright — spec files | 7 |
+| Playwright — projects | 3 |
+| Playwright — total project-expanded executions | 354 |
+| Backend pytest — collected | ~1,330 |
+| TypeScript | clean |
+| Frontend build | green |
 
-### Health
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Service health check |
-
-### Speeches
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/speeches` | Create a new speech session |
-| GET | `/speeches?user_id={id}` | List speeches for a user |
-| GET | `/speeches/{id}` | Get speech detail |
-| PATCH | `/speeches/{id}` | Update speech metadata |
-| DELETE | `/speeches/{id}` | Delete speech and cascade |
-| POST | `/speeches/{id}/reset-audio` | Delete audio and reset pipeline |
-| POST | `/speeches/{id}/transcribe` | Trigger Whisper transcription |
-| POST | `/speeches/{id}/extract-arguments` | Trigger argument extraction |
-| POST | `/speeches/{id}/generate-feedback` | Trigger feedback generation |
-| POST | `/speeches/{id}/generate-drills` | Trigger drill generation |
-| POST | `/speeches/{id}/analyze` | Trigger full async pipeline |
-| GET | `/speeches/{id}/comparison?user_id={id}` | Re-record improvement comparison |
-| POST | `/speeches/{id}/evidence-check` | Check claim against evidence library |
-| GET | `/speeches/{id}/evidence-checks?user_id={id}` | List saved evidence checks |
-| GET | `/speeches/{id}/delivery-metrics` | Get delivery metrics for speech |
-| POST | `/speeches/{id}/delivery-metrics/recompute` | Recompute delivery from stored transcript |
-
-### Drills
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/speeches/{id}/drills` | List drills for a speech |
-| PATCH | `/drills/{id}` | Update drill status |
-| POST | `/drills/{id}/attempts` | Record a drill attempt |
-
-### Users
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/users/{id}/progress` | XP, level, badges, skill averages, incomplete drills |
-| POST | `/users/{id}/events` | Record a product analytics event |
-
-### Teams
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/teams` | Create a team |
-| POST | `/teams/join` | Join team by invite code |
-| GET | `/teams/users/{id}` | List teams for a user |
-| GET | `/teams/{id}/dashboard` | Coach view with student progress |
-
-### Documents (Evidence Library)
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/documents` | Register uploaded document, trigger parsing, and embed chunks |
-| GET | `/documents?user_id={id}` | List documents |
-| GET | `/documents/{id}?user_id={id}` | Document with chunks and evidence cards |
-| DELETE | `/documents/{id}?user_id={id}` | Delete document and cascade |
-| POST | `/documents/{id}/embed` | Embed any un-embedded chunks for an existing document |
-| POST | `/documents/search` | Search evidence library; `mode` param: `keyword`, `semantic`, or `hybrid` |
-
-### Shared Reports
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/speeches/{id}/share` | user_id body | Create or refresh a share link; returns token and include flags |
-| GET | `/speeches/{id}/share?user_id={id}` | query param | Get current active share settings (null if none) |
-| PATCH | `/shared-reports/{share_id}` | user_id body | Update which sections are included |
-| DELETE | `/shared-reports/{share_id}?user_id={id}` | query param | Revoke the share link permanently |
-| GET | `/shared-reports/{token}` | none (public) | Fetch sanitized report payload for a valid, non-revoked, non-expired token |
-
-**Privacy rules for `GET /shared-reports/{token}`:**
-- Returns HTTP 410 Gone if the link has been revoked or is past its expiry
-- Returns HTTP 404 if the token does not exist
-- `user_id`, `audio_url`, and storage paths are never included in the response
-- `evidence_summary` is excluded unless `include_evidence_summary` is explicitly `true`
-- Each section (transcript, flow, feedback, drills, delivery, improvement) is included only if the `include_*` flag is true AND the data exists in the database
-
-### Jobs
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/jobs/{id}` | Get analysis job status and progress |
-
-### Pilot
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/pilot/summary?user_id={id}` | Per-user pilot metrics |
-
-### Output Feedback
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/output-feedback` | Submit confusion report on AI output |
+The Playwright count of 354 reflects 118 unique tests × 3 browser projects. When reporting test results, distinguish unique tests from total executions to avoid confusion.
 
 ---
 
-## Frontend Pages and Components
+## Accessibility and Responsive Design
 
-### Pages
+### Keyboard interaction
 
-| Route | Description |
-|---|---|
-| `/` | Homepage; adapts based on auth state and progress |
-| `/dashboard` | Progress dashboard with XP, level, drills, delivery focus card |
-| `/session` | Create a new speech session |
-| `/speech/[id]` | Full speech workspace: flow, coaching report, delivery, drills |
-| `/team` | Team management and coach dashboard |
-| `/evidence` | Evidence Library: upload, browse, search documents |
-| `/drills` | Standalone drills view |
-| `/demo` | Public demo with static sample data; no login required |
-| `/evals` | Eval quality dashboard (reads static fixture data) |
-| `/pilot` | Pilot metrics for current user |
-| `/learn` | Onboarding reference material |
-| `/login` | Supabase Auth with Google OAuth |
-| `/share/[token]` | Public shared coach report; no login required; 410 if revoked or expired |
+- All interactive elements are keyboard-reachable via Tab
+- ARIA tab patterns use manual roving tabIndex with ArrowLeft/Right/Home/End navigation
+- Custom `focus-visible` rings use `ring-lav/50` to distinguish from decorative borders
+- Focus is trapped in dialogs and restored on close
 
-### Key components
+### ARIA patterns
 
-| Component | Description |
-|---|---|
-| `DeliveryCoachPanel` | Delivery score ring, pacing band, filler breakdown, expandable 5-segment timeline |
-| `FlowBoard` | Horizontal scrolling flow sheet with snap carousel |
-| `FlowTable` | Vertical flow table with argument type color coding |
-| `ArgumentChain` | Inline claim-warrant-evidence-impact chain display |
-| `ScoreCard` | Score ring with dimension breakdown |
-| `ImprovementComparisonCard` | Before/after delta for score, delivery score, and filler count |
-| `FirstRunCommandCenter` | Onboarding state machine for zero-speech users |
-| `EvidenceSupportPanel` | Evidence check results with support level labels |
-| `AnalysisProgressCard` | Job polling progress bar and step labels |
-| `DrillCard` | Drill display with attempt recorder and rating |
-| `PilotChecklist` | Live pilot loop checklist with completion flags |
-| `SkillTrendCard` | Per-dimension improvement trend vs. previous speech |
-| `JudgeLensComparison` | Side-by-side feedback delta when judge type changes |
-| `CoachMarginNote` | Inline coach observation card |
-| `DashboardCockpitBand` | Stats band across the top of the dashboard |
-| `CoachReportView` | Print-friendly shared report renderer; all sections conditional on data and include flags |
-| `ShareReportModal` | Share link create/update/revoke modal; evidence summary off by default; expiry pill buttons |
+- Tablist/tab/tabpanel pattern in JudgeLensSection (Phase B) with `aria-selected` and `aria-controls`
+- Live regions (`role="status" aria-live="polite"`) for dynamic content changes
+- Landmark roles on all major page sections
+- Buttons never used for navigation; links never used for actions
 
----
+### Reduced-motion
 
-## Evaluation Harness
+All animations are wrapped in `reducedSafe()` from `src/lib/motion.ts`. When `prefers-reduced-motion: reduce` is active:
+- Entrance animations are suppressed entirely (no `initial` prop)
+- State transitions are instant
+- No content depends on animation completing to be readable
+- The `isMounted` pattern prevents hydration mismatch for animation state
 
-RoundLab includes a labeled evaluation system to measure whether AI outputs are debate-correct.
+### Responsive targets
 
-### Running evals
+| Viewport | Context |
+|----------|---------|
+| 390×844 | Mobile (iPhone 14) |
+| 768×1024 | Tablet portrait |
+| 1024×768 | Laptop small |
+| 1280×800 | Laptop standard |
+| 1440×900 | Desktop |
 
-```bash
-cd backend
-source .venv/bin/activate
+Playwright responsive tests run at 390×844 (mobile-chrome project). Overflow checks use `scrollWidth ≤ viewport + 2px`.
 
-# No API cost — tests eval machinery only
-python -m evals.run_evals --mock
+### Accessibility testing
 
-# Real LLM calls — accurate results
-python -m evals.run_evals
+Playwright tests use `@axe-core/playwright` for automated WCAG 2.1 AA checks. Suppressions are documented inline in `e2e/accessibility.spec.ts`.
 
-# Single fixture
-python -m evals.run_evals --fixture good_constructive
-
-# Limit to first N fixtures
-python -m evals.run_evals --mock --limit 3
-```
-
-Results write to `backend/evals/results/latest.json` and a timestamped archive.
-
-### Fixtures
-
-| ID | Speech type | Primary test focus |
-|---|---|---|
-| `good_constructive` | constructive | No explicit impact weighing |
-| `missing_warrant_constructive` | constructive | No logical mechanisms |
-| `weak_evidence_constructive` | constructive | Vague or unnamed sources |
-| `no_weighing_summary` | summary | Extensions without impact comparison |
-| `dropped_argument_rebuttal` | rebuttal | Ignores opponent C2 entirely |
-| `new_argument_final_focus` | final_focus | New evidence introduced in final focus |
-| `no_clash_rebuttal` | rebuttal | Only restates own case |
-| `strong_delivery_weak_logic` | constructive | Circular arguments, no evidence |
-
-A fixture passes if issue F1 is at least 0.5, argument coverage is at least 0.5, and all `required` issues are detected.
-
-On the current internal fixture suite, real evals have previously reached 8/8 passing with F1 around 0.850.
-
-### Eval metrics
-
-| Metric | Description |
-|---|---|
-| Issue Precision | Fraction of detected issues that were expected |
-| Issue Recall | Fraction of expected issues that were detected |
-| Issue F1 | Harmonic mean of precision and recall |
-| Argument Coverage | Fraction of expected argument components found |
-| Drill Relevance | Fraction of expected skill targets in generated drills |
-| Hallucinated Evidence | Arguments with vague or unnamed source attributions |
-
-### Adding a fixture
-
-1. Create `backend/evals/fixtures/<id>.json` following the `EvalSpeechFixture` schema in `backend/evals/models.py`
-2. Set `required: true` on issues that must be detected for the fixture to pass
-3. Run `python -m evals.run_evals --mock --fixture <id>` to verify the file loads
+No full WCAG certification has been conducted.
 
 ---
 
-## Delivery Coach
+## Design System
 
-Delivery analysis is fully deterministic — no LLM, no external API. It derives metrics from the transcript text and optional duration.
+See [`DESIGN.md`](DESIGN.md) for the complete token reference and design principles.
 
-### Metrics computed
+See [`docs/ROUNDLAB_DESIGN_DIRECTION.md`](docs/ROUNDLAB_DESIGN_DIRECTION.md) for phase-by-phase design decisions and visual review records.
 
-| Metric | Method |
-|---|---|
-| Words per minute | word count / (duration / 60) |
-| Pacing band | too_slow (<110 WPM), steady (110–180), too_fast (>180), unknown |
-| Filler word count | Multi-word fillers detected first to prevent double-counting |
-| Filler breakdown | Per-word count dictionary |
-| Repeated phrases | 2–4 word n-grams appearing 3+ times (common phrases excluded) |
-| Long sentences | Sentences exceeding 30 words |
-| Delivery score | 100 minus stacked penalties for pacing, fillers, repetition, long sentences, short speech; clamped 0–100 |
-| Clarity flags | `too_fast`, `too_slow`, `many_fillers`, `moderate_fillers`, `long_sentences`, `repetitive_wording` |
+See [`docs/VISUAL_REVIEW_CHECKLIST.md`](docs/VISUAL_REVIEW_CHECKLIST.md) for the pre-PR visual review protocol.
 
-### 5-segment timeline
+### Core principles (summary)
 
-The transcript is divided into five equal-word chunks with approximate timestamps. Each segment reports filler count, repeated phrase hits, and flags, letting students see whether their pacing or filler use degrades as the speech progresses.
+1. **Debate structure is the design.** Every surface should evoke a flow sheet, a ballot, or a judge's desk.
+2. **Product interface is the marketing.** Show real UI states, not abstract illustrations.
+3. **One section, one idea.** Never stack identical rhythms.
+4. **Color carries meaning.** `lav` = brand/AI provenance. `ok/warn/danger` = argument health. Never decorative.
+5. **Restrained motion.** Animate workflow progression and state transitions only. No perpetual animation.
+6. **Preserve successful visual ideas.** A comprehensive UI improvement should refine strong existing interactions rather than replace them by default.
 
-### Delivery drills
+### Design tokens (in `frontend/src/app/globals.css`)
 
-`make_delivery_drill()` in `drill_generation.py` generates one deterministic drill per speech based on priority:
+Key tokens: `canvas`, `surface-1/2/3`, `hairline/hairline-strong`, `ink/ink-muted/ink-subtle/ink-faint`, `lav/lav-hi`, `ok/warn/danger`.
 
-1. `too_fast` flag + WPM > 185 → pacing_control drill
-2. `many_fillers` flag + filler rate > 5% → filler_reduction drill
-3. `long_sentences` flag → clarity_delivery drill
-
-Only one delivery drill is appended, and only if no delivery-targeted drill was already generated by the LLM pass.
-
----
-
-## Evidence Library
-
-The Evidence Library stores uploaded case files and uses pgvector semantic search to connect speech claims to the closest matching evidence in the student's own library.
-
-### How it works
-
-1. Student uploads a PDF, DOCX, TXT, or MD case file (max 20 MB)
-2. Text is extracted (PDF via PyMuPDF; DOCX via python-docx; TXT/MD native)
-3. The document is split into chunks; each chunk is embedded with `text-embedding-3-small` (1536 dimensions) and stored in `document_chunks.embedding`
-4. The pipeline detects evidence card boundaries and extracts tag, author, year, source, and card text
-5. Cards are stored with `attribution_complete: false` if author, year, or source is missing — RoundLab never fabricates citations
-6. Students can search the library in three modes:
-   - **Keyword** — PostgreSQL full-text search with `ilike` fallback
-   - **Semantic** — cosine similarity over chunk embeddings via the `match_document_chunks` RPC
-   - **Hybrid** — semantic results first; keyword fills any remaining gaps (recommended default)
-7. Evidence support checks embed the claim, retrieve the top-k closest chunks, then classify support level with the LLM; results include matched chunk IDs, similarity scores, retrieved snippets, and a `missing_link` suggestion
-
-### Support levels
-
-| Level | Meaning |
-|---|---|
-| `supported` | An uploaded card directly supports the claim |
-| `partially_supported` | An uploaded card is related but does not fully prove the exact claim or magnitude |
-| `unsupported` | No uploaded card supports the claim as stated |
-| `unverifiable` | No relevant card was found in the library |
-
-### Similarity thresholds
-
-| Label | Similarity range | UI color |
-|---|---|---|
-| Strong match | ≥ 0.70 | green |
-| Possible match | 0.45 – 0.69 | amber |
-| Weak match | < 0.45 | red |
-
-### Semantic retrieval path
-
-```
-claim text  →  embed_text()  →  match_document_chunks RPC (cosine distance)
-            →  ranked chunks  →  LLM classifies support (no outside knowledge)
-            →  SupportCheckResult (matched_chunk_ids, top_similarity, retrieved_snippets, support_rationale, missing_link)
-```
-
-If embedding fails or the RPC returns no results, the check falls back to keyword ranking over evidence cards. The `retrieval_mode` field on each result indicates which path was used (`semantic`, `keyword`, or `none`).
-
-### Backfilling embeddings for existing documents
-
-```bash
-cd backend
-source .venv/bin/activate
-python -m app.scripts.embed_existing_documents --user-id <uuid>
-python -m app.scripts.embed_existing_documents --document-id <uuid> --dry-run
-```
-
-Alternatively, call `POST /documents/{id}/embed` to re-embed a single document via the API.
-
-### Limitations
-
-- Scanned image PDFs without an embedded text layer are not supported
-- `.doc` (legacy Word format) is not supported; convert to `.docx` or `.txt`
-- Semantic search requires the pgvector extension to be enabled in Supabase and chunks to have been embedded; documents uploaded before the RAG migration need backfilling
-- Evidence checking is triggered manually per claim; it is not run automatically during the pipeline
-- RoundLab only searches the student's uploaded library — it never uses outside web knowledge or fabricates evidence
-
----
-
-## Shareable Coach Reports
-
-Students can share a read-only coaching report with a coach or parent using a private, token-gated link. Reports are private by default — no share link is created until the student explicitly requests one.
-
-### Privacy model
-
-- Links are never publicly indexed; they are accessible only to people who have the URL
-- Each link is a 43-character cryptographically random token (`secrets.token_urlsafe(32)`)
-- Evidence files and audio recordings are **never** included
-- `user_id`, `audio_url`, and internal storage paths are stripped from the public response
-- Evidence risk summary is **excluded by default**; students must explicitly enable it
-- Links can be revoked instantly; the shared URL returns 410 Gone after revocation
-
-### What gets shared
-
-The student chooses which sections to include when creating the link. All sections are on by default except evidence risk summary:
-
-| Section | Default | Description |
-|---|---|---|
-| Judge feedback | On | Summary, priorities, strengths, weaknesses, score breakdown |
-| Argument flow | On | All extracted arguments with claim, warrant, evidence, impact |
-| Practice plan | On | All three drills with prompts and success criteria |
-| Delivery | On | WPM, filler count, delivery score, pacing band |
-| Transcript | On | Full speech transcript text |
-| Improvement vs. previous | On | Score and delivery deltas from the most recent re-record |
-| Evidence risk summary | Off | Evidence support check summary (excluded by default) |
-
-### Share link expiry
-
-| Option | Behavior |
-|---|---|
-| No expiration | Link stays active until revoked |
-| 7 days | Automatically expires; returns 410 after expiry |
-| 30 days | Automatically expires; returns 410 after expiry |
-
-### Print-to-PDF
-
-The shared report page includes a Print button. Clicking it calls `window.print()`. The `@media print` CSS hides navigation, modal backdrops, and buttons; sets a 12pt black-on-white layout; and adds page break hints to sections. Use the browser's "Save as PDF" option when printing.
-
-### Copy practice plan
-
-The speech report page includes a "Copy practice plan" button that formats the coaching report, priorities, drills, and delivery metrics as plain indented text and copies it to the clipboard. The plan can be pasted into a message or shared without a link.
-
----
-
-## Gamification
-
-XP is awarded only for practice actions, not for passive uploads. The XP system is designed to reinforce the practice loop.
-
-### XP values
-
-| Action | XP |
-|---|---|
-| Flow generated | +5 |
-| Feedback report generated | +10 |
-| Drill assigned | +15 |
-| Feedback rating submitted | +10 |
-| First drill attempt | +50 |
-| Repeat drill attempt | +20 |
-| Full practice loop completed (feedback + drills + attempts) | +25 bonus |
-| Speech upload or transcription | 0 |
-
-### Level thresholds
-
-| Level | XP range |
-|---|---|
-| 1 | 0–99 |
-| 2 | 100–249 |
-| 3 | 250–499 |
-| 4 | 500–899 |
-| 5 | 900–1399 |
-| 6+ | 1400+ (300 per level) |
-
-### Badges
-
-| Badge | Condition |
-|---|---|
-| First Feedback | First feedback report received |
-| First Drill Attempt | First drill attempt recorded |
-| Practice Habit | 3 drill attempts completed |
-| Full Practice Loop | Completed feedback + drills + attempts in one session |
-| Feedback Analyst | 3 feedback reports rated |
-| Team Player | Joined a team |
-
----
-
-## Team Features
-
-- Coaches create a team and receive a 6-character invite code
-- Students join by entering the invite code
-- One user can belong to multiple teams with different roles in each
-- The coach dashboard shows per-student speech count, drills assigned, drill attempts, and last practice date
-- Coaches see progress metadata only; audio recordings and full transcripts are not exposed
-
----
-
-## First-Run Onboarding and Demo Mode
-
-### First-run state machine
-
-`deriveFirstRunState()` in `frontend/src/lib/firstRunHelpers.ts` returns one of nine states based on `ProgressSummary`, `PilotSummary`, and the speech list:
-
-| State | Condition |
-|---|---|
-| `no_activity` | No speeches recorded |
-| `speech_recorded` | Speech uploaded, not yet analyzed |
-| `flow_ready` | Argument flow extracted |
-| `feedback_ready` | Feedback report complete |
-| `drills_assigned` | Drills generated |
-| `drill_attempted` | At least one drill attempt saved |
-| `rerecorded` | Re-recording exists |
-| `comparison_viewed` | Improvement comparison viewed |
-| `active_user` | 3+ feedback reports and 3+ drill attempts |
-
-The `active_user` threshold gates the transition from onboarding to the full dashboard experience.
-
-### FirstRunCommandCenter
-
-When a user has zero speeches, the dashboard renders `FirstRunCommandCenter` instead of the normal progress cards. It shows a mission brief, step-by-step guide, and CTA to record a first speech.
-
-### Contextual help panels
-
-The speech report page embeds collapsible help panels at three points:
-- **What is a flow?** — adjacent to the flow section
-- **Why does warranting matter?** — adjacent to the coaching report
-- **What does the judge lens change?** — adjacent to the judge lens selector
-
-### Demo mode
-
-The `/demo` page is publicly accessible without login. It renders a complete sample speech report using static fixture data (`SAMPLE_ARGUMENT_MAP_V1`, `SAMPLE_SPEECH_V2`, `SAMPLE_FEEDBACK_V2`, `SAMPLE_DRILLS_V2`). All content is labeled as demo data. No authenticated user data is used or mixed in.
-
----
-
-## Async Analysis Jobs
-
-The full analysis pipeline runs as a background job to avoid blocking the HTTP response.
-
-### Flow
-
-1. Frontend calls `POST /speeches/{id}/analyze`
-2. Backend creates an `analysis_jobs` row with `status: pending` and returns the job ID immediately
-3. The pipeline runs in a background thread, writing progress (step name, progress_pct) to the `analysis_jobs` row after each step
-4. Frontend polls `GET /jobs/{id}` every 2 seconds and renders `AnalysisProgressCard` with the current step and percentage
-5. On `status: complete`, the frontend fetches the full speech report
-6. On `status: failed`, the frontend shows a recovery UI with a retry button
-
-### Job statuses
-
-| Status | Meaning |
-|---|---|
-| `pending` | Queued, not yet started |
-| `running` | Pipeline in progress |
-| `complete` | All steps succeeded |
-| `failed` | Pipeline encountered a fatal error |
-
----
-
-## Pilot Testing Protocol
-
-RoundLab is designed for a 5–10 student pilot. The recommended session flow is:
-
-1. Student records one PF speech (any speech type)
-2. Student opens the flow report and reviews the judge-style coaching report
-3. Student completes one recommended drill
-4. Student re-records the speech
-5. Student views the improvement comparison
-6. Student rates the feedback helpfulness
-
-### Pilot checklist flags
-
-| Flag | Meaning |
-|---|---|
-| `return_for_second_speech` | Student recorded 2+ speeches |
-| `completed_one_drill` | At least one drill marked completed |
-| `rerecord_count` | Speeches recorded over a parent speech |
-| `comparison_count` | Times the improvement comparison was viewed |
-| `feedback_rating_count` | Number of feedback reports rated |
-
-### Pilot dashboard
-
-Navigate to `/pilot` to see per-user pilot metrics, skill trends, common issues from feedback reports, and the full pilot checklist with live completion state.
-
-The pilot dashboard shows only the current user's data. No cross-user data is exposed.
-
-### Feedback and confusion reporting
-
-Feedback reports support three helpfulness ratings: `helpful`, `somewhat`, `not_helpful`. Users submit from the speech report page; an optional short comment is accepted.
-
-Any AI output surface has a "Report confusing output" control. Users can flag: incorrect issue, generic feedback, evidence mismatch, confusing wording, technical bug, or other. Feedback is stored in `output_feedback` for pilot learning, not public support.
-
----
-
-## Analytics Events
-
-All events are stored in `product_events`. Logging is fire-and-forget and never blocks user flows.
-
-| Event | When fired |
-|---|---|
-| `speech_created` | User creates a new speech session |
-| `rerecord_started` | User creates a speech with a parent speech |
-| `speech_analyzed` | Feedback report generation completes |
-| `feedback_viewed` | User fetches a feedback report |
-| `feedback_rated` | User submits a feedback helpfulness rating |
-| `drill_attempt_saved` | User saves a drill attempt |
-| `drill_attempt_scored` | Drill attempt scoring completes |
-| `drill_rated` | User submits a drill helpfulness rating |
-| `comparison_viewed` | User views a speech improvement comparison |
-| `share_report_modal_opened` | User opens the share report modal |
-| `share_report_created` | User creates or updates a share link |
-| `share_report_copied` | User copies the share link to clipboard |
-| `share_report_revoked` | User revokes an active share link |
-| `shared_report_opened` | Viewer opens a shared report via public token URL |
-| `report_print_clicked` | User clicks Print on the shared report page |
-
----
-
-## Current Limitations
-
-### Audio and transcription
-- Audio formats supported: MP3, WAV, M4A, WebM, OGG, MP4 (max 50 MB)
-- Optimized for 45–90 second PF speeches; very short speeches receive lower scores by design
-- Audio quality directly affects transcript accuracy and downstream AI output quality
-- Browser MediaRecorder support varies by platform; file upload is recommended for iOS Safari
-
-### Evidence Library
-- Scanned image PDFs (no embedded text layer) are not supported
-- `.doc` (legacy Word format) is not supported; use `.docx` or `.txt`
-- Semantic search requires the pgvector extension enabled in Supabase; documents uploaded before the RAG migration must be backfilled with `embed_existing_documents.py` or `POST /documents/{id}/embed`
-- Evidence checking is triggered manually per claim; it is not run automatically during the pipeline
-- Only the student's uploaded documents are searched — outside knowledge is never used
-
-### AI accuracy
-- Argument extraction can misclassify argument types for highly conversational or off-structure speech
-- Debate signal detection has known gaps: new-argument detection in final focus, no-clash rebuttal detection, and false-positive suppression for generic content
-- Evidence support classification may return `unverifiable` for claims that use paraphrased evidence; semantic retrieval mitigates this but does not eliminate it
-- Semantic evidence retrieval degrades to keyword fallback when a document has not yet been embedded
-
-### Teams
-- No leave-team or remove-member functionality yet; coaches must manage membership manually
-- The pilot dashboard shows only the current user's data, not a team-wide aggregate view
-
-### Sharing
-- One active share link per speech at a time; creating a new link with different settings updates the existing one
-- Expiry is checked at request time, not by a background job — the row stays in the database after expiry
-- The shared report renders the snapshot of data at the time of the request, not at the time the link was created
-
-### Gamification
-- Streak bonuses are defined in the XP rules but are not yet automatically awarded
-
-### Delivery analysis
-- Delivery analysis requires the transcript to exist; it cannot be computed from audio alone
-- WPM computation requires `duration_seconds` to be set on the speech record; without it, pacing band returns `unknown`
-- Delivery metrics are computed once at pipeline time; manual recomputation is available via `POST /speeches/{id}/delivery-metrics/recompute`
-
----
-
-## Roadmap
-
-| Item | Notes |
-|---|---|
-| Automatic evidence checking in pipeline | Run evidence support checks as part of the analysis job (currently manual per claim) |
-| AI drill verification | Check whether the student's attempt actually addresses the drill prompt |
-| Streak bonuses | Auto-award XP for consecutive-day practice |
-| Team-wide pilot dashboard | Aggregate metrics across all students in a team |
-| Tournament prep mode (v2) | Judge adaptation profiles; round simulation; blockfile trainer |
-| Tabroom.com integration | Pull tournament results to contextualize practice gaps |
-| Advanced skill trend analytics | Peer comparison; long-range regression charts |
-| Video upload support | Crossfire analysis; body language feedback |
-| Real-time collaboration | Live team practice sessions |
+Key CSS utilities: `section-stamp` (11px mono uppercase for eyebrows), `text-headline` (section headings), `text-title` (metric displays), `beam-top` (top lav gradient accent on cards).
 
 ---
 
 ## Deployment
 
-### Backend (Render, Railway, Fly.io, or equivalent)
+### Frontend (Vercel)
 
-Set environment variables:
+| Setting | Value |
+|---------|-------|
+| Root directory | `frontend` |
+| Build command | `npm run build` |
+| Output directory | `.next` (automatic) |
+| Production branch | `main` |
 
-```
-SUPABASE_URL
-SUPABASE_KEY       # service role key — keep secret
-OPENAI_API_KEY
-ENVIRONMENT=production
-CORS_ORIGINS=https://your-frontend-domain.com
-```
+Required environment variables in Vercel project settings:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_API_URL` (must point to the deployed backend URL)
 
-Start command:
+### Backend (Render or Railway)
 
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
+| Setting | Value |
+|---------|-------|
+| Root directory | `backend` |
+| Start command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Python version | 3.11+ |
 
-### Frontend (Vercel recommended)
+Required environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `CORS_ORIGINS`.
 
-1. Connect the GitHub repository to Vercel
-2. Set the root directory to `frontend`
-3. Set environment variables:
-   - `NEXT_PUBLIC_API_URL` (your deployed backend URL)
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. Deploy
+`CORS_ORIGINS` must include the full Vercel frontend URL (including `https://`).
 
-### Pre-deployment checklist
+### Common deployment pitfalls
 
-- [ ] All backend tests pass (`pytest`)
-- [ ] Frontend builds without errors (`npm run build`)
-- [ ] TypeScript check clean (`npx tsc --noEmit`)
-- [ ] All environment variables set in production
-- [ ] Supabase migrations applied in order (includes `20260609600000_add_pgvector_embeddings.sql` and `20260609700000_add_shared_reports.sql`)
-- [ ] pgvector extension enabled in Supabase (the migration enables it, but confirm it is available for your Supabase plan)
-- [ ] `audio` storage bucket created with public read access
-- [ ] `documents` storage bucket created with private access
-- [ ] CORS origins updated for production domain
-- [ ] OpenAI billing alerts configured (includes embedding API calls via text-embedding-3-small)
+- Vercel project root must be set to `frontend/`, not the repo root — otherwise the build fails
+- Local `.env.local` and `.env` files are never committed; they must be set in the hosting provider's dashboard
+- A local commit does not update production until pushed to `main` and the Vercel deployment completes
+- `SUPABASE_SERVICE_ROLE_KEY` must remain server-side only; `NEXT_PUBLIC_SUPABASE_ANON_KEY` is safe in the browser
+
+See `DEPLOYMENT.md` for the complete first-time setup walkthrough.
 
 ---
 
-## Screenshots
+## Development Workflow
 
-Screenshots will be added when assets are available in a hosted environment.
+```
+feature branch
+  → local changes
+  → npx tsc --noEmit            (TypeScript)
+  → npx jest --no-coverage      (unit tests)
+  → npm run build               (build check)
+  → npx playwright test         (e2e)
+  → visual review at 5 viewports
+  → commit
+  → PR to main
+  → Vercel preview deployment (automatic)
+  → merge to main
+  → production deployment (automatic via Vercel)
+```
+
+### Visual comparison using Git worktrees
+
+To compare two branches side by side in the browser:
+
+```bash
+git worktree add /tmp/roundlab-compare <other-branch>
+cd /tmp/roundlab-compare/frontend && npm install && npm run dev -- --port 3001
+# Main branch runs on :3000, comparison branch on :3001
+```
+
+Worktrees are in `.claude/worktrees/` locally; do not commit them.
+
+### What not to commit
+
+- `.env.local` (frontend secrets)
+- `.env` (backend secrets)
+- Playwright test-result artifacts (`test-results/`)
+- Claude worktrees (`.claude/worktrees/`)
+- Python `__pycache__` and `.venv`
+- Any speech recordings or user data
+
+---
+
+## Current Status
+
+### Operational
+
+- Speech recording, upload, and paste → transcription → argument analysis → ballot → drills
+- Speech report with flow, ballot, skills, transcript, drills, and delivery analysis
+- Evidence Studio: research, card cutting, markup, save, export
+- Team and coach workflows: assignments, review queue, team overview
+- Google authentication via Supabase
+- Interactive homepage with continuous C1 debate example across Phase A–D sections
+- Demo report at `/demo` (full sample without login)
+- Pilot tools at `/pilot`
+
+### Pilot-ready but not yet at scale
+
+- Delivery analysis (deterministic; no ML model)
+- Blockfile/frontline trainer (semantic coverage check)
+- Tournament workout mode
+- Shared coach reports
+
+### Known limitations
+
+- No mobile audio recording optimization (browser-level mic; quality varies)
+- Delivery analysis requires audio; transcript-only input returns structural feedback only
+- Evidence search quality depends on external provider availability (Tavily/Exa)
+- No email notifications or scheduling features
+- No full-round mode (sequential 1AC → 2NC → … flow)
+- Judge adaptation covers three profiles (flow / lay / parent); not further calibrated by individual judge
+
+---
+
+## Roadmap
+
+Items below are planned but not implemented:
+
+- **Full-round mode:** Sequential speech input through the full PF round structure
+- **Expanded judge profiles:** Additional named judge types beyond flow/lay/parent
+- **Evidence-link ingestion:** User provides URLs at research time; system fetches and queues
+- **Scheduling and reminders:** Practice reminder notifications and tournament prep schedules
+- **Richer coach analytics:** Team-wide skill trend dashboards, per-student history
+- **Assignments v2:** Announcements, rubric templates, and assignment comments
+- **Broader public speaking support:** Extension beyond PF to LD, Congress, or extemporaneous
 
 ---
 
 ## Contributing
 
-Pull requests are welcome. For major changes, open an issue first to discuss the approach.
+### Branch convention
 
-When contributing:
-- Run `pytest` before submitting a backend change
-- Run `npm test && npm run build` before submitting a frontend change
-- Do not add new AI-generated content surfaces that could be used for case generation
-- Follow the existing Pydantic schema pattern for all new API responses
+```bash
+git checkout -b feature/my-feature
+# or
+git checkout -b fix/short-description
+# or
+git checkout -b ui/section-name
+```
+
+### Before opening a PR
+
+1. Run `npx tsc --noEmit` — must be clean
+2. Run `npx jest --no-coverage` — all tests must pass
+3. Run `npm run build` — must complete without error
+4. Run `npx playwright test` — all projects must pass
+5. If you added or changed UI: visual review at all five standard viewports
+6. If you changed a marketing section: review `docs/ROUNDLAB_DESIGN_DIRECTION.md` for prior decisions
+
+### Design expectations for UI work
+
+- Every new interactive state needs an accessible non-animated fallback
+- Use design tokens — no `text-[Npx]` or `bg-[#hex]` in component files
+- Reduced-motion: wrap entrance animations in `reducedSafe()`
+- No `role="alert"` on static marketing content
+- Follow the ARIA patterns established in existing components (roving tabIndex for tablists, `role="status"` for live regions)
+
+### Preservation rule
+
+> A comprehensive UI improvement should refine strong existing interactions rather than remove them by default.
+
+Before removing a homepage section or component, document: what it does, what replaced it, and why the replacement is stronger.
+
+### Accessibility expectations
+
+- All interactive elements keyboard-reachable
+- Color is never the only indicator of state (always paired with icon or text)
+- Screen-reader-only text (`sr-only`) for visual-only indicators
+- No content hidden behind JavaScript completion
+
+---
+
+## Security and Privacy
+
+- **Service-role key is server-only.** The `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security and must never appear in frontend code or browser network requests.
+- **User data is scoped.** RLS policies on all user-owned tables enforce that users can only access their own speeches, reports, and drills. Coaches see student data only for teams they manage.
+- **Audio recordings may be sensitive.** Uploaded speech files are stored in Supabase Storage under the user's account. Contributors must not commit any real user recordings.
+- **Credentials are never committed.** `.env`, `.env.local`, and any file containing real keys must remain in `.gitignore`.
+- **No compliance certification** (FERPA, COPPA, GDPR) has been formally conducted. RoundLab is currently in pilot with consenting participants.
 
 ---
 
 ## License
 
-MIT
+No license file is present in this repository. All rights reserved unless otherwise stated by the project owner. Contact the repository owner before using, modifying, or distributing this code.
 
 ---
 
-## Status
-
-RoundLab is in active development, pre-production. It is not yet deployed to a public production environment.
-
-- Backend test suite: **645 tests passing**
-- Frontend test suite: **318 tests passing**
-- TypeScript: **clean**
-- Next.js build: **passing**
-
-Built by [@yashnilmohanty](https://github.com/yashnilmohanty) — yashnilmohanty@gmail.com
+*Built for competitive Public Forum. Coaching, not case generation.*

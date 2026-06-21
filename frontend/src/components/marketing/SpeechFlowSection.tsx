@@ -193,10 +193,10 @@ export default function SpeechFlowSection() {
           </p>
         </motion.div>
 
-        {/* Two-panel grid: transcript (wider) + flow chain */}
+        {/* Two-panel grid: transcript (wider) + flow chain — equal height at lg+ */}
         <motion.div
           {...reducedSafe(fadeUpInView(0.08))}
-          className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_352px] lg:gap-5 xl:grid-cols-[1fr_368px]"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_388px] lg:gap-5 xl:grid-cols-[1fr_408px]"
         >
           {/* ── Left: Transcript ──────────────────────────────────────────── */}
           <div className="flex flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-1">
@@ -212,7 +212,7 @@ export default function SpeechFlowSection() {
               {/* Annotated prose. Each phrase segment is a button that can be toggled. */}
               <p
                 id="stf-transcript-body"
-                className="text-sm leading-[1.9] text-ink-subtle"
+                className="text-sm leading-[1.75] text-ink-subtle"
               >
                 {TRANSCRIPT_SEGMENTS.map((seg, i) => {
                   if (seg.type === "text") {
@@ -288,7 +288,7 @@ export default function SpeechFlowSection() {
 
             {/* Chain nodes */}
             <div
-              className="flex flex-col px-4 py-3"
+              className="flex flex-1 flex-col px-5 py-4"
               role="list"
               aria-label="Extracted argument chain"
             >

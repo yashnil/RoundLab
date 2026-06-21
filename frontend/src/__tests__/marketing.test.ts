@@ -85,6 +85,44 @@ describe("supported-today integrity", () => {
   });
 });
 
+describe("trust grid invariants", () => {
+  it("has exactly 6 trust points after inspectability point was added", () => {
+    expect(TRUST_POINTS).toHaveLength(6);
+  });
+
+  it("last point is the inspectability reason", () => {
+    const last = TRUST_POINTS[TRUST_POINTS.length - 1];
+    expect(last.title).toMatch(/inspectable/i);
+  });
+
+  it("all trust point titles and bodies are non-empty", () => {
+    for (const p of TRUST_POINTS) {
+      expect(p.title.length).toBeGreaterThan(0);
+      expect(p.body.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("homepage anchor invariants after cleanup pass", () => {
+  it("includes #practice (PipelineShowcase restored)", () => {
+    expect(HOME_ANCHORS).toContain("#practice");
+  });
+
+  it("does not include removed anchors", () => {
+    expect(HOME_ANCHORS).not.toContain("#how-it-works");
+    expect(HOME_ANCHORS).not.toContain("#supported");
+    expect(HOME_ANCHORS).not.toContain("#flow");
+    expect(HOME_ANCHORS).not.toContain("#improve");
+  });
+
+  it("nav links do not point at removed anchors", () => {
+    const dead = ["#how-it-works", "#supported", "#flow", "#improve"];
+    for (const link of MARKETING_NAV_LINKS) {
+      expect(dead).not.toContain(link.href);
+    }
+  });
+});
+
 describe("workflow rail reveals distinct steps", () => {
   it("has unique keys and the full Speak→Improve loop", () => {
     const keys = WORKFLOW_STEPS.map((s) => s.key);

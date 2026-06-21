@@ -15,11 +15,11 @@ export const MARKETING_FOOTER: FooterGroup[] = [
   {
     label: "Product",
     links: [
-      { label: "Practice loop", href: "#practice" },
-      { label: "Flow & ballot", href: "#flow" },
-      { label: "Improvement", href: "#improve" },
-      { label: "Evidence", href: "#evidence" },
-      { label: "For coaches", href: "#team" },
+      { label: "Speech to flow", href: "#speech-to-flow" },
+      { label: "Judge lens",     href: "#judge" },
+      { label: "Practice demo",   href: "#practice" },
+      { label: "Evidence",       href: "#evidence" },
+      { label: "For coaches",    href: "#team" },
     ],
   },
   {

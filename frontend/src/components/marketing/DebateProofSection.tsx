@@ -148,15 +148,17 @@ function DecisiveMomentCard({ animated }: { animated: boolean }) {
           })}
         </div>
 
-        {/* Ballot excerpt — main visual focus */}
+        {/* Ballot excerpt — anchored at bottom with a visible separator */}
+        <div className="mt-auto border-t border-hairline/50 pt-3">
         <div
-          className="mt-auto flex flex-col gap-1.5 rounded-lg border border-warn/20 bg-warn/5 px-3 py-3"
+          className="flex flex-col gap-1.5 rounded-lg border border-warn/20 bg-warn/5 px-3 py-3"
           data-testid="ballot-excerpt"
         >
           <p className="section-stamp text-warn">Flow judge · ballot note</p>
           <p className="text-xs italic leading-relaxed text-ink-subtle">
             &ldquo;{BALLOT_EXCERPT}&rdquo;
           </p>
+        </div>
         </div>
       </div>
     </motion.div>
@@ -177,7 +179,7 @@ function DrillBridgeCard({ animated }: { animated: boolean }) {
         <span className="section-stamp text-lav">Drill assigned</span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 p-5">
+      <div className="flex flex-1 flex-col gap-3 p-5">
         {/* Gap-trigger bridge — carries the diagnosis from card 01 */}
         <div
           className="flex items-center gap-1.5 rounded-md border border-warn/25 bg-warn/5 px-2.5 py-1.5"
@@ -188,28 +190,31 @@ function DrillBridgeCard({ animated }: { animated: boolean }) {
           <span className="text-eyebrow text-ink-subtle">· missing · prescribed from C1</span>
         </div>
 
-        {/* Drill type badge */}
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-lav/15 px-1.5 py-0.5 text-eyebrow font-semibold text-lav">
-            {DRILL_CARD_DATA.type.toUpperCase()}
-          </span>
-        </div>
+        {/* Drill content — separated from the diagnosis trigger by a lav line */}
+        <div className="flex flex-1 flex-col gap-3 border-t border-lav/20 pt-3">
+          {/* Drill type badge */}
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-lav/15 px-1.5 py-0.5 text-eyebrow font-semibold text-lav">
+              {DRILL_CARD_DATA.type.toUpperCase()}
+            </span>
+          </div>
 
-        {/* Drill prompt */}
-        <p
-          className="text-sm font-medium leading-relaxed text-ink"
-          data-testid="drill-prompt"
-        >
-          &ldquo;{DRILL_CARD_DATA.prompt}&rdquo;
-        </p>
+          {/* Drill prompt */}
+          <p
+            className="text-sm font-medium leading-relaxed text-ink"
+            data-testid="drill-prompt"
+          >
+            &ldquo;{DRILL_CARD_DATA.prompt}&rdquo;
+          </p>
 
-        {/* Expected outcome + duration */}
-        <div className="mt-auto flex flex-col gap-2">
-          <p className="section-stamp">Expected outcome</p>
-          <p className="text-xs text-ink-subtle">{DRILL_CARD_DATA.target}</p>
-          <span className="w-fit rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-subtle">
-            {DRILL_CARD_DATA.durationLabel} · speak aloud
-          </span>
+          {/* Expected outcome + duration */}
+          <div className="mt-auto flex flex-col gap-2">
+            <p className="section-stamp">Expected outcome</p>
+            <p className="text-xs text-ink-subtle">{DRILL_CARD_DATA.target}</p>
+            <span className="w-fit rounded-full border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-subtle">
+              {DRILL_CARD_DATA.durationLabel} · speak aloud
+            </span>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -231,8 +236,8 @@ function TransformationCard({ animated }: { animated: boolean }) {
       </div>
 
       <div className="flex flex-1 flex-col gap-3 p-5">
-        {/* Before lane — visually recessive: this is the unresolved state */}
-        <div className="flex flex-col gap-2 rounded-lg bg-surface-2/60 px-4 py-3">
+        {/* Before lane — visually recessive: framed but dim to signal the unresolved state */}
+        <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-2/60 px-4 py-3">
           <div className="flex items-center justify-between">
             <span className="text-eyebrow font-semibold text-ink-subtle">BEFORE DRILL</span>
             <span className="font-mono text-xs text-ink-faint">{BEFORE_SPEECH.timestamp}</span>

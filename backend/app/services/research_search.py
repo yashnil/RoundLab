@@ -1179,7 +1179,10 @@ class CandidateCardsResult:
     normalized_claim: str = ""
     corrections_applied: list[str] = field(default_factory=list)
     # Reranker tracking
-    reranker_used: str = "none"  # "cohere" | "heuristic" | "none"
+    reranker_used: str = "none"  # "cohere" | "heuristic" | "bm25" | "bm25+semantic" | "none"
+    # Pass 8: deduplication and retrieval tracking
+    dedup_removed: int = 0
+    retrieval_backend: str = ""
     # Firecrawl / Cohere instrumentation
     firecrawl_attempted: int = 0
     firecrawl_succeeded: int = 0
@@ -1202,6 +1205,19 @@ class CandidateCardsResult:
     slot_unfilled_reasons: dict = field(default_factory=dict)
     per_slot_provider_errors: dict = field(default_factory=dict)
     slot_diagnostics: dict = field(default_factory=dict)
+    # Pass 11: card support verification counters
+    p11_cards_verified: int = 0
+    p11_cards_supported: int = 0
+    p11_cards_partially_supported: int = 0
+    p11_cards_unsupported: int = 0
+    p11_cards_contradicted: int = 0
+    p11_cards_insufficient_context: int = 0
+    p11_det_mismatches: int = 0
+    p11_semantic_attempted: int = 0
+    p11_semantic_backend: str = ""
+    p11_semantic_failures: int = 0
+    p11_abstract_warnings: int = 0
+    p11_safer_tags: int = 0
 
 
 # ── Tag safety validation (Change 6) ─────────────────────────────────────────
@@ -1385,6 +1401,11 @@ def generate_candidate_cards(
     existing_bodies: list[str] = []
     seen_domains: dict[str, int] = {}
     weak_best_claims: list[str] = []
+    # Pass 8: track body hashes for O(1) exact-dup check before word-set dedup
+    _seen_body_hashes: set[str] = set()
+    # Pass 8: aggregated retrieval stats for trace
+    _total_dedup_removed: int = 0
+    _retrieval_backend: str = ""
 
     for candidate in search_results:
         if len(result.card_drafts) >= max_cards:
@@ -1570,10 +1591,25 @@ def generate_candidate_cards(
 
         result.sources_extracted += 1
 
-        # Chunk text
-        all_chunks = _chunk_text(article.extracted_text)
+        # ── Passage construction: paragraph-aware (Pass 8) ────────────────────
+        from app.services.evidence_passage_builder import build_passages as _build_passages
+        _meta = article.metadata if article else None
+        _p8_candidates = _build_passages(
+            article.extracted_text,
+            url=url,
+            domain=domain,
+            title=(_meta.title or "") if _meta else "",
+            author=(_meta.author or "") if _meta else "",
+            published_date=(_meta.published_date or "") if _meta else "",
+            provider=provider_name,
+            query=candidate.get("query", claim_to_support[:80]),
+        )
+
+        if _p8_candidates:
+            all_chunks = [c.text for c in _p8_candidates]
+        else:
+            all_chunks = _chunk_text(article.extracted_text)
         if not all_chunks:
-            # Fall back to paragraphs
             all_chunks = _split_paragraphs(article.extracted_text)
         if not all_chunks:
             result.sources_considered.append({"url": url, "status": "skipped", "reason": "no usable text chunks"})
@@ -1603,11 +1639,30 @@ def generate_candidate_cards(
 
         if _chunk_reranker_used == "none":
             _sq_score, _ = _assess_source_quality(url, article, extraction_method)
-            all_chunks = _rerank_chunks_heuristic(
-                all_chunks, concepts, _sq_score, max_chunks=min(10, _max_chunks)
-            )
-            if result.reranker_used == "none":
-                result.reranker_used = "heuristic"
+            if _p8_candidates:
+                # Pass 8: use hybrid BM25+RRF ranker when passage builder succeeded
+                from app.services.evidence_hybrid_retriever import hybrid_rank_passages as _hybrid_rank
+                _norm_cred = _sq_score / 10.0
+                for _pc in _p8_candidates:
+                    _pc.credibility_score = _norm_cred
+                _ranked_cands, _ret_stats = _hybrid_rank(
+                    _p8_candidates,
+                    claim=claim_to_support,
+                    topic=topic,
+                    role="direct_support",
+                    source_authority=_norm_cred,
+                )
+                all_chunks = [c.text for c in _ranked_cands[:min(10, _max_chunks)]]
+                if not _retrieval_backend:
+                    _retrieval_backend = _ret_stats.backend
+                if result.reranker_used == "none":
+                    result.reranker_used = _ret_stats.backend
+            else:
+                all_chunks = _rerank_chunks_heuristic(
+                    all_chunks, concepts, _sq_score, max_chunks=min(10, _max_chunks)
+                )
+                if result.reranker_used == "none":
+                    result.reranker_used = "heuristic"
 
         top_chunks = all_chunks[:3]
 
@@ -1697,8 +1752,16 @@ def generate_candidate_cards(
             if not sts:
                 sts = bsc[:100]
 
+            # Pass 8: exact-hash check before Jaccard (O(1) vs O(n))
+            from app.services.evidence_deduplicator import _passage_hash as _ph
+            _body_hash = _ph(chunk)
+            if _body_hash in _seen_body_hashes:
+                result.sources_considered.append({"url": url, "status": "duplicate", "reason": "exact-duplicate passage"})
+                _total_dedup_removed += 1
+                continue
             if _is_near_duplicate(chunk, existing_bodies):
                 result.sources_considered.append({"url": url, "status": "duplicate", "reason": "near-duplicate passage"})
+                _total_dedup_removed += 1
                 continue
 
             # Get backward-compat support level
@@ -1845,8 +1908,107 @@ def generate_candidate_cards(
 
             if _slot_id:
                 _used_slot_ids.add(_slot_id)
-            existing_bodies.append(draft.get("body_text", ""))
+            _accepted_body = draft.get("body_text", "")
+            existing_bodies.append(_accepted_body)
+            # Pass 8: register body hash so future exact-dup check is O(1)
+            _seen_body_hashes.add(_ph(_accepted_body))
             seen_domains[domain] = seen_domains.get(domain, 0) + 1
+
+            # ── Pass 11: Card support verification ───────────────────────────
+            # Runs deterministic checks + optional LLM verifier. Never raises.
+            # Unsupported cards are excluded; contradicted cards moved to
+            # counter_evidence_drafts; partial/insufficient cards kept with warnings.
+            try:
+                from app.services.evidence_card_verifier import (
+                    verify_card_support, should_accept_card,
+                    should_move_to_counter_evidence,
+                    PARTIALLY_SUPPORTED as _PARTIAL,
+                    INSUFFICIENT_CONTEXT as _INSUF_CTX,
+                    CONTRADICTED as _CONTRADICTED,
+                )
+                from app.config import settings as _v_settings
+
+                if getattr(_v_settings, "research_enable_card_verification", True):
+                    # Snippet sources cannot be fully verified — always insufficient_context
+                    _src_type = (
+                        "snippet_only" if is_snippet_source
+                        else draft.get("draft_json", {}).get("source_text_type", "full_text")
+                    )
+                    _v_result = verify_card_support(
+                        claim=claim_to_support,
+                        tag=draft.get("tag", ""),
+                        body_text=_accepted_body,
+                        context=chunk or "",
+                        source_text_type=_src_type,
+                        best_supported_claim=bsc or "",
+                        enable_semantic=False,  # LLM verifier disabled in search loop for speed
+                    )
+
+                    # Update P11 counters
+                    result.p11_cards_verified += 1
+                    _verd = _v_result.overall_verdict
+                    if _verd == "supported":
+                        result.p11_cards_supported += 1
+                    elif _verd == _PARTIAL:
+                        result.p11_cards_partially_supported += 1
+                    elif _verd == "unsupported":
+                        result.p11_cards_unsupported += 1
+                    elif _verd == _CONTRADICTED:
+                        result.p11_cards_contradicted += 1
+                    elif _verd == _INSUF_CTX:
+                        result.p11_cards_insufficient_context += 1
+
+                    result.p11_det_mismatches += len(_v_result.deterministic_mismatches)
+                    if _v_result.source_text_type == "abstract_only" and _v_result.context_limitation:
+                        result.p11_abstract_warnings += 1
+                    if _v_result.safer_tag_generated:
+                        result.p11_safer_tags += 1
+
+                    # Attach verification to draft_json
+                    if not draft.get("draft_json"):
+                        draft["draft_json"] = {}
+                    draft["draft_json"]["support_verification"] = _v_result.to_dict()
+
+                    # Contradicted supporting card → move to counter_evidence
+                    if should_move_to_counter_evidence(_v_result):
+                        result.counter_evidence_drafts.append({
+                            "url": url,
+                            "tag": draft.get("tag", ""),
+                            "passage_excerpt": _accepted_body[:200],
+                            "reasoning": "Card verified as contradicting the requested claim.",
+                            "support_verdict": _verd,
+                        })
+                        result.sources_considered.append({
+                            "url": url,
+                            "status": "moved_to_counter_evidence",
+                            "support_verdict": _verd,
+                        })
+                        result.candidates_generated += 1
+                        chunk_processed = True
+                        continue  # do NOT add to card_drafts
+
+                    # Unsupported → exclude silently, track reason
+                    if not should_accept_card(_v_result):
+                        result.filtered_no_support += 1
+                        result.sources_considered.append({
+                            "url": url,
+                            "status": "rejected_verification",
+                            "support_verdict": _verd,
+                            "reason": (
+                                f"Card failed support verification: {_verd}. "
+                                + ("; ".join(_v_result.deterministic_mismatches[:2]) or "")
+                            ),
+                        })
+                        result.candidates_generated += 1
+                        chunk_processed = True
+                        continue  # do NOT add to card_drafts
+
+            except Exception as exc:
+                # Verification errors never block card generation
+                logger.debug("Support verification error for %s: %s", url, exc)
+
+            # ── End Pass 11 ──────────────────────────────────────────────────
+
             result.sources_considered.append({
                 "url": url,
                 "status": "card_generated",
@@ -1866,6 +2028,10 @@ def generate_candidate_cards(
 
     # Build suggested revised claims from weak passages
     result.suggested_revised_claims = [c for c in weak_best_claims if c.strip()][:5]
+
+    # Pass 8: store aggregated retrieval stats on the result
+    result.dedup_removed = _total_dedup_removed
+    result.retrieval_backend = _retrieval_backend
 
     # ── Part 6: result filtering / post-processing ───────────────────────────
     _post_process_card_set(result, _slots, max_cards)

@@ -11,6 +11,7 @@ import { CardAnalysis } from "./CardAnalysis";
 import { DebatePrepPanel } from "./DebatePrepPanel";
 import { computeSaveReadiness } from "./SaveReadinessGate";
 import { CardMarkupToolbar, CardMarkupArea, useMarkupState, buildUserMarkupPayload, isUserSpan } from "./CardMarkupToolbar";
+import { CitationDetailsPanel } from "./CitationDetailsPanel";
 
 export { hostnameOnly };
 
@@ -382,7 +383,7 @@ export default function EvidenceStudioCard({
             )}
           </div>
 
-          {/* Right column: actions */}
+          {/* Right column: actions — stopPropagation prevents selection when clicking these */}
           <div className="flex flex-col items-end justify-between px-3 py-3 gap-2 shrink-0 border-l border-hairline">
             <div className="flex items-center gap-2">
               {/* Readiness dot + label */}
@@ -392,7 +393,7 @@ export default function EvidenceStudioCard({
               </div>
               {/* Discard */}
               <button
-                onClick={() => onDiscard(card.id)}
+                onClick={(e) => { e.stopPropagation(); onDiscard(card.id); }}
                 aria-label="Discard card"
                 title="Discard card"
                 className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/30"
@@ -404,7 +405,7 @@ export default function EvidenceStudioCard({
               {/* Quick save */}
               {card.status === "draft" && !card.is_counter_evidence && readiness === "ready" && (
                 <button
-                  onClick={() => onSave(card)}
+                  onClick={(e) => { e.stopPropagation(); onSave(card); }}
                   className="text-[11px] px-2.5 py-1.5 rounded-lg border border-ok/40 text-ok hover:bg-ok/10 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40"
                 >
                   Save
@@ -412,7 +413,7 @@ export default function EvidenceStudioCard({
               )}
               {/* Open Studio — always opens modal, never inline expands */}
               <button
-                onClick={() => onOpenStudio?.()}
+                onClick={(e) => { e.stopPropagation(); onOpenStudio?.(); }}
                 disabled={!onOpenStudio}
                 className="text-[11px] px-3 py-1.5 rounded-lg bg-ink text-canvas hover:bg-ink/80 transition-colors font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lav/50"
               >
@@ -569,6 +570,25 @@ export default function EvidenceStudioCard({
 
         {/* Debate prep, full-width below the analysis (not cramped in a rail) */}
         <DebatePrepPanel intelligence={card.intelligence} className="rounded-xl border border-hairline bg-surface-1 p-4 sm:p-5" />
+
+        {/* Structured citation details — collapsed by default; edits are citation-only */}
+        {card.citation?.citation_record && (
+          <CitationDetailsPanel
+            record={card.citation.citation_record}
+            legacyMla={card.mla_citation || card.citation?.mla_citation || undefined}
+            defaultOpen={false}
+            onFieldEdit={async (field, value) => {
+              try {
+                await apiFetch(`/research/card-drafts/${card.id}/citation-field`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ user_id: card.user_id, field, value }),
+                });
+              } catch {
+                /* non-fatal: citation edit will not surface outside the panel */
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );

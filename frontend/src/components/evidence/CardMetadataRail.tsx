@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CardDraft } from "@/types";
 import { sourceQualityBadgeStyle, sourceQualityLabel } from "@/lib/researchHelpers";
 import { EvidenceSlotBadge } from "./EvidenceSlotBadge";
+import { CitationDetailsPanel } from "./CitationDetailsPanel";
 
 const PROVENANCE_ICON: Record<string, string> = {
   meta_tags: "🏷",
@@ -81,8 +82,20 @@ function CitationQualityRow({ card }: { card: CardDraft }) {
   );
 }
 
-/** Right-side rail: citation panel + MLA. */
-export function CardMetadataRail({ card }: { card: CardDraft }) {
+/** Right-side rail: citation panel + MLA.
+ *
+ * @param onCitationFieldEdit  Optional — called when user edits a citation field in
+ *                             the structured panel. The caller is responsible for
+ *                             persisting the change (e.g., PATCH /research/card-drafts).
+ *                             Citation edits must never change evidence body or provenance.
+ */
+export function CardMetadataRail({
+  card,
+  onCitationFieldEdit,
+}: {
+  card: CardDraft;
+  onCitationFieldEdit?: (field: string, value: string) => void;
+}) {
   const [mlaCopied, setMlaCopied] = useState(false);
   const publication =
     card.citation?.publication_name ||
@@ -162,6 +175,16 @@ export function CardMetadataRail({ card }: { card: CardDraft }) {
           </a>
         )}
       </div>
+
+      {/* Structured citation details (Pass 12/13) — collapsed by default */}
+      {card.citation?.citation_record ? (
+        <CitationDetailsPanel
+          record={card.citation.citation_record}
+          onFieldEdit={onCitationFieldEdit}
+          legacyMla={mla || undefined}
+          defaultOpen={false}
+        />
+      ) : hasMla ? null : null}
     </div>
   );
 }

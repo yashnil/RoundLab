@@ -2174,6 +2174,7 @@ def enrich_citation_metadata(
     )
 
     # ── Optional Crossref DOI enrichment ─────────────────────────────────────
+    crossref_data: Optional[dict] = None
     if doi and quality != "complete":
         crossref_data = _lookup_crossref_doi(doi)
         if crossref_data:
@@ -2196,6 +2197,40 @@ def enrich_citation_metadata(
             elif citation.author_display:
                 citation.short_cite = citation.author_display
 
+    # ── Pass 12: build CitationRecord alongside legacy CitationMetadata ───────
+    try:
+        from app.services.citation_normalizer import (
+            build_citation_record,
+            merge_crossref as _merge_crossref,
+        )
+        from app.services.citation_renderers import attach_rendered
+
+        _author_src = provenance.get("author_source", "provider_metadata") or "provider_metadata"
+        _title_src = provenance.get("title_source", "provider_metadata") or "provider_metadata"
+        _pub_src = provenance.get("publication_source", "provider_metadata") or "provider_metadata"
+        _date_src = provenance.get("date_source", "provider_metadata") or "provider_metadata"
+
+        _record = build_citation_record(
+            url=url,
+            authors_raw=citation.authors or citation.author_display or "",
+            title=citation.title or "",
+            container_title=citation.container_title or "",
+            publisher=citation.publication_name or "",
+            published_date=citation.year or "",
+            doi=citation.doi or "",
+            authors_source=_author_src,
+            title_source=_title_src,
+            container_title_source=_pub_src,
+            publisher_source=_pub_src,
+            date_source=_date_src,
+        )
+        if crossref_data:
+            _record = _merge_crossref(_record, crossref_data)
+        _record = attach_rendered(_record)
+        citation.citation_record = _record  # type: ignore[attr-defined]
+    except Exception as _exc:
+        logger.debug("CitationRecord build failed: %s", _exc)
+
     return citation
 
 
@@ -2203,32 +2238,32 @@ def enrich_citation_metadata(
 
 _ROLE_WHY_TEMPLATES: dict[str, str] = {
     "direct_support": (
-        "This passage directly states that {claim}. Use it as your core warrant "
-        "in a constructive or extension."
+        "The source explicitly establishes that {claim} — the evidence gives you "
+        "a direct, quotable link rather than an inferred one."
     ),
     "mechanism_support": (
-        "This passage explains the mechanism by which {claim}. Pair with an impact "
-        "card to complete your argument."
+        "The passage walks through the causal steps behind {claim}, turning your "
+        "position from an assertion into a mechanistic argument the opponent must rebut."
     ),
     "example_support": (
-        "This passage provides a real-world case or precedent supporting {claim}. "
-        "Use in rebuttal to show practical application."
+        "A documented, real-world case backs {claim} — the opponent has to explain "
+        "why that case is different rather than just dismissing the abstract claim."
     ),
     "impact_support": (
-        "This passage describes the harm or impact of {claim}. Use in impact "
-        "calculus or weighing."
+        "The evidence establishes the magnitude and stakes behind {claim}, giving "
+        "the judge a concrete number or scenario to weigh, not just an assertion."
     ),
     "definition_support": (
-        "This passage offers a definition that frames how {claim} should be "
-        "interpreted. Use to control the debate framework."
+        "This passage fixes how the key term in {claim} should be read, "
+        "so the rest of your argument is evaluated on your terms from the start."
     ),
     "authority_support": (
-        "This passage provides expert or institutional backing for {claim}. Use to "
-        "boost your credibility on this argument."
+        "A credible expert or institution vouches for {claim}, raising the bar "
+        "an opponent must clear — they need a conflicting authority, not just skepticism."
     ),
     "counter_evidence": (
-        "This passage argues against your position. Use it as a pre-empt or to write "
-        "a frontline response."
+        "This passage argues against your position — read it as a pre-empt so the "
+        "judge hears your answer before the opponent reads it."
     ),
 }
 
@@ -2253,7 +2288,7 @@ _ROLE_DEBATE_NOTES: dict[str, str] = {
 
 # Part 9 — likely opponent responses by evidence role
 _ROLE_OPPONENT_RESPONSE: dict[str, str] = {
-    "direct_support": "Opponents may challenge the source's bias or claim this is isolated evidence.",
+    "direct_support": "Opponents will likely question whether the source's context matches the resolution — have the publication date, author credentials, and scope ready.",
     "mechanism_support": "Opponents may argue the mechanism doesn't apply to all cases or is disputed.",
     "example_support": "Opponents may argue the case is unique/irrelevant to the resolution or happened in a different context.",
     "impact_support": "Opponents may weigh this impact differently or argue it's overstated.",
@@ -2311,7 +2346,7 @@ _ROLE_HOW_TO_ANSWER: dict[str, str] = {
     "counter_evidence": "Frame it explicitly as a pre-empt and immediately read your answer so the judge hears the response first.",
 }
 _ROLE_CROSSFIRE_ANSWER: dict[str, str] = {
-    "direct_support": "Point to the exact highlighted line and restate the claim it proves — don't get drawn into the source's tone.",
+    "direct_support": "Read the highlighted sentence aloud, ask them to identify the specific word they're disputing, then explain why the passage supports your position even under their reading.",
     "mechanism_support": "Walk them through the causal steps slowly; make them concede each link.",
     "example_support": "Concede the case is specific, then explain why the underlying reason generalizes.",
     "impact_support": "Re-anchor on your weighing: magnitude, probability, timeframe — and ask them to compare directly.",
@@ -2320,7 +2355,7 @@ _ROLE_CROSSFIRE_ANSWER: dict[str, str] = {
     "counter_evidence": "Acknowledge it, then read the line from your answer that resolves it.",
 }
 _ROLE_PAIRING: dict[str, str] = {
-    "direct_support": "an impact card, so you have both the link and why it matters.",
+    "direct_support": "an impact card that quantifies what happens if the claim goes unanswered — your link card establishes the connection; the impact card tells the judge why it matters.",
     "mechanism_support": "an impact card — the mechanism explains how, the impact explains why it matters.",
     "example_support": "an analytic or data card so the example reads as a representative pattern.",
     "impact_support": "a link/mechanism card so the impact is actually caused by your side of the resolution.",
@@ -2338,7 +2373,7 @@ _SLOT_FUNCTION_WHY: dict[str, str] = {
     "answer to objection": "This card establishes the conditions or pre-empt needed to defend {claim}.",
     "definition/background": "This card frames the background/definition underpinning {claim}.",
     "mechanism/warrant": "This card explains the mechanism by which {claim} holds.",
-    "direct support": "This card directly supports {claim}.",
+    "direct support": "The source establishes {claim} directly — a quotable link the opponent has to answer outright.",
     "authority/credibility support": "This card lends expert/institutional credibility to {claim}.",
 }
 
@@ -2522,14 +2557,44 @@ def derive_card_intelligence(
     """
     claim_phrase = (slot_target_claim or best_supported_claim or claim or "")[:80] or "this argument"
 
-    # why_this_card — prefer slot-function-aware lead-in when available
+    # why_this_card — prefer slot-function-aware lead-in; otherwise use
+    # source_title when available for specificity over generic role phrases.
     slot_template = _SLOT_FUNCTION_WHY.get(slot_function) if slot_function else None
     if slot_template:
         why = slot_template.format(claim=claim_phrase)
+    elif source_title and evidence_role not in ("counter_evidence",):
+        # Use the source name so the note reads as specific coaching.
+        src_short = source_title[:48].rstrip()
+        _source_why: dict[str, str] = {
+            "direct_support": (
+                f"{src_short} explicitly establishes that {claim_phrase} — "
+                "a direct, quotable link the opponent has to answer outright."
+            ),
+            "mechanism_support": (
+                f"{src_short} walks through the causal steps behind {claim_phrase}, "
+                "turning your position into a mechanistic argument rather than an assertion."
+            ),
+            "example_support": (
+                f"{src_short} provides a documented case backing {claim_phrase} — "
+                "the opponent must explain why that case doesn't generalise."
+            ),
+            "impact_support": (
+                f"{src_short} quantifies the stakes behind {claim_phrase}, "
+                "giving the judge a concrete figure to weigh instead of just an abstract claim."
+            ),
+            "definition_support": (
+                f"{src_short} frames the key term so {claim_phrase} is evaluated on your terms."
+            ),
+            "authority_support": (
+                f"{src_short} provides expert backing for {claim_phrase}, "
+                "raising the bar the opponent must clear to cast doubt."
+            ),
+        }
+        why = _source_why.get(evidence_role, f"{src_short} supports the claim: {claim_phrase}.")
     else:
         template = _ROLE_WHY_TEMPLATES.get(
             evidence_role,
-            "This passage supports the claim: {claim}.",
+            "The evidence supports the claim: {claim}.",
         )
         if evidence_role == "counter_evidence":
             why = template  # no {claim} placeholder
@@ -2606,7 +2671,22 @@ def derive_card_intelligence(
         if not reasons:
             reasons.append("Review before saving")
 
-    opponent_response = _ROLE_OPPONENT_RESPONSE.get(evidence_role, "")
+    _base_opponent = _ROLE_OPPONENT_RESPONSE.get(evidence_role, "")
+    # Make opponent_response specific to the actual claim when one is available.
+    _claim_short = _shorten_claim(best_supported_claim or claim) if (best_supported_claim or claim) else ""
+    if _claim_short and evidence_role == "direct_support":
+        opponent_response = (
+            f"Opponents will likely challenge whether the source context matches "
+            f"the resolution's scope for '{_claim_short}' — know the author, date, and "
+            f"publication so you can defend them in crossfire."
+        )
+    elif _claim_short and evidence_role == "impact_support":
+        opponent_response = (
+            f"Opponents will try to weigh against '{_claim_short}' using magnitude, "
+            f"probability, or timeframe — pre-load your comparison before the impact debate starts."
+        )
+    else:
+        opponent_response = _base_opponent
     crossfire_question = _ROLE_CROSSFIRE_QUESTION.get(evidence_role, "")
     if crossfire_question and "[opponent's impact]" in crossfire_question:
         crossfire_question = crossfire_question.replace("[opponent's impact]", "your opponent's impact")

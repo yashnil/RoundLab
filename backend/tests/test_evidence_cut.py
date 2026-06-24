@@ -682,9 +682,12 @@ class TestDeriveCardIntelligence:
         base.update(overrides)
         return derive_card_intelligence(**base)
 
-    def test_direct_support_why_text_mentions_constructive(self):
+    def test_direct_support_why_text_mentions_link(self):
         intel = self._intel(evidence_role="direct_support")
-        assert "constructive" in intel.why_this_card.lower()
+        # Pass 15.7: why_this_card now emphasises "explicitly establishes" / "quotable link"
+        # rather than using the old "constructive" framing.
+        text = intel.why_this_card.lower()
+        assert any(kw in text for kw in ("establishes", "link", "explicitly")), text
         assert intel.best_use == "contention"
 
     def test_mechanism_support_suggests_pairing(self):

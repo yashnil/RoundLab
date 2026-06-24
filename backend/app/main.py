@@ -1,8 +1,37 @@
+import logging
+import logging.config
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import argument_maps, assignments, blockfiles, dev, documents, drills, feedback_reports, health, jobs, output_feedback, pilot, research, shared_reports, speeches, teams, transcripts, users, workouts
+from app.api import argument_maps, assignments, blockfiles, dev, documents, drills, evidence_library, feedback_reports, health, jobs, judge_adaptation, output_feedback, pilot, research, round_simulations, shared_reports, speeches, teams, tournament_prep, transcripts, users, workouts
 from app.config import settings
+from app.middleware.correlation import CorrelationMiddleware
+
+# Structured logging: consistent key=value output for log aggregation
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "structured": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "structured",
+        }
+    },
+    "root": {"level": "INFO", "handlers": ["console"]},
+    "loggers": {
+        "httpx": {"level": "WARNING"},
+        "httpcore": {"level": "WARNING"},
+        "openai": {"level": "WARNING"},
+        "supabase": {"level": "WARNING"},
+    },
+})
 
 app = FastAPI(title="RoundLab API", version="0.1.0")
 
@@ -16,6 +45,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Correlation middleware: injects x-request-id into every request/response
+app.add_middleware(CorrelationMiddleware)
 
 app.include_router(health.router)
 app.include_router(speeches.router)
@@ -35,6 +67,10 @@ app.include_router(shared_reports.router)
 app.include_router(workouts.router)
 app.include_router(blockfiles.router)
 app.include_router(research.router)
+app.include_router(evidence_library.router)
+app.include_router(tournament_prep.router)
+app.include_router(judge_adaptation.router)
+app.include_router(round_simulations.router)
 
 # Dev-only endpoints (disabled in production via environment check)
 if settings.environment != "production":

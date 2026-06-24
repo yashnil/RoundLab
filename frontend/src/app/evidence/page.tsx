@@ -24,6 +24,7 @@ import { shouldShowResultsSummary, shouldShowEmptyState } from "@/components/Evi
 import { EvidenceSearchProgress } from "@/components/evidence/EvidenceSearchProgress";
 import ClaimDecomposition from "@/components/evidence/ClaimDecomposition";
 import ResearchSummary from "@/components/evidence/ResearchSummary";
+import { SearchFailurePanel } from "@/components/evidence/SearchFailurePanel";
 import ProvenanceTrail from "@/components/evidence/ProvenanceTrail";
 import { DocumentCard } from "@/components/evidence/DocumentCard";
 import { BlockEntryCard } from "@/components/evidence/BlockEntryCard";
@@ -31,7 +32,7 @@ import { SearchResultCard } from "@/components/evidence/SearchResultCard";
 import {
   fileSizeLabel, extFromFilename, ALLOWED_EVIDENCE_EXTS, MAX_EVIDENCE_MB,
 } from "@/lib/evidenceHelpers";
-import { RESEARCH_DEPTH_OPTIONS, type ResearchDepth } from "@/lib/claimDecomposition";
+import { decomposeClaim, RESEARCH_DEPTH_OPTIONS, type ResearchDepth } from "@/lib/claimDecomposition";
 import {
   deriveWorkbenchStage,
   deriveMobileStageFromWorkbench,
@@ -102,6 +103,8 @@ export default function EvidencePage() {
   const [cardFilter, setCardFilter] = useState<"all" | "ready" | "review" | "weak" | "counter">("all");
   const [studioCard, setStudioCard] = useState<CardDraft | null>(null);
   const [saveError, setSaveError] = useState("");
+  // ID of the most-recently saved card (for the "View in Library" link)
+  const [lastSavedCardId, setLastSavedCardId] = useState<string | null>(null);
 
   // Workbench state — which card is previewed in the right panel
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -110,6 +113,9 @@ export default function EvidencePage() {
   // Roving tabindex for candidate keyboard navigation
   const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
   const candidateListRef = useRef<HTMLDivElement>(null);
+  // Sequence counter for stale-response protection: only the most-recent
+  // search can commit its result to state.
+  const searchSeqRef = useRef(0);
 
   // Block entries state
   const [blockEntries, setBlockEntries] = useState<BlockEntry[]>([]);
@@ -257,6 +263,7 @@ export default function EvidencePage() {
     if (!userId || !claim) return;
     if (override) setCbClaimGoal(override);
     const maxCards = cbDepth === "quick" ? 3 : cbDepth === "deep" ? 8 : 5;
+    const seq = ++searchSeqRef.current;
     setCbLoading(true);
     setCbError("");
     setCbGenerateResult(null);
@@ -275,13 +282,73 @@ export default function EvidencePage() {
           include_partial_support: true,
         }),
       });
+      // Stale-response guard: discard if a newer request has already started
+      if (seq !== searchSeqRef.current) return;
       setCardFilter("all");
       setCbGenerateResult(result);
-      // Auto-transition mobile to candidates panel when results arrive
       if (result.cards.length > 0) setMobileStageOverride("candidates");
     } catch (e: unknown) {
+      if (seq !== searchSeqRef.current) return;
       setCbError(e instanceof Error ? e.message : "Search failed");
-    } finally { setCbLoading(false); }
+    } finally {
+      if (seq === searchSeqRef.current) setCbLoading(false);
+    }
+  }
+
+  /**
+   * Run all five claim angles in sequence, aggregate and deduplicate the
+   * resulting cards, then commit the merged set to state. Each angle uses
+   * max_cards=3 so the total stays manageable. Cards are deduplicated by id.
+   * A stale-response guard ensures that a concurrent normal search can cancel
+   * this loop.
+   */
+  async function handleRunAllAngles() {
+    if (!userId || !cbClaimGoal.trim()) return;
+    const branches = decomposeClaim(cbClaimGoal.trim());
+    const seq = ++searchSeqRef.current;
+    setCbLoading(true);
+    setCbError("");
+    setCbGenerateResult(null);
+    setSelectedCardId(null);
+    setMobileStageOverride(null);
+    const seenIds = new Set<string>();
+    const allCards: GenerateCardsResponse["cards"] = [];
+    try {
+      for (const branch of branches) {
+        if (seq !== searchSeqRef.current) return; // cancelled by newer request
+        try {
+          const result = await apiFetch<GenerateCardsResponse>("/research/generate-cards", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              topic: cbTopic.trim() || undefined,
+              claim_to_support: branch.query,
+              side: cbSide || undefined,
+              max_cards: 3,
+              include_partial_support: true,
+            }),
+          });
+          for (const card of result.cards) {
+            if (!seenIds.has(card.id)) {
+              seenIds.add(card.id);
+              allCards.push(card);
+            }
+          }
+        } catch { /* ignore per-angle failure, continue remaining angles */ }
+      }
+      if (seq !== searchSeqRef.current) return;
+      setCardFilter("all");
+      setCbGenerateResult({
+        search_configured: true,
+        cards: allCards,
+        no_card_reason: allCards.length === 0 ? "No cards found across any angle." : null,
+        suggestions: [],
+      });
+      if (allCards.length > 0) setMobileStageOverride("candidates");
+    } finally {
+      if (seq === searchSeqRef.current) setCbLoading(false);
+    }
   }
 
   async function generateDraftFromSource(
@@ -313,8 +380,11 @@ export default function EvidencePage() {
 
   async function handleSaveDraft(draft: CardDraft, confirmed: boolean) {
     if (!userId || !confirmed) return;
+    // Prevent duplicate save clicks while a save is in-flight
+    if (savingDraftId !== null) return;
     setSavingDraftId(draft.id);
     setSaveError("");
+    setLastSavedCardId(null);
     try {
       const m = draft.user_markup_json;
       const hasFullMarkup =
@@ -338,11 +408,15 @@ export default function EvidencePage() {
           }),
         });
       }
-      await apiFetch(`/research/card-drafts/${draft.id}/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, confirmed }),
-      });
+      const result = await apiFetch<{ card_id: string; draft_id: string; message: string }>(
+        `/research/card-drafts/${draft.id}/save`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, confirmed }),
+        },
+      );
+      setLastSavedCardId(result.card_id);
       setDrafts((prev) =>
         prev.map((d) => d.id === draft.id ? { ...d, status: "saved" as const } : d),
       );
@@ -352,9 +426,20 @@ export default function EvidencePage() {
           : prev,
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error
-        ? err.message
-        : "Save failed. Check that your account profile is set up and try again.";
+      // The API returns structured {stage, message} for 500s; surface the stage
+      let msg = "Save failed. Check your account profile and try again.";
+      if (err instanceof Error) {
+        try {
+          const parsed = JSON.parse(err.message) as { stage?: string; message?: string };
+          if (parsed.stage) {
+            msg = `Save failed at ${parsed.stage}: ${parsed.message ?? "internal error"}`;
+          } else {
+            msg = err.message;
+          }
+        } catch {
+          msg = err.message;
+        }
+      }
       setSaveError(msg);
     } finally { setSavingDraftId(null); }
   }
@@ -511,9 +596,9 @@ export default function EvidencePage() {
       return;
     }
     setActiveCardIndex(next);
-    // Move DOM focus to the newly active card button
-    const buttons = candidateListRef.current?.querySelectorAll<HTMLElement>("button[data-candidate]");
-    buttons?.[next]?.focus();
+    // Move DOM focus to the newly active card element
+    const candidates = candidateListRef.current?.querySelectorAll<HTMLElement>("[data-candidate]");
+    candidates?.[next]?.focus();
   }
 
   // ── Loading state ──────────────────────────────────────────────────────────
@@ -807,7 +892,9 @@ export default function EvidencePage() {
                     <ClaimDecomposition
                       claim={cbClaimGoal}
                       disabled={cbLoading}
+                      isSearching={cbLoading}
                       onSearchBranch={(query) => handleGenerateCards(query)}
+                      onRunAll={handleRunAllAngles}
                     />
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-ink-subtle">Depth</span>
@@ -990,12 +1077,26 @@ export default function EvidencePage() {
                       onKeyDown={handleCandidateKeyDown}
                     >
                       {filteredCards.map((card, idx) => (
+                        // Outer element is a div — never a button — so the inner
+                        // Save/Discard/Open Studio buttons remain valid HTML.
+                        // Selection fires on click/Enter/Space; inner buttons call
+                        // e.stopPropagation() to prevent accidental card selection.
                         <div
                           key={card.id}
                           role="option"
                           aria-selected={selectedCardId === card.id}
+                          aria-label={`${card.tag ?? "Untitled card"}. ${computeSaveReadiness(card).level === "ready" ? "Ready to save." : "Needs review."}`}
+                          data-candidate="true"
+                          tabIndex={activeCardIndex === idx ? 0 : -1}
+                          onClick={() => handleSelectCard(card, idx)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleSelectCard(card, idx);
+                            }
+                          }}
                           className={cn(
-                            "relative rounded-xl border transition-all",
+                            "relative rounded-xl border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lav/50",
                             selectedCardId === card.id
                               ? "border-lav/40 ring-1 ring-lav/20"
                               : "border-hairline hover:border-hairline-strong",
@@ -1006,22 +1107,13 @@ export default function EvidencePage() {
                               Best match
                             </span>
                           )}
-                          <button
-                            type="button"
-                            data-candidate="true"
-                            tabIndex={activeCardIndex === idx ? 0 : -1}
-                            className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lav/50 rounded-xl"
-                            onClick={() => handleSelectCard(card, idx)}
-                            aria-label={`${card.tag ?? "Untitled card"}. ${computeSaveReadiness(card).level === "ready" ? "Ready to save." : "Needs review."}`}
-                          >
-                            <EvidenceCardDraft
-                              card={card}
-                              claimGoal={cbClaimGoal.trim()}
-                              onSave={(c) => handleSaveDraft(c, true)}
-                              onDiscard={handleDiscardDraft}
-                              onOpenStudio={() => setStudioCard(card)}
-                            />
-                          </button>
+                          <EvidenceCardDraft
+                            card={card}
+                            claimGoal={cbClaimGoal.trim()}
+                            onSave={(c) => handleSaveDraft(c, true)}
+                            onDiscard={handleDiscardDraft}
+                            onOpenStudio={() => setStudioCard(card)}
+                          />
                           <div className="mt-1.5 px-1">
                             <ProvenanceTrail card={card} />
                           </div>
@@ -1117,19 +1209,32 @@ export default function EvidencePage() {
                   const hasCounterEvidence = (diag?.rejected_as_counter_evidence ?? 0) > 0;
                   const hasIndirectSupport = cbGenerateResult.usable_indirect_support_found === true;
                   const leadUrls = diag?.possible_lead_urls ?? [];
+                  const trace = cbGenerateResult.search_trace;
 
                   return (
-                    <div className="rounded-xl border border-hairline bg-surface-1 px-4 py-4 flex flex-col gap-3">
-                      <p className="text-sm font-semibold text-ink">
-                        {hasCounterEvidence
-                          ? "Sources found argue against this claim"
-                          : hasIndirectSupport
-                          ? "Indirect support found — needs a link card"
-                          : "No cards found for this claim"}
-                      </p>
-                      {cbGenerateResult.no_card_reason && (
-                        <p className="text-xs text-ink-subtle leading-relaxed">{cbGenerateResult.no_card_reason}</p>
+                    <div className="flex flex-col gap-3">
+                      {/* Structured failure panel when trace is available */}
+                      {trace ? (
+                        <SearchFailurePanel
+                          trace={trace}
+                          noCardReason={cbGenerateResult.no_card_reason}
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-hairline bg-surface-1 px-4 py-4 flex flex-col gap-3">
+                          <p className="text-sm font-semibold text-ink">
+                            {hasCounterEvidence
+                              ? "Sources found argue against this claim"
+                              : hasIndirectSupport
+                              ? "Indirect support found — needs a link card"
+                              : "No cards found for this claim"}
+                          </p>
+                          {cbGenerateResult.no_card_reason && (
+                            <p className="text-xs text-ink-subtle leading-relaxed">{cbGenerateResult.no_card_reason}</p>
+                          )}
+                        </div>
                       )}
+
+                      {/* Indirect support tip */}
                       {hasIndirectSupport && cbGenerateResult.indirect_support_explanation && (
                         <div className="rounded-lg border border-lav/25 bg-lav/5 px-3 py-2">
                           <p className="text-xs text-ink-subtle leading-relaxed">
@@ -1137,6 +1242,8 @@ export default function EvidencePage() {
                           </p>
                         </div>
                       )}
+
+                      {/* Counter-evidence pre-empt banner */}
                       {hasCounterEvidence && (
                         <div className="rounded-lg border border-warn/25 bg-warn/5 px-3 py-2">
                           <p className="text-xs text-warn leading-relaxed">
@@ -1144,6 +1251,8 @@ export default function EvidencePage() {
                           </p>
                         </div>
                       )}
+
+                      {/* Lead URLs for manual review */}
                       {leadUrls.length > 0 && (
                         <div className="flex flex-col gap-1">
                           <p className="text-xs font-medium text-ink-subtle">Worth checking manually:</p>
@@ -1159,6 +1268,8 @@ export default function EvidencePage() {
                           ))}
                         </div>
                       )}
+
+                      {/* Revised claim suggestions */}
                       {cbGenerateResult.suggested_revised_claims && cbGenerateResult.suggested_revised_claims.length > 0 && (
                         <div className="flex flex-col gap-1.5">
                           <p className="text-xs font-medium text-ink-subtle">Try a narrower claim:</p>
@@ -1176,11 +1287,8 @@ export default function EvidencePage() {
                           </div>
                         </div>
                       )}
-                      {cbGenerateResult.suggestions && cbGenerateResult.suggestions.length > 0 && (
-                        <ul className="text-xs text-ink-subtle list-disc list-inside flex flex-col gap-0.5">
-                          {cbGenerateResult.suggestions.map((s) => <li key={s}>{s}</li>)}
-                        </ul>
-                      )}
+
+                      {/* Mode-switch buttons */}
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" className="h-7 px-2 text-xs gap-1"
                           onClick={() => { setBuilderMode("url"); setCbGenerateResult(null); }}>
@@ -1259,12 +1367,36 @@ export default function EvidencePage() {
                         className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-xs text-danger"
                         role="alert"
                       >
-                        Save failed: {saveError}
+                        <span>{saveError}</span>
                         <button
+                          type="button"
                           className="ml-2 underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger/50 rounded"
+                          onClick={() => { setSaveError(""); handleSaveDraft(selectedCard!, true); }}
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          className="ml-1.5 underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger/50 rounded"
                           onClick={() => setSaveError("")}
                         >
                           Dismiss
+                        </button>
+                      </div>
+                    )}
+                    {/* Save success */}
+                    {lastSavedCardId && !saveError && (
+                      <div
+                        className="rounded-lg border border-ok/25 bg-ok/5 px-3 py-2 text-xs text-ok"
+                        role="status"
+                      >
+                        Card saved to your library.{" "}
+                        <button
+                          type="button"
+                          className="underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ok/50 rounded"
+                          onClick={() => setActiveTab("library")}
+                        >
+                          View in Library
                         </button>
                       </div>
                     )}

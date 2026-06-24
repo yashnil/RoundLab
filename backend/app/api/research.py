@@ -43,18 +43,21 @@ from app.models.research import (
 )
 from app.services.card_cutting import generate_card_draft, generate_evidence_cut
 from app.services.claim_decomposition import decompose_claim
+from app.services.evidence_query_planner import plan_evidence_research
 from app.services.research_search import (
     build_research_query_variants,
     build_research_search_query,
     canonicalize_url,
     generate_candidate_cards,
 )
+from app.services.search_trace import build_search_trace
 from app.services.source_quality import rate_source_quality
 from app.services.supabase_client import get_supabase
 from app.services.web_article_extraction import (
     extract_article,
     extract_article_from_paste,
 )
+from app.services.evidence_extraction_router import route_extraction, is_pdf_url, is_docx_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/research", tags=["research"])
@@ -100,6 +103,9 @@ def _get_or_create_research_doc(user_id: str) -> str:
 
     First ensures the user has a profile row (required by the documents FK).
     Uses upsert-style logic: check → insert → retry-check to handle race conditions.
+
+    The insert omits nullable columns (document_role) so it works even if older
+    migration versions haven't added those columns yet.
     """
     sb = get_supabase()
 
@@ -121,6 +127,7 @@ def _get_or_create_research_doc(user_id: str) -> str:
     if existing:
         return existing
 
+    insert_exc: Optional[Exception] = None
     try:
         insert_result = (
             sb.table("documents")
@@ -130,13 +137,14 @@ def _get_or_create_research_doc(user_id: str) -> str:
                 "storage_path": _RESEARCH_DOC_STORAGE_PATH,
                 "doc_type": "evidence",
                 "status": "parsed",
-                "document_role": "evidence",
+                # document_role omitted: nullable, only present after blockfile migration
             })
             .execute()
         )
         if insert_result.data:
             return insert_result.data[0]["id"]
     except Exception as exc:
+        insert_exc = exc
         logger.warning("Research Library document insert failed (%s) — retrying select", exc)
 
     # Second-chance select (concurrent create or insert returned empty data)
@@ -144,9 +152,12 @@ def _get_or_create_research_doc(user_id: str) -> str:
     if existing2:
         return existing2
 
+    detail = str(insert_exc) if insert_exc else "insert returned no data"
     raise RuntimeError(
         f"Could not create or find Research Library document for user {user_id[:8]}. "
-        "Check that the Supabase profiles + documents tables are migrated correctly."
+        f"Underlying cause: {detail}. "
+        "Check that the Supabase profiles + documents tables are migrated correctly and "
+        "that the service-role key (SUPABASE_SERVICE_ROLE_KEY) is set."
     )
 
 
@@ -256,7 +267,58 @@ async def extract_url(body: ExtractUrlRequest) -> ExtractUrlResponse:
     never modified — it is stored verbatim in research_sources.
     """
     try:
-        article = extract_article(body.url)
+        doc_type = route_extraction(body.url)
+        if doc_type == "pdf":
+            from app.services.evidence_pdf_extractor import extract_pdf
+            from app.services.evidence_web_extractor import article_to_document
+            from app.models.research import ArticleMetadata, ExtractedArticle
+            import httpx as _httpx
+            try:
+                _safe, _reason = __import__("app.services.web_article_extraction", fromlist=["validate_url"]).validate_url(body.url)
+                if not _safe:
+                    raise ValueError(_reason)
+                with _httpx.Client(follow_redirects=True, timeout=20) as _c:
+                    _resp = _c.get(body.url, headers={"User-Agent": "Mozilla/5.0 (compatible; RoundLabBot/1.0)"})
+                _doc = extract_pdf(_resp.content, source_url=body.url)
+                article = ExtractedArticle(
+                    url=body.url,
+                    metadata=ArticleMetadata(url=body.url, title=_doc.title, author=_doc.author, published_date=_doc.publication_date),
+                    extracted_text=_doc.raw_text,
+                    extraction_method=_doc.extraction_method,
+                    extraction_confidence=_doc.extraction_confidence,
+                    status="ok" if not _doc.is_metadata_only else "failed",
+                    error=("; ".join(_doc.extraction_warnings) if _doc.extraction_warnings else None),
+                )
+            except ValueError:
+                raise
+            except Exception as _pdf_exc:
+                raise ValueError(f"PDF extraction failed: {_pdf_exc}") from _pdf_exc
+        elif doc_type == "docx":
+            from app.services.evidence_docx_extractor import extract_docx
+            from app.models.research import ArticleMetadata, ExtractedArticle
+            import httpx as _httpx
+            try:
+                _safe, _reason = __import__("app.services.web_article_extraction", fromlist=["validate_url"]).validate_url(body.url)
+                if not _safe:
+                    raise ValueError(_reason)
+                with _httpx.Client(follow_redirects=True, timeout=20) as _c:
+                    _resp = _c.get(body.url, headers={"User-Agent": "Mozilla/5.0 (compatible; RoundLabBot/1.0)"})
+                _doc = extract_docx(_resp.content, source_url=body.url)
+                article = ExtractedArticle(
+                    url=body.url,
+                    metadata=ArticleMetadata(url=body.url, title=_doc.title, author=_doc.author, published_date=_doc.publication_date),
+                    extracted_text=_doc.raw_text,
+                    extraction_method=_doc.extraction_method,
+                    extraction_confidence=_doc.extraction_confidence,
+                    status="ok" if not _doc.is_metadata_only else "failed",
+                    error=("; ".join(_doc.extraction_warnings) if _doc.extraction_warnings else None),
+                )
+            except ValueError:
+                raise
+            except Exception as _docx_exc:
+                raise ValueError(f"DOCX extraction failed: {_docx_exc}") from _docx_exc
+        else:
+            article = extract_article(body.url)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -532,6 +594,10 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
     _slot_errors: dict[str, list[str]] = {}
     gen_result = None
 
+    # Trace state (populated below for whichever path runs)
+    _roles_attempted: list[str] = []
+    _search_stopped_early: bool = False
+
     # ── Per-slot search path (when slot planner is enabled) ───────────────────
     _use_per_slot = getattr(settings, "research_enable_slot_planner", True)
     _evidence_plan = None
@@ -676,39 +742,90 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
             _use_per_slot = False
 
     # ── Unified search fallback ───────────────────────────────────────────────
-    if gen_result is None:
-        if plan and plan.search_queries:
-            query_variants = plan.search_queries
-        else:
-            query_variants = build_research_query_variants(
-                topic=body.topic,
-                claim_to_support=body.claim_to_support,
-                side=body.side,
-            )
+    # Tracks which evidence roles were queried (for trace display).
+    _roles_attempted: list[str] = []
+    _search_stopped_early: bool = False
+    # Pass 9 metadata (populated later if academic search runs)
+    _p9_meta = None
+    # URLs at which we stop escalating to lower-priority role groups.
+    _EARLY_STOP_URLS: int = max(8, _MAX_SEARCH_URLS // 2)
 
-        for variant in query_variants:
-            if len(seen_urls) >= _MAX_SEARCH_URLS:
-                break
-            try:
-                response = client.search(
-                    query=variant,
-                    max_results=5,
-                    search_depth="advanced",
-                )
-                for r in (response.get("results") or []):
-                    url = r.get("url", "")
-                    _canonical = canonicalize_url(url)
-                    if url and _canonical not in seen_urls:
-                        seen_urls.add(_canonical)
-                        all_results.append(r)
-            except Exception as exc:
-                logger.warning("Tavily search failed for variant '%s': %s", variant, exc)
-                tavily_errors.append(str(exc))
+    if gen_result is None:
+        # ── Build role-aware query plan ───────────────────────────────────
+        if plan and plan.search_queries:
+            # Use the claim-decomposition plan's queries when available,
+            # but wrap them in a structure compatible with escalation tracking.
+            query_variants = plan.search_queries
+            _roles_attempted = ["direct_outcome", "causal_mechanism"]
+            for variant in query_variants:
+                if len(seen_urls) >= _MAX_SEARCH_URLS:
+                    break
+                try:
+                    response = client.search(
+                        query=variant,
+                        max_results=5,
+                        search_depth="advanced",
+                    )
+                    for r in (response.get("results") or []):
+                        url = r.get("url", "")
+                        _canonical = canonicalize_url(url)
+                        if url and _canonical not in seen_urls:
+                            seen_urls.add(_canonical)
+                            all_results.append(r)
+                except Exception as exc:
+                    logger.warning("Tavily search failed for variant '%s': %s", variant, exc)
+                    tavily_errors.append(str(exc))
+        else:
+            # ── Role-aware escalation using EvidenceResearchPlan ─────────
+            ev_plan = plan_evidence_research(
+                claim=body.claim_to_support,
+                topic=body.topic or "",
+                side=body.side or "",
+            )
+            query_variants = ev_plan.all_queries_deduped
+
+            for role_group in sorted(ev_plan.role_groups, key=lambda g: g.priority):
+                if len(seen_urls) >= _MAX_SEARCH_URLS:
+                    break
+                # Escalate to lower-priority groups only when we don't yet
+                # have enough candidates from higher-priority searches.
+                if (
+                    role_group.priority > 0
+                    and len(seen_urls) >= _EARLY_STOP_URLS
+                ):
+                    _search_stopped_early = True
+                    logger.info(
+                        "Early stop after %d URLs (role=%s skipped)",
+                        len(seen_urls), role_group.role,
+                    )
+                    break
+
+                _roles_attempted.append(role_group.role)
+                for variant in role_group.queries:
+                    if len(seen_urls) >= _MAX_SEARCH_URLS:
+                        break
+                    try:
+                        response = client.search(
+                            query=variant,
+                            max_results=5,
+                            search_depth="advanced",
+                        )
+                        for r in (response.get("results") or []):
+                            url = r.get("url", "")
+                            _canonical = canonicalize_url(url)
+                            if url and _canonical not in seen_urls:
+                                seen_urls.add(_canonical)
+                                all_results.append(r)
+                    except Exception as exc:
+                        logger.warning(
+                            "Tavily search failed for '%s': %s", variant, exc
+                        )
+                        tavily_errors.append(str(exc))
 
         # Supplement with Exa if configured
         _exa_key = settings.exa_api_key
-        if _exa_key and plan:
-            _exa_queries = (plan.search_queries or query_variants)[:8]
+        if _exa_key and query_variants:
+            _exa_queries = query_variants[:8]
             try:
                 from app.services.research_search import _search_exa
                 _exa_results = _search_exa(_exa_queries, _exa_key)
@@ -726,7 +843,106 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
             except Exception as exc:
                 logger.warning("Exa provider failed: %s", exc)
 
+        # ── Pass 9: Academic and primary-source supplement ────────────────────
+        _p9_meta = None
+        if settings.research_enable_academic_search and query_variants:
+            try:
+                from app.services.evidence_academic_search import gather_academic_results
+                from app.services.evidence_source_registry import build_site_queries
+                from app.services.evidence_source_router import (
+                    aggregate_lanes,
+                    route_queries,
+                )
+
+                _p9_routing = route_queries(query_variants[:6])
+                _p9_all_lanes = aggregate_lanes(_p9_routing)
+
+                # ── Academic provider search (OpenAlex + Semantic Scholar) ────
+                if "academic_research" in _p9_all_lanes:
+                    _p9_acad_queries = [
+                        q for q, lanes in _p9_routing.items()
+                        if "academic_research" in lanes
+                    ][:3]
+                    _p9_results, _p9_meta = gather_academic_results(
+                        _p9_acad_queries,
+                        semantic_scholar_key=settings.semantic_scholar_api_key,
+                        openalex_email=settings.openalex_contact_email,
+                        max_per_provider=3,
+                        seen_urls=seen_urls,
+                    )
+                    for r in _p9_results:
+                        _c = canonicalize_url(r.get("url", ""))
+                        if _c and _c not in seen_urls and len(seen_urls) < _MAX_SEARCH_URLS:
+                            seen_urls.add(_c)
+                            all_results.append(r)
+
+                # ── Government/institutional site-targeted Tavily searches ────
+                _tgt_cats: list[str] = []
+                if "government_primary" in _p9_all_lanes:
+                    _tgt_cats.extend(["government_us", "international_org", "court_legislative"])
+                if "institutional_report" in _p9_all_lanes:
+                    _tgt_cats.extend(["research_institute"])
+                if _tgt_cats:
+                    _site_qs = build_site_queries(query_variants[:2], _tgt_cats, max_queries=2)
+                    if _p9_meta:
+                        _p9_meta.trusted_domain_searches = len(_site_qs)
+                    for sq in _site_qs:
+                        if len(seen_urls) >= _MAX_SEARCH_URLS:
+                            break
+                        try:
+                            _resp = client.search(query=sq, max_results=3, search_depth="advanced")
+                            for r in (_resp.get("results") or []):
+                                _c = canonicalize_url(r.get("url", ""))
+                                if r.get("url") and _c not in seen_urls:
+                                    seen_urls.add(_c)
+                                    r["_source_priority"] = 3
+                                    all_results.append(r)
+                        except Exception as _sq_exc:
+                            logger.debug("P9 site-targeted search failed: %s", _sq_exc)
+
+                # Bounded interleaving: insert academic/government results at
+                # proportional intervals rather than forcing ALL of them first.
+                # This keeps relevance dominant while giving priority sources
+                # early consideration proportional to their count.
+                if any(r.get("_source_priority", 1) > 1 for r in all_results):
+                    _web = [r for r in all_results if r.get("_source_priority", 1) == 1]
+                    _priority = [r for r in all_results if r.get("_source_priority", 1) > 1]
+                    if _web and _priority:
+                        _step = max(1, len(_web) // max(len(_priority), 1))
+                        _interleaved: list = []
+                        _ai = 0
+                        for _i, _w in enumerate(_web):
+                            if _ai < len(_priority) and _i % _step == 0:
+                                _interleaved.append(_priority[_ai])
+                                _ai += 1
+                            _interleaved.append(_w)
+                        _interleaved.extend(_priority[_ai:])
+                        all_results = _interleaved
+                    elif _priority:
+                        # All results are priority (no web) — keep original order
+                        pass
+
+            except Exception as _p9_exc:
+                logger.warning("P9 academic search block failed: %s", _p9_exc)
+
         if not all_results and tavily_errors:
+            _trace = build_search_trace(
+                queries_run=query_variants,
+                roles_attempted=_roles_attempted,
+                sources_found=0,
+                sources_attempted=0,
+                sources_extracted=0,
+                passages_considered=0,
+                filtered_no_support=0,
+                filtered_low_quality=0,
+                rejected_by_source_quality=0,
+                rejected_by_missing_best_claim=0,
+                counter_evidence_count=0,
+                candidates_generated=0,
+                tavily_errors=tavily_errors,
+                possible_lead_urls=[],
+                cards_produced=0,
+            )
             return GenerateCardsResponse(
                 search_configured=True,
                 query_used=query_variants[0] if query_variants else body.claim_to_support[:60],
@@ -735,9 +951,28 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
                 suggestions=["Use URL mode if you have a specific source.", "Try rephrasing the claim."],
                 normalized_claim=plan.normalized_claim if plan else None,
                 corrections_applied=plan.corrections_applied if plan else [],
+                failure_reason=_trace.failure_reason,
+                search_trace=_trace,
             )
 
         if not all_results:
+            _trace = build_search_trace(
+                queries_run=query_variants,
+                roles_attempted=_roles_attempted,
+                sources_found=0,
+                sources_attempted=0,
+                sources_extracted=0,
+                passages_considered=0,
+                filtered_no_support=0,
+                filtered_low_quality=0,
+                rejected_by_source_quality=0,
+                rejected_by_missing_best_claim=0,
+                counter_evidence_count=0,
+                candidates_generated=0,
+                tavily_errors=tavily_errors,
+                possible_lead_urls=[],
+                cards_produced=0,
+            )
             return GenerateCardsResponse(
                 search_configured=True,
                 query_used=query_variants[0] if query_variants else body.claim_to_support[:60],
@@ -747,6 +982,8 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
                 diagnostics=SearchDiagnostics(query_variants_used=query_variants),
                 normalized_claim=plan.normalized_claim if plan else None,
                 corrections_applied=plan.corrections_applied if plan else [],
+                failure_reason=_trace.failure_reason,
+                search_trace=_trace,
             )
 
         gen_result = generate_candidate_cards(
@@ -839,33 +1076,66 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
             "but you'll need to link it to the broader claim in your speech."
         )
 
+    # ── Build search trace (sanitized, no secrets) ───────────────────────────
+    _trace = build_search_trace(
+        queries_run=query_variants,
+        roles_attempted=_roles_attempted,
+        sources_found=gen_result.sources_found,
+        sources_attempted=gen_result.sources_attempted,
+        sources_extracted=gen_result.sources_extracted,
+        passages_considered=gen_result.passages_considered,
+        filtered_no_support=gen_result.filtered_no_support,
+        filtered_low_quality=gen_result.filtered_low_quality,
+        rejected_by_source_quality=gen_result.rejected_by_source_quality,
+        rejected_by_missing_best_claim=gen_result.rejected_by_missing_best_claim,
+        counter_evidence_count=_counter_evidence_count,
+        candidates_generated=gen_result.candidates_generated,
+        tavily_errors=tavily_errors,
+        possible_lead_urls=gen_result.possible_lead_urls,
+        cards_produced=len(gen_result.card_drafts),
+        stopped_early=_search_stopped_early,
+        # Pass 8 retrieval metadata
+        passages_deduplicated=gen_result.dedup_removed,
+        retrieval_backend=gen_result.retrieval_backend,
+        # Pass 9 academic routing metadata
+        p9_lanes=_p9_meta.lanes_selected if _p9_meta else None,
+        p9_providers_attempted=_p9_meta.providers_attempted if _p9_meta else 0,
+        p9_results_found=_p9_meta.academic_found if _p9_meta else 0,
+        p9_doi_matches=_p9_meta.doi_matches_found if _p9_meta else 0,
+        p9_crossref_enrichments=_p9_meta.crossref_enrichments if _p9_meta else 0,
+        p9_trusted_domain_searches=_p9_meta.trusted_domain_searches if _p9_meta else 0,
+        p9_metadata_only_excluded=_p9_meta.metadata_only_excluded if _p9_meta else 0,
+        p9_primary_candidates=_p9_meta.primary_source_candidates if _p9_meta else 0,
+        p9_source_distribution=_p9_meta.source_type_distribution if _p9_meta else None,
+        p9_specialized_summary=_p9_meta.specialized_summary if _p9_meta else "",
+    )
+
     if not gen_result.card_drafts:
-        # ── Differentiated no-card messages (Change 8) ────────────────────────
-        # Case A: Tavily returned results, extraction failed on all of them
-        if gen_result.sources_extracted == 0 and gen_result.sources_attempted > 0:
+        # ── Differentiated no-card messages ──────────────────────────────────
+        # Use failure_detail from the trace as the primary human-readable message,
+        # fall back to the legacy differentiated messages for backward compat.
+        if _trace.failure_detail:
+            reason = _trace.failure_detail
+        elif gen_result.sources_extracted == 0 and gen_result.sources_attempted > 0:
             reason = (
                 f"Found {gen_result.sources_attempted} source(s) but couldn't extract text from any. "
                 "Try URL mode with a direct link to a specific article."
             )
-        # Case B: Low source quality rejections are the dominant failure
         elif gen_result.rejected_by_source_quality > 0 and gen_result.candidates_generated == 0:
             reason = (
                 f"{gen_result.rejected_by_source_quality} source(s) were found but rejected for low credibility "
-                "(below quality threshold). Try a broader claim or use URL mode with a government or academic source."
+                "(below quality threshold). Try URL mode with a government or academic source."
             )
-        # Case C: Passages found but none had a classifiable best_supported_claim
         elif gen_result.rejected_by_missing_best_claim > 0 and gen_result.candidates_generated == 0:
             reason = (
-                f"Sources were extracted but the classifier couldn't identify what specific claim each passage supports. "
+                "Sources were extracted but the classifier couldn't identify what specific claim each passage supports. "
                 "Try rephrasing the claim to match how sources discuss this topic."
             )
-        # Case D: Counter-evidence dominated the results
         elif _counter_evidence_count > 0 and gen_result.filtered_no_support == 0 and gen_result.candidates_generated == 0:
             reason = (
                 f"The {_counter_evidence_count} relevant passage(s) found actually argued against your claim. "
                 "Consider running these as pre-empts, or flip the claim direction."
             )
-        # Case E: Low usefulness after extraction
         elif gen_result.filtered_no_support > 0:
             by_role = gen_result.candidates_by_role
             role_mentions = [
@@ -888,7 +1158,6 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
                     f"Searched {gen_result.sources_extracted} source(s) but none clearly supported this claim. "
                     "The claim may be too broad, or the key mechanism needs different wording."
                 )
-        # Case F: Low quality filter (existing behavior)
         elif gen_result.filtered_low_quality > 0 and gen_result.filtered_no_support == 0:
             reason = (
                 f"{gen_result.filtered_low_quality} source(s) found but filtered out for low credibility. "
@@ -903,7 +1172,7 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
             cards=[],
             sources_considered=gen_result.sources_considered,
             no_card_reason=reason,
-            suggestions=[
+            suggestions=_trace.recovery_actions or [
                 "Try a narrower, mechanism-focused claim.",
                 "Change the wording to match how sources discuss this topic.",
                 "Try URL mode with a specific source you already know.",
@@ -919,6 +1188,9 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
             direct_support_found=_direct_support_found,
             usable_indirect_support_found=_usable_indirect,
             indirect_support_explanation=_indirect_explanation,
+            # Search reliability
+            failure_reason=_trace.failure_reason,
+            search_trace=_trace,
         )
 
     # Persist drafts to DB (status=draft, not saved to evidence_cards yet)
@@ -973,6 +1245,8 @@ async def generate_cards(body: GenerateCardsRequest) -> GenerateCardsResponse:
         weak_leads=gen_result.weak_leads,
         unfilled_slots=gen_result.unfilled_slots,
         evidence_set_plan=gen_result.evidence_set_plan,
+        # Search reliability
+        search_trace=_trace,
     )
 
 
@@ -1020,13 +1294,94 @@ async def patch_card_draft(draft_id: str, body: PatchCardDraftRequest) -> dict:
         raise HTTPException(status_code=500, detail="Failed to update card draft.") from exc
 
 
+# ── 5b. Citation field edit (structured; never changes evidence body) ─────────
+
+class CitationFieldEditRequest(BaseModel):
+    user_id: str
+    field: str   # e.g. "title", "authors", "year", "doi", "institution"
+    value: str   # new value as string; normalizer parses into the right type
+
+
+@router.patch("/card-drafts/{draft_id}/citation-field")
+async def patch_citation_field(draft_id: str, body: CitationFieldEditRequest) -> dict:
+    """Apply a structured citation field edit to the draft.
+
+    - Applies apply_user_edit() → sets confidence=verified + manually_edited=True.
+    - Re-renders all 6 citation formats via attach_rendered().
+    - Updates draft_json['citation_record']. Does NOT touch body_text, spans, or
+      support_verdict — citation edits must never change evidence or provenance.
+    """
+    existing = _get_draft_or_404(draft_id, body.user_id)
+
+    draft_json = dict(existing.get("draft_json") or {})
+    existing_record_data: Optional[dict] = draft_json.get("citation_record")
+
+    try:
+        from app.models.citation import CitationRecord
+        from app.services.citation_normalizer import (
+            apply_user_edit,
+            build_citation_record,
+        )
+        from app.services.citation_renderers import attach_rendered
+
+        if existing_record_data:
+            record = CitationRecord(**existing_record_data)
+        else:
+            # Build a minimal record from the draft's legacy fields
+            from app.services.citation_normalizer import from_legacy_citation_metadata
+            from app.models.research import CitationMetadata as _CMeta
+            legacy_data = draft_json.get("citation") or {}
+            if legacy_data:
+                legacy = _CMeta(**legacy_data)
+            else:
+                legacy = _CMeta(
+                    url=existing.get("url") or "",
+                    title=existing.get("title") or "",
+                    authors=[existing.get("author") or ""],
+                    year=existing.get("published_date") or "",
+                    publication_name=existing.get("publication") or "",
+                )
+            record = from_legacy_citation_metadata(legacy)
+
+        record = apply_user_edit(record, body.field, body.value)
+        record = attach_rendered(record)
+
+        draft_json["citation_record"] = record.model_dump()
+        result = (
+            get_supabase()
+            .table("card_drafts")
+            .update({"draft_json": draft_json})
+            .eq("id", draft_id)
+            .execute()
+        )
+        return {"ok": True, "citation_record": record.model_dump()}
+    except Exception as exc:
+        logger.error("Citation field edit failed for draft %s: %s", draft_id, exc)
+        raise HTTPException(status_code=500, detail="Citation edit failed.") from exc
+
+
 # ── 6. Save draft → evidence_card ─────────────────────────────────────────────
+
+def _stage_error(stage: str, exc: Exception) -> HTTPException:
+    """Return a sanitized HTTPException with a stage marker. Never leaks secrets."""
+    safe_detail = str(exc)
+    # Strip anything that looks like a key or connection string
+    for bad in ("eyJ", "postgresql://", "service_role", "anon", "secret"):
+        if bad in safe_detail:
+            safe_detail = "internal error"
+            break
+    return HTTPException(
+        status_code=500,
+        detail={"stage": stage, "message": safe_detail},
+    )
+
 
 @router.post("/card-drafts/{draft_id}/save", response_model=SaveDraftResponse)
 async def save_card_draft(draft_id: str, body: SaveDraftRequest) -> SaveDraftResponse:
     """Confirm user review and save draft as an evidence_card.
 
     Requires confirmed=True. User must explicitly review before saving.
+    Idempotent: if the draft was already saved, returns the existing card_id.
     """
     if not body.confirmed:
         raise HTTPException(
@@ -1035,7 +1390,17 @@ async def save_card_draft(draft_id: str, body: SaveDraftRequest) -> SaveDraftRes
         )
 
     draft = _get_draft_or_404(draft_id, body.user_id)
+
+    # ── Idempotency: draft already saved ──────────────────────────────────────
+    existing_card_id = draft.get("saved_card_id")
+    if existing_card_id:
+        return SaveDraftResponse(
+            card_id=existing_card_id,
+            draft_id=draft_id,
+            message="Card already saved to your Evidence Library.",
+        )
     if draft.get("status") == "saved":
+        # saved_card_id missing (rare) — cannot reconstruct; treat as duplicate
         raise HTTPException(status_code=409, detail="Draft has already been saved.")
 
     body_text = draft.get("body_text", "").strip()
@@ -1044,11 +1409,14 @@ async def save_card_draft(draft_id: str, body: SaveDraftRequest) -> SaveDraftRes
 
     sb = get_supabase()
 
+    # ── Stage 1: find/create parent document ──────────────────────────────────
     try:
         doc_id = _get_or_create_research_doc(body.user_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to create Research Library document.") from exc
+        logger.error("[save/%s] stage=doc user=%s: %s", draft_id[:8], body.user_id[:8], exc)
+        raise _stage_error("find_or_create_document", exc) from exc
 
+    # ── Stage 2: insert document chunk ────────────────────────────────────────
     chunk_text = f"{draft.get('tag', '')}\n\n{body_text}"
     try:
         chunk_result = (
@@ -1069,23 +1437,29 @@ async def save_card_draft(draft_id: str, body: SaveDraftRequest) -> SaveDraftRes
         )
         chunk_id = chunk_result.data[0]["id"]
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to create document chunk.") from exc
+        logger.error("[save/%s] stage=chunk: %s", draft_id[:8], exc)
+        raise _stage_error("insert_document_chunk", exc) from exc
 
+    # ── Stage 2b: store embedding (non-fatal) ─────────────────────────────────
     embedding = _embed_text_safe(chunk_text)
     if embedding:
         try:
             sb.table("document_chunks").update({"embedding": embedding}).eq("id", chunk_id).execute()
         except Exception as exc:
-            logger.warning("Failed to store embedding: %s", exc)
+            logger.warning("[save/%s] embedding store failed: %s", draft_id[:8], exc)
 
+    # ── Stage 3: insert evidence_card ─────────────────────────────────────────
+    # card_text (NOT NULL in base schema) must be set; body_text is the research
+    # card content added by migration 20260610. Both columns carry the same text.
     try:
-        card_row = {
+        card_row: dict = {
             "document_id": doc_id,
             "chunk_id": chunk_id,
             "user_id": body.user_id,
             "tag": draft.get("tag", ""),
-            "cite": draft.get("cite", ""),
-            "body_text": body_text,
+            "card_text": body_text,        # satisfies original NOT NULL constraint
+            "cite": draft.get("cite", ""),  # added by migration 20260623
+            "body_text": body_text,         # extended column from migration 20260610
             "highlighted_spans_json": draft.get("highlighted_spans_json") or [],
             "underline_spans_json": draft.get("underline_spans_json") or [],
             "url": draft.get("url"),
@@ -1103,15 +1477,18 @@ async def save_card_draft(draft_id: str, body: SaveDraftRequest) -> SaveDraftRes
         card_result = sb.table("evidence_cards").insert(card_row).execute()
         card_id = card_result.data[0]["id"]
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to save evidence card.") from exc
+        logger.error("[save/%s] stage=card_insert: %s", draft_id[:8], exc)
+        raise _stage_error("insert_library_card", exc) from exc
 
+    # ── Stage 4: mark draft saved ─────────────────────────────────────────────
     try:
         sb.table("card_drafts").update({"status": "saved", "saved_card_id": card_id}).eq("id", draft_id).execute()
         research_source_id = draft.get("research_source_id")
         if research_source_id:
             sb.table("research_sources").update({"status": "saved"}).eq("id", research_source_id).execute()
     except Exception as exc:
-        logger.warning("Failed to update draft/source status: %s", exc)
+        # Non-fatal: card is already persisted; log and continue
+        logger.warning("[save/%s] stage=update_draft: %s", draft_id[:8], exc)
 
     return SaveDraftResponse(
         card_id=card_id,
@@ -1158,3 +1535,54 @@ async def delete_card_draft(draft_id: str, user_id: str = Query(...)) -> dict:
         return {"discarded": True}
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to discard draft.") from exc
+
+
+# ── 9. Hard-delete a saved evidence card ──────────────────────────────────────
+
+@router.delete("/saved-cards/{card_id}")
+async def delete_saved_card(card_id: str, user_id: str = Query(...)) -> dict:
+    """
+    Permanently delete a saved evidence card and all associated metadata.
+
+    Removes: evidence_cards row, any linked card_drafts, user_markup,
+    card_cutting_metadata. Does NOT remove blockfile entries that
+    reference this card — callers should remove blockfile associations first.
+    """
+    supabase = get_supabase()
+
+    # Verify ownership
+    try:
+        card_res = (
+            supabase.table("evidence_cards")
+            .select("id, user_id")
+            .eq("id", card_id)
+            .single()
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="Evidence card not found.") from exc
+
+    if not card_res.data:
+        raise HTTPException(status_code=404, detail="Evidence card not found.")
+    if card_res.data.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this card.")
+
+    errors: list[str] = []
+
+    # Mark any associated card_drafts as discarded
+    try:
+        supabase.table("card_drafts").update({"status": "discarded"}).eq(
+            "saved_card_id", card_id
+        ).execute()
+    except Exception as exc:
+        errors.append(f"card_drafts: {type(exc).__name__}")
+
+    # Delete the card itself
+    try:
+        supabase.table("evidence_cards").delete().eq("id", card_id).eq(
+            "user_id", user_id
+        ).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to delete evidence card.") from exc
+
+    return {"deleted": True, "card_id": card_id, "partial_errors": errors or None}

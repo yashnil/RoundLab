@@ -496,6 +496,8 @@ export interface EvidenceCard {
   user_id: string;
   chunk_id: string | null;
   tag: string | null;
+  /** Short citation string added by migration 20260623 (e.g. "Feaver, 2017"). */
+  cite?: string | null;
   author: string | null;
   source: string | null;
   year: number | null;
@@ -983,6 +985,113 @@ export interface CitationMetadata {
   date_source?: string;
   title_source?: string;
   publication_source?: string;
+  // Pass 12 — structured citation record
+  citation_record?: CitationRecord;
+}
+
+// ── Pass 12: Structured Citation Record ──────────────────────────────────────
+
+export type ConfidenceTier = "verified" | "high" | "medium" | "low" | "unknown";
+export type MetadataSource =
+  | "user_edit" | "crossref" | "openalex" | "semantic_scholar"
+  | "json_ld" | "citation_meta" | "og" | "pdf_parser" | "docx_parser"
+  | "provider_metadata" | "visible_text" | "url_inference" | "domain_inference" | "none";
+
+export type CitationSourceType =
+  | "article-journal" | "paper-conference" | "book" | "chapter"
+  | "report" | "government-report" | "webpage" | "article-newspaper"
+  | "article-magazine" | "legal_case" | "legislation" | "dataset"
+  | "thesis" | "working-paper" | "document";
+
+export type CitationCompleteness =
+  | "complete" | "usable_with_warnings" | "incomplete" | "unverified";
+
+export interface CitationPerson {
+  given: string;
+  family: string;
+  literal: string;
+  suffix: string;
+  is_organization: boolean;
+}
+
+export interface CitationDate {
+  year: number | null;
+  month: number | null;
+  day: number | null;
+}
+
+export interface FieldProvenance {
+  source: MetadataSource;
+  confidence: ConfidenceTier;
+  manually_edited: boolean;
+  warning: string;
+}
+
+export interface CitationConflict {
+  field: string;
+  selected_value: string;
+  selected_source: string;
+  conflicting_value: string;
+  conflicting_source: string;
+  message: string;
+}
+
+export interface CitationRecord {
+  source_type: CitationSourceType;
+  source_type_confidence: ConfidenceTier;
+  // People
+  authors: CitationPerson[];
+  editors: CitationPerson[];
+  authors_prov: FieldProvenance;
+  // Titles
+  title: string;
+  title_prov: FieldProvenance;
+  container_title: string;
+  container_title_prov: FieldProvenance;
+  collection_title: string;
+  // Publication
+  publisher: string;
+  publisher_prov: FieldProvenance;
+  publisher_place: string;
+  edition: string;
+  // Issue
+  volume: string;
+  issue: string;
+  page: string;
+  article_number: string;
+  // Dates
+  issued: CitationDate | null;
+  issued_prov: FieldProvenance;
+  accessed: CitationDate | null;
+  // Identifiers
+  doi: string;
+  doi_prov: FieldProvenance;
+  url: string;
+  url_prov: FieldProvenance;
+  canonical_url: string;
+  // Legal / gov
+  court: string;
+  case_name: string;
+  docket_number: string;
+  legislation_title: string;
+  section: string;
+  institution: string;
+  institution_prov: FieldProvenance;
+  report_number: string;
+  jurisdiction: string;
+  language: string;
+  // Quality
+  completeness: CitationCompleteness;
+  conflicts: CitationConflict[];
+  warnings: string[];
+  citation_version: number;
+  // Rendered cache (never source of truth)
+  rendered_debate: string;
+  rendered_mla: string;
+  rendered_apa: string;
+  rendered_chicago: string;
+  rendered_bibtex: string;
+  rendered_ris: string;
 }
 
 // Evidence Set Builder (Parts 1-2)
@@ -1220,6 +1329,132 @@ export interface SearchDiagnostics {
   slot_unfilled_reasons?: Record<string, string> | null;
 }
 
+// ── Search trace models (Pass 7 — search reliability) ──────────────────────
+
+export interface SearchStageTrace {
+  stage: string;
+  queries_run: string[];
+  roles_attempted: string[];
+  urls_found: number;
+  urls_deduplicated: number;
+  pages_fetched_ok: number;
+  extraction_successes: number;
+  extraction_failures: number;
+  passages_considered: number;
+  passages_rejected_relevance: number;
+  passages_rejected_quality: number;
+  passages_rejected_validation: number;
+  passages_deduplicated?: number;
+  cards_produced: number;
+  provider_errors: string[];
+  notes: string[];
+  // Pass 8 retrieval metadata (optional for backward compat)
+  reranker_applied?: boolean;
+  reranker_backend?: string;
+  // Pass 9 academic routing metadata (all optional)
+  source_lanes_selected?: string[];
+  specialized_providers_attempted?: number;
+  specialized_results_found?: number;
+  doi_matches?: number;
+  crossref_enrichments?: number;
+  trusted_domain_searches?: number;
+  metadata_only_excluded?: number;
+  primary_source_candidates?: number;
+  // Pass 10 extraction provenance metadata (all optional)
+  document_types_encountered?: string[];
+  parsers_attempted?: string[];
+  parser_selected?: string;
+  parser_failures?: number;
+  fallback_count?: number;
+  extraction_quality_warnings?: string[];
+  full_text_count?: number;
+  abstract_only_count?: number;
+  snippet_only_count?: number;
+  partial_extraction_count?: number;
+  metadata_only_count?: number;
+  snapshot_success_count?: number;
+  snapshot_failure_count?: number;
+  page_aware_candidates?: number;
+  offset_validation_failures?: number;
+  // Pass 11 support verification metadata (all optional)
+  cards_verified?: number;
+  cards_supported?: number;
+  cards_partially_supported?: number;
+  cards_unsupported?: number;
+  cards_contradicted?: number;
+  cards_insufficient_context?: number;
+  deterministic_mismatches_found?: number;
+  semantic_verifier_attempted?: number;
+  semantic_verifier_backend?: string;
+  semantic_verifier_failures?: number;
+  abstract_context_warnings?: number;
+  safer_tags_generated?: number;
+}
+
+export interface SearchTraceResult {
+  stages: SearchStageTrace[];
+  failure_reason: string | null;
+  failure_detail: string;
+  attempts_summary: string[];
+  recovery_actions: string[];
+  stopped_early: boolean;
+  total_queries: number;
+  total_urls_found: number;
+  total_cards: number;
+  // Pass 8 retrieval info (optional for backward compat)
+  dedup_removed?: number;
+  retrieval_backend?: string;
+  // Pass 9 source info (optional for backward compat)
+  source_type_distribution?: Record<string, number>;
+  specialized_summary?: string;
+  // Pass 10 extraction summary (optional)
+  extraction_summary?: string;
+  // Pass 11 verification summary (optional)
+  verification_summary?: string;
+}
+
+// Pass 11: Evidence support verification types
+
+export type SupportVerdict =
+  | "supported"
+  | "partially_supported"
+  | "unsupported"
+  | "contradicted"
+  | "insufficient_context"
+  | "verification_unavailable";
+
+export interface SupportEvidenceSpan {
+  text: string;
+  start: number;
+  end: number;
+  span_type: "supporting" | "conflicting";
+}
+
+export interface SupportDimensionResult {
+  dimension: string;
+  verdict: string;
+  severity: "critical" | "major" | "minor" | "none";
+  explanation: string;
+  spans: SupportEvidenceSpan[];
+  suggested_correction?: string;
+}
+
+export interface EvidenceVerificationResult {
+  overall_verdict: SupportVerdict;
+  claim_verdict: SupportVerdict;
+  tag_verdict: SupportVerdict;
+  dimensions: SupportDimensionResult[];
+  safer_tag?: string;
+  safer_tag_generated: boolean;
+  source_text_type: string;
+  context_limitation?: string;
+  deterministic_mismatches: string[];
+  semantic_verifier_used: boolean;
+  semantic_verifier_backend?: string;
+  verifier_confidence: number;
+  verification_duration_ms: number;
+}
+
 export interface GenerateCardsResponse {
   search_configured: boolean;
   query_used?: string | null;
@@ -1241,6 +1476,9 @@ export interface GenerateCardsResponse {
   weak_leads?: WeakLead[];
   unfilled_slots?: string[];
   evidence_set_plan?: EvidenceSetPlan | null;
+  // Search reliability (Pass 7)
+  failure_reason?: string | null;
+  search_trace?: SearchTraceResult | null;
 }
 
 export interface ResearchConfigResponse {

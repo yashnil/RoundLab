@@ -54,6 +54,50 @@ class Settings(BaseSettings):
     )
     research_enable_zotero: bool = Field(default=False, alias="RESEARCH_ENABLE_ZOTERO")
 
+    # Pass 9: academic and primary-source routing
+    # Both providers are free without keys; keys only raise rate limits.
+    semantic_scholar_api_key: Optional[str] = Field(
+        default=None, alias="SEMANTIC_SCHOLAR_API_KEY"
+    )
+    openalex_contact_email: Optional[str] = Field(
+        default=None, alias="OPENALEX_CONTACT_EMAIL"
+    )
+    # Set to False to prevent live HTTP calls in test / CI environments.
+    research_enable_academic_search: bool = Field(
+        default=True, alias="RESEARCH_ENABLE_ACADEMIC_SEARCH"
+    )
+
+    # Pass 11: card support verification
+    research_enable_card_verification: bool = Field(
+        default=True, alias="RESEARCH_ENABLE_CARD_VERIFICATION"
+    )
+    card_verifier_backend: str = Field(
+        default="llm", alias="CARD_VERIFIER_BACKEND"
+    )  # "llm" | "disabled"
+    card_verifier_timeout_s: float = Field(
+        default=10.0, alias="CARD_VERIFIER_TIMEOUT_S"
+    )
+    card_verifier_max_cards: int = Field(
+        default=4, alias="CARD_VERIFIER_MAX_CARDS"
+    )
+    card_verifier_max_context_chars: int = Field(
+        default=3000, alias="CARD_VERIFIER_MAX_CONTEXT_CHARS"
+    )
+
+    # ── Pass 18: Pilot mode + cost controls ────────────────────────────────
+    # Enable to enforce per-user daily limits and surface cost tracking.
+    pilot_mode: bool = Field(default=False, alias="PILOT_MODE")
+    # Max USD per user per day across all LLM + provider calls.
+    daily_llm_budget_usd: float = Field(default=1.0, alias="DAILY_LLM_BUDGET_USD")
+    # Hard caps for specific operations per user per day.
+    max_rounds_per_user_daily: int = Field(default=5, alias="MAX_ROUNDS_PER_USER_DAILY")
+    max_evidence_searches_per_day: int = Field(default=20, alias="MAX_EVIDENCE_SEARCHES_PER_DAY")
+    # Latency budget targets in seconds (for monitoring, not enforcement).
+    latency_evidence_search_s: float = Field(default=30.0, alias="LATENCY_EVIDENCE_SEARCH_S")
+    latency_card_cut_s: float = Field(default=15.0, alias="LATENCY_CARD_CUT_S")
+    latency_opponent_speech_s: float = Field(default=20.0, alias="LATENCY_OPPONENT_SPEECH_S")
+    latency_ballot_s: float = Field(default=25.0, alias="LATENCY_BALLOT_S")
+
     model_config = {"env_file": ".env", "extra": "ignore", "populate_by_name": True}
 
 

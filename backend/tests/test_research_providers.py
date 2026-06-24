@@ -532,6 +532,7 @@ class TestGracefulDegradation:
         # No Firecrawl key configured
         with (
             patch.object(wae, "extract_article", return_value=mock_article_fail),
+            patch("app.services.research_search.extract_article", return_value=mock_article_fail),
             patch("app.services.research_search._classify_role_with_llm", return_value=None),
         ):
             result = generate_candidate_cards(
@@ -543,11 +544,13 @@ class TestGracefulDegradation:
                 use_llm=False,
             )
 
-        # Should either have a snippet-only card or a possible_lead_url
+        # Snippet-only sources are routed to weak_leads (Part 6 post-processing);
+        # the test accepts a snippet card in card_drafts, a weak_lead, or a possible_lead_url.
         assert (
             len(result.card_drafts) > 0 or
+            len(result.weak_leads) > 0 or
             len(result.possible_lead_urls) > 0
-        ), "Expected snippet card or possible_lead_url for failed extraction"
+        ), "Expected snippet card, weak lead, or possible_lead_url for failed extraction"
 
     def test_generate_candidate_cards_uses_provider_raw_when_available(self, monkeypatch):
         """When provider_raw >= 600 chars and not boilerplate, it should be used directly."""
@@ -653,8 +656,9 @@ class TestGracefulDegradation:
                 use_llm=False,
             )
 
-        # reranker_used should be "heuristic" (no Cohere key in test env)
-        assert result.reranker_used in ("heuristic", "cohere", "none"), (
+        # reranker_used should be a recognised backend value
+        _valid_backends = ("heuristic", "cohere", "none", "bm25", "bm25+semantic")
+        assert result.reranker_used in _valid_backends, (
             f"Expected a valid reranker_used value, got: {result.reranker_used}"
         )
 
@@ -749,8 +753,11 @@ class TestRerankerUsedDiagnostics:
                 user_id="test-user",
                 use_llm=False,
             )
-        # use_llm=False means cohere path is skipped → heuristic
-        assert result.reranker_used == "heuristic"
+        # use_llm=False means cohere path is skipped → heuristic or BM25 (Pass 8)
+        _non_cohere = ("heuristic", "bm25", "bm25+semantic", "none")
+        assert result.reranker_used in _non_cohere, (
+            f"Expected non-Cohere backend, got: {result.reranker_used}"
+        )
         assert result.cohere_rerank_attempted == 0
 
     def test_reranker_used_is_cohere_when_key_present(self, monkeypatch):

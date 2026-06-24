@@ -15,6 +15,9 @@ import {
   Users,
   ClipboardCheck,
   TrendingUp,
+  Trophy,
+  Scale,
+  Swords,
 } from "lucide-react";
 
 export interface AppNavItem {
@@ -94,6 +97,14 @@ export const APP_NAV_GROUPS: SidebarNavGroup[] = [
         hint: "Your next step, progress, and recent rounds",
       },
       {
+        href: "/round-simulation",
+        label: "Full Round",
+        icon: Swords,
+        match: ["/round-simulation"],
+        hint: "Practice a full PF round against an evidence-constrained AI opponent",
+        loopStep: "practice",
+      },
+      {
         href: "/session",
         label: "Practice",
         icon: Mic,
@@ -129,6 +140,27 @@ export const APP_NAV_GROUPS: SidebarNavGroup[] = [
         icon: BookMarked,
         match: ["/evidence"],
         hint: "Research sources and cut debate cards",
+      },
+      {
+        href: "/library",
+        label: "Library",
+        icon: BookMarked,
+        match: ["/library"],
+        hint: "Organized evidence by resolution and argument",
+      },
+      {
+        href: "/prep",
+        label: "Tournament Prep",
+        icon: Trophy,
+        match: ["/prep"],
+        hint: "Readiness report, gap-driven workouts, and prep plan",
+      },
+      {
+        href: "/judge-adaptation",
+        label: "Judge Adaptation",
+        icon: Scale,
+        match: ["/judge-adaptation"],
+        hint: "Adapt your material for lay, flow, technical, and coach judges",
       },
     ],
   },

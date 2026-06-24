@@ -1,7 +1,9 @@
 """Pydantic models for Research-to-Card Evidence Builder."""
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 from pydantic import BaseModel, Field
+
+from app.models.citation import CitationRecord  # noqa: E402  (no circular dep)
 
 SourceQuality = Literal["high", "medium", "low", "unknown"]
 CardDraftStatus = Literal["draft", "saved", "discarded"]
@@ -121,6 +123,8 @@ class CitationMetadata(BaseModel):
     date_source: str = ""
     title_source: str = ""
     publication_source: str = ""
+    # Pass 12 — structured CitationRecord (optional; absent on legacy cards)
+    citation_record: Optional[CitationRecord] = None
 
 
 # ── Card intelligence (debate-use annotations) ─────────────────────────────────
@@ -229,6 +233,8 @@ class CardDraftRow(BaseModel):
     intelligence: Optional[CardIntelligence] = None
     source_domain: Optional[str] = None
     source_title: Optional[str] = None
+    # Pass 12 — structured citation record (absent on legacy cards)
+    citation_record: Optional[CitationRecord] = None
     created_at: str
     updated_at: str
 
@@ -398,6 +404,9 @@ class GenerateCardsResponse(BaseModel):
     weak_leads: list[dict] = []
     unfilled_slots: list[str] = []
     evidence_set_plan: Optional[dict] = None
+    # Search reliability (Pass 7)
+    failure_reason: Optional[str] = None
+    search_trace: Optional[Any] = None  # SearchTraceResult from search_trace.py
 
 
 # ── Config response ───────────────────────────────────────────────────────────

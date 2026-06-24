@@ -240,7 +240,10 @@
 
   html {
     @apply font-sans;
-    scroll-behavior: smooth;
+    /* Smooth scroll only when the user has not requested reduced motion */
+    @media (prefers-reduced-motion: no-preference) {
+      scroll-behavior: smooth;
+    }
     /* Default to dark mode, allow light mode via .light class */
   }
 

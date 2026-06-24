@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# =============================================================================
+# RoundLab — Remote Migration Repair Example
+# =============================================================================
+#
+# WARNING: This script is for EXAMPLE PURPOSES ONLY.
+# Do NOT run it blindly. Read every section carefully before executing.
+#
+# WHEN TO USE:
+#   The remote Supabase project has tables that were applied manually (outside
+#   the Supabase CLI migration system), but the supabase_migrations.schema_migrations
+#   table has no records for those files. Running "supabase db push" would attempt
+#   to re-apply those migrations and fail with "table already exists" errors.
+#
+# SAFE APPROACH:
+#   1. Run scripts/audit_remote_schema.sql first to confirm which tables exist.
+#   2. If all tables in a migration already exist remotely, insert a fake migration
+#      record so Supabase CLI knows it's been applied.
+#   3. If some tables are missing, apply just those missing CREATE TABLE statements.
+#      Never re-run a whole migration file if some of its statements already ran.
+#
+# PRE-REQUISITES:
+#   - SUPABASE_DB_URL must be set (find under Project Settings → Database → URI)
+#   - psql must be installed
+#   - You must have applied scripts/audit_remote_schema.sql and confirmed the state
+#
+# =============================================================================
+
+set -euo pipefail
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+DB_URL="${SUPABASE_DB_URL:?SUPABASE_DB_URL must be set}"
+
+echo "=== RoundLab Remote Migration Repair ==="
+echo "WARNING: This modifies the remote database. Review every step first."
+echo ""
+read -p "Type 'yes' to confirm you have audited the remote schema: " CONFIRM
+[[ "$CONFIRM" == "yes" ]] || { echo "Aborted."; exit 1; }
+
+# ── Step 1: Confirm which migrations need to be recorded ─────────────────────
+# Run the audit script first and note which migrations have been applied
+# but are missing from schema_migrations.
+echo ""
+echo "Current migration history on remote:"
+psql "$DB_URL" -c \
+  "SELECT version, inserted_at FROM supabase_migrations.schema_migrations ORDER BY inserted_at;"
+
+# ── Step 2: Insert migration records for already-applied files ─────────────────
+# ONLY run the INSERT for a version if that migration's tables ALREADY EXIST on remote.
+# Inserting a record for a migration that was never applied will make Supabase skip it.
+#
+# Format: INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('...');
+#
+# Uncomment and run each INSERT only after confirming the tables exist:
+
+# -- Early foundation migrations (if applied manually):
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260524000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260601000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260602000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260602100000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260604000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260606000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260607000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260608100000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260608110000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609100000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609200000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609300000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609400000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609500000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609600000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609700000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609800000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260609900000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260610000000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260618000000') ON CONFLICT DO NOTHING;"
+#
+# -- Pass 13–18 migrations (ONLY if those tables exist remotely already):
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260622010000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260622020000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260622030000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260622040000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260623010000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260623020000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260623025000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260623030000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260623040000') ON CONFLICT DO NOTHING;"
+# psql "$DB_URL" -c "INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20260623050000') ON CONFLICT DO NOTHING;"
+
+# ── Step 3: Apply migrations that are new and NOT yet applied ─────────────────
+# If the remote has NO migration history at all (fresh project with tables applied
+# manually), you have two options:
+#
+# Option A — Reset and replay from scratch:
+#   supabase db reset
+#   This drops all tables and re-applies the full migration chain.
+#   ONLY safe if the remote has no production data.
+#
+# Option B — Apply only new migrations after baseline-ing existing state:
+#   1. Insert all existing-tables migrations into schema_migrations (Step 2 above)
+#   2. Then run: supabase db push
+#   This will apply only the new migrations not yet recorded.
+#
+# For the pilot (no production data yet), Option A (db reset) is preferred:
+#   supabase link --project-ref YOUR_PROJECT_REF
+#   supabase db reset
+
+echo ""
+echo "Review complete. If tables were confirmed, run:"
+echo "  supabase db reset    # safe reset for pilot (drops + replays)"
+echo "  supabase db push     # incremental push (after baselining)"

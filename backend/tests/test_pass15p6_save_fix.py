@@ -177,7 +177,7 @@ class TestMigrationFile(unittest.TestCase):
 
     def setUp(self):
         migrations_dir = ROOT / "supabase" / "migrations"
-        files = sorted(migrations_dir.glob("20260623_pass15p6*.sql"))
+        files = sorted(migrations_dir.glob("*pass15p6*.sql"))
         self.assertGreater(len(files), 0, "Pass 15.6 migration file not found")
         self.sql = files[0].read_text()
 

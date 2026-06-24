@@ -25,20 +25,29 @@ CREATE INDEX IF NOT EXISTS idx_prep_gaps_fingerprint
   ON prep_gaps (fingerprint)
   WHERE fingerprint IS NOT NULL;
 
--- 4. Populate fingerprints for existing rows (md5 of user_id||workspace_id||category||title)
-UPDATE prep_gaps
+-- 4. Backfill fingerprints for existing rows.
+-- Uses PostgreSQL built-in sha256() — no pgcrypto / extensions.digest required.
+-- Compact JSON array (no spaces): ["user_id","workspace_id","category","title"]
+-- Matches Python: json.dumps([...], separators=(',',':'), ensure_ascii=False)
+UPDATE public.prep_gaps
 SET fingerprint = substr(
     encode(
-      digest(
-        coalesce(user_id::text,'') ||
-        coalesce(workspace_id::text,'') ||
-        coalesce(category,'') ||
-        coalesce(title,''),
-        'sha256'
-      ),
-      'hex'
-    ), 1, 32
-  )
+        sha256(
+            convert_to(
+                json_build_array(
+                    COALESCE(user_id::text, ''),
+                    COALESCE(workspace_id::text, ''),
+                    COALESCE(category::text, ''),
+                    COALESCE(title, '')
+                )::text,
+                'UTF8'
+            )
+        ),
+        'hex'
+    ),
+    1,
+    32
+)
 WHERE fingerprint IS NULL;
 
 -- 5. Ensure RLS on round_crossfire_exchanges allows student-question rows

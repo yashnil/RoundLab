@@ -96,9 +96,18 @@ def get_pre_round_readiness_warnings(
 
 
 def _gap_fingerprint(user_id: str, workspace_id: str, category: str, title: str) -> str:
-    """Stable fingerprint for deduplication. Independent of round_id."""
-    key = json.dumps([user_id, workspace_id, category, title], sort_keys=True)
-    return hashlib.sha256(key.encode()).hexdigest()[:32]
+    """Stable fingerprint for deduplication. Independent of round_id.
+
+    Compact JSON array, no spaces, UTF-8 passthrough — matches PostgreSQL:
+      encode(sha256(convert_to(json_build_array(...)::text, 'UTF8')), 'hex')
+    Field order: user_id, workspace_id, category, title.
+    """
+    key = json.dumps(
+        [user_id, workspace_id, category, title],
+        separators=(',', ':'),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(key.encode('utf-8')).hexdigest()[:32]
 
 
 def _upsert_gap(

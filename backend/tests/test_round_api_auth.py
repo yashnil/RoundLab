@@ -59,6 +59,57 @@ def test_gap_fingerprint_length_is_32():
     assert len(fp) == 32
 
 
+def test_gap_fingerprint_serialization_is_compact_json():
+    """Fingerprint must use compact JSON (no spaces) to match PostgreSQL json_build_array()::text.
+
+    PostgreSQL: json_build_array('a','b')::text  → ["a","b"]   (no spaces)
+    Python old: json.dumps(['a','b'])             → ["a", "b"] (space after comma)
+    Python new: json.dumps([...], separators=(',',':')) → ["a","b"] ✓
+    """
+    user_id, ws, cat, title = "user-1", "ws-1", "missing_response", "No response to X"
+    # Compact JSON array — what PostgreSQL json_build_array produces
+    expected_key = '["user-1","ws-1","missing_response","No response to X"]'
+    expected_fp = hashlib.sha256(expected_key.encode("utf-8")).hexdigest()[:32]
+    assert _gap_fingerprint(user_id, ws, cat, title) == expected_fp
+
+
+def test_gap_fingerprint_does_not_use_spaced_json():
+    """Confirm the old json.dumps default (spaces after commas) would yield a different hash."""
+    user_id, ws, cat, title = "u", "ws-1", "c", "t"
+    spaced_key = json.dumps([user_id, ws, cat, title])   # default: spaces after ','
+    compact_key = json.dumps([user_id, ws, cat, title], separators=(",", ":"))
+    assert spaced_key != compact_key                     # sanity: formats differ
+    spaced_fp = hashlib.sha256(spaced_key.encode("utf-8")).hexdigest()[:32]
+    assert _gap_fingerprint(user_id, ws, cat, title) != spaced_fp
+
+
+def test_gap_fingerprint_unicode_title():
+    """Non-ASCII titles must not be \\uXXXX-escaped (ensure_ascii=False) so SQL and Python match.
+
+    PostgreSQL json_build_array emits raw UTF-8, not \\uXXXX escape sequences.
+    Python's default json.dumps would escape é → \\u00e9, breaking the hash match.
+    """
+    title = "Contención sobre política"  # "Contención sobre política"
+    expected_key = f'["u","ws","c","{title}"]'      # raw UTF-8, no backslash escapes
+    expected_fp = hashlib.sha256(expected_key.encode("utf-8")).hexdigest()[:32]
+    actual_fp = _gap_fingerprint("u", "ws", "c", title)
+    assert actual_fp == expected_fp
+    assert len(actual_fp) == 32
+
+
+def test_gap_fingerprint_field_order_is_user_workspace_category_title():
+    """Field order is fixed at [user, workspace, category, title]; swapping any two changes the hash."""
+    # Swap user ↔ workspace
+    fp_correct = _gap_fingerprint("aaa", "bbb", "c", "t")
+    fp_swapped = _gap_fingerprint("bbb", "aaa", "c", "t")
+    assert fp_correct != fp_swapped
+
+    # Swap category ↔ title
+    fp_cat_first = _gap_fingerprint("u", "ws", "category_val", "title_val")
+    fp_title_first = _gap_fingerprint("u", "ws", "title_val", "category_val")
+    assert fp_cat_first != fp_title_first
+
+
 # ── Unit: _upsert_gap ─────────────────────────────────────────────────────────
 
 

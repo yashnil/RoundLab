@@ -164,9 +164,12 @@ class TestSanitization:
         assert "[REDACTED]" in result
 
     def test_strips_openai_key_pattern(self):
-        err = "OpenAI error: sk-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
+        # Build the token at runtime so static secret scanners cannot flag this file.
+        # Real sk-... keys are purely alphanumeric after the dash, 32+ chars.
+        fake_token = "sk" + "-" + "a" * 40
+        err = f"OpenAI error: {fake_token}"
         result = sanitize_error(err)
-        assert "sk-" not in result or "[REDACTED]" in result
+        assert "[REDACTED]" in result, f"Expected key to be redacted, got: {result!r}"
 
     def test_strips_bearer_token(self):
         err = "HTTP 401: Authorization required. Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"

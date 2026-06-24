@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AdaptationChangesPanel } from "@/components/judge-adaptation/AdaptationChangesPanel";
 import { JudgeComparisonPanel } from "@/components/judge-adaptation/JudgeComparisonPanel";
@@ -27,7 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "readiness", label: "Readiness" },
 ];
 
-export default function JudgeAdaptationPage() {
+function JudgeAdaptationContent() {
   const searchParams = useSearchParams();
   const userId = searchParams.get("user_id") ?? "demo-user";
 
@@ -392,5 +392,13 @@ export default function JudgeAdaptationPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function JudgeAdaptationPage() {
+  return (
+    <Suspense fallback={<div className="max-w-5xl mx-auto px-4 py-8 text-sm text-[var(--ink-subtle)]">Loading…</div>}>
+      <JudgeAdaptationContent />
+    </Suspense>
   );
 }

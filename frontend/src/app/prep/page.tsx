@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   BarChart3,
@@ -55,7 +55,7 @@ function EmptyState({ onGenerate, loading }: { onGenerate: () => void; loading: 
   );
 }
 
-export default function PrepPage() {
+function PrepPageContent() {
   const searchParams = useSearchParams();
   const workspaceId = searchParams.get("workspace");
   const resolutionId = searchParams.get("resolution");
@@ -265,5 +265,13 @@ export default function PrepPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function PrepPage() {
+  return (
+    <Suspense fallback={<div className="max-w-5xl mx-auto px-4 py-8 text-sm text-[var(--ink-subtle)]">Loading…</div>}>
+      <PrepPageContent />
+    </Suspense>
   );
 }

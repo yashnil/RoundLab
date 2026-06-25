@@ -55,6 +55,14 @@ _IMPACT = frozenset({
     "casualties", "crisis", "threat", "war", "economy", "economic", "stability",
 })
 
+# Scoring weights. _SEM_WEIGHT must exceed _BM25_WEIGHT: a perfect neural-
+# reranker score (sem=1.0) must be able to override a perfect BM25 match
+# (rel=1.0), otherwise enabling the semantic reranker has no effect when
+# lexical relevance is already high. A weak score (< _BM25_WEIGHT / _SEM_WEIGHT
+# ≈ 0.75) will not flip a clearly superior BM25 candidate.
+_BM25_WEIGHT: float = 3.0
+_SEM_WEIGHT: float = 4.0
+
 _ROLE_SIGNALS: dict[str, frozenset] = {
     "direct_support": _CAUSAL,
     "mechanism_support": _CAUSAL | _LEGAL,
@@ -242,8 +250,8 @@ def rank_candidate_windows(
             coherence -= 0.8
 
         score = (
-            rel * 3.0
-            + sem * 2.0
+            rel * _BM25_WEIGHT
+            + sem * _SEM_WEIGHT
             + entity
             + role_sc
             + coherence

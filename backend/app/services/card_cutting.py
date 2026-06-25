@@ -208,6 +208,14 @@ class SentenceSpan:
 _PYSBD_SEGMENTER = None
 _PYSBD_TRIED = False
 
+# Matches the omission markers the card cutter inserts between non-adjacent
+# sentences: "[…]" (U+2026) and "[...]" (ASCII), optionally surrounded by
+# whitespace. These markers are NOT sentence-ending punctuation, so neither
+# pysbd nor the regex splitter recognises them as boundaries — splitting on
+# them first prevents the entire condensed card from being treated as one
+# sentence and triggering a false ratio_too_high failure.
+_OMISSION_MARKER_RE = re.compile(r'\s*\[(?:…|\.\.\.)\]\s*')
+
 
 def _get_pysbd():
     global _PYSBD_SEGMENTER, _PYSBD_TRIED
@@ -223,13 +231,8 @@ def _get_pysbd():
     return _PYSBD_SEGMENTER
 
 
-def segment_text(text: str) -> list[SentenceSpan]:
-    """Segment text into sentences with exact character offsets.
-
-    Adapter: prefers pysbd (robust, handles abbreviations/citations) and falls
-    back to the regex splitter when pysbd is not installed. Returned spans always
-    satisfy text[span.start:span.end] == span.text.
-    """
+def _segment_one_block(text: str) -> list[SentenceSpan]:
+    """Apply pysbd-or-regex segmentation to a single text block without omission markers."""
     if not text or not text.strip():
         return []
     seg = _get_pysbd()
@@ -252,6 +255,57 @@ def segment_text(text: str) -> list[SentenceSpan]:
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug("pysbd segmentation failed, falling back: %s", exc)
     return _split_sentences_regex(text)
+
+
+def segment_text(text: str) -> list[SentenceSpan]:
+    """Segment text into sentences with exact character offsets.
+
+    First splits on omission markers ([…] / [...]) that the card cutter inserts
+    between non-adjacent sentences in a condensed card body. Each resulting
+    segment is sentence-split independently with character offsets anchored to
+    the full original text. Without markers, falls through to pysbd or the regex
+    splitter unchanged.
+
+    Returned spans always satisfy: text[span.start:span.end] == span.text.
+    """
+    if not text or not text.strip():
+        return []
+
+    # Fast path: no markers → segment directly with existing behaviour.
+    if not _OMISSION_MARKER_RE.search(text):
+        return _segment_one_block(text)
+
+    # Collect marker-delimited segments with their absolute character offsets.
+    parts: list[tuple[str, int]] = []
+    pos = 0
+    for m in _OMISSION_MARKER_RE.finditer(text):
+        seg_raw = text[pos:m.start()]
+        stripped = seg_raw.strip()
+        if stripped:
+            lead = len(seg_raw) - len(seg_raw.lstrip())
+            parts.append((stripped, pos + lead))
+        pos = m.end()
+    seg_raw = text[pos:]
+    stripped = seg_raw.strip()
+    if stripped:
+        lead = len(seg_raw) - len(seg_raw.lstrip())
+        parts.append((stripped, pos + lead))
+
+    if not parts:
+        # Text was entirely omission markers — treat as empty.
+        return []
+
+    # Sentence-split each segment and remap start/end to full-text offsets.
+    all_spans: list[SentenceSpan] = []
+    for seg_text, seg_offset in parts:
+        for s in _segment_one_block(seg_text):
+            all_spans.append(SentenceSpan(
+                text=s.text,
+                start=seg_offset + s.start,
+                end=seg_offset + s.end,
+                index=len(all_spans),
+            ))
+    return all_spans
 
 
 def _split_sentences(text: str) -> list[SentenceSpan]:

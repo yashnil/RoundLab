@@ -4,6 +4,8 @@ from app.services.evidence_candidate_ranker import (
     rank_candidate_windows,
     reranker_backend,
     CandidateWindow,
+    _BM25_WEIGHT,
+    _SEM_WEIGHT,
 )
 
 
@@ -137,4 +139,88 @@ class TestSemanticRerankerSeam:
         a = r.rank_candidate_windows(cands, claim="x")
         b = r.rank_candidate_windows(cands, claim="x")
         assert [w.score for w in a] == [w.score for w in b]
+        self._reset(r)
+
+    def test_weak_semantic_does_not_override_strong_bm25(self, monkeypatch):
+        """A low semantic score must not flip a candidate with a clear BM25 advantage.
+
+        sem=0.5 gives 0.5 * _SEM_WEIGHT extra for cand[1], but cand[0] has a
+        perfect BM25 match worth _BM25_WEIGHT — the BM25 advantage exceeds the
+        weak semantic boost so cand[0] must still win.
+        """
+        import app.services.evidence_candidate_ranker as r
+        from app.config import settings
+        cands = [
+            # Strong lexical match: "policy" appears in query and candidate.
+            "Policy changes enabled significant improvements in overall effectiveness.",
+            # No lexical overlap with the query at all.
+            "Something entirely different with no connection to the subject here.",
+        ]
+        self._reset(r)
+        monkeypatch.setattr(settings, "use_semantic_reranker", True, raising=False)
+        r.set_semantic_scorer(lambda c, q: [0.0, 0.5])
+        ranked = r.rank_candidate_windows(cands, claim="policy", role="direct_support")
+        assert ranked[0].text == cands[0], (
+            f"Weak semantic (0.5 * {_SEM_WEIGHT}={0.5 * _SEM_WEIGHT}) should not override "
+            f"strong BM25 (≈1.0 * {_BM25_WEIGHT}={_BM25_WEIGHT}). Got: {ranked[0].text!r}"
+        )
+        self._reset(r)
+
+    def test_strong_semantic_can_flip_bm25_ranking(self, monkeypatch):
+        """sem=1.0 must be able to override a strong-but-not-dominant BM25 candidate."""
+        import app.services.evidence_candidate_ranker as r
+        from app.config import settings
+        cands = [
+            "Generic background sentence about policy in general terms here.",
+            "Another plain sentence with little obvious lexical overlap at all.",
+        ]
+        self._reset(r)
+        monkeypatch.setattr(settings, "use_semantic_reranker", False, raising=False)
+        base = r.rank_candidate_windows(cands, claim="policy", role="direct_support")
+
+        monkeypatch.setattr(settings, "use_semantic_reranker", True, raising=False)
+        r.set_semantic_scorer(lambda c, q: [0.0, 1.0])
+        boosted = r.rank_candidate_windows(cands, claim="policy", role="direct_support")
+        assert boosted[0].text == cands[1], "sem=1.0 must be strong enough to flip ranking"
+        assert base[0].text != boosted[0].text or base[0].score != boosted[0].score
+        self._reset(r)
+
+    def test_semantic_subscore_is_bounded_zero_to_one(self, monkeypatch):
+        """The 'semantic' subscore reported on CandidateWindow must be in [0.0, 1.0]."""
+        import app.services.evidence_candidate_ranker as r
+        from app.config import settings
+        cands = ["First sentence here.", "Second sentence there.", "Third one too."]
+        self._reset(r)
+        monkeypatch.setattr(settings, "use_semantic_reranker", True, raising=False)
+        r.set_semantic_scorer(lambda c, q: [0.0, 0.5, 1.0])
+        ranked = r.rank_candidate_windows(cands, claim="test")
+        for w in ranked:
+            sem = w.subscores["semantic"]
+            assert 0.0 <= sem <= 1.0, f"Semantic subscore out of bounds: {sem}"
+        self._reset(r)
+
+    def test_sem_weight_exceeds_bm25_weight(self):
+        """Invariant: _SEM_WEIGHT > _BM25_WEIGHT so a perfect semantic score
+        can always override a perfect BM25 score.  If this fails, the semantic
+        reranker seam is permanently broken for any candidate with high lexical
+        relevance."""
+        assert _SEM_WEIGHT > _BM25_WEIGHT, (
+            f"_SEM_WEIGHT ({_SEM_WEIGHT}) must exceed _BM25_WEIGHT ({_BM25_WEIGHT})"
+        )
+
+    def test_no_scorer_preserves_bm25_ranking(self, monkeypatch):
+        """When no scorer is installed, semantic=0 everywhere and BM25 wins."""
+        import app.services.evidence_candidate_ranker as r
+        from app.config import settings
+        self._reset(r)
+        monkeypatch.setattr(settings, "use_semantic_reranker", False, raising=False)
+        cands = [
+            "Policy changes enabled significant improvements in effectiveness.",
+            "Something entirely different with no lexical overlap here at all.",
+        ]
+        ranked_a = r.rank_candidate_windows(cands, claim="policy", role="direct_support")
+        ranked_b = r.rank_candidate_windows(cands, claim="policy", role="direct_support")
+        assert [w.text for w in ranked_a] == [w.text for w in ranked_b]
+        for w in ranked_a:
+            assert w.subscores["semantic"] == 0.0
         self._reset(r)

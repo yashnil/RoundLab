@@ -135,6 +135,68 @@ class TestSentenceSplitting:
             assert span.end > span.start
             assert isinstance(span.index, int)
 
+    # ── Omission marker splitting (regression: card cutter inserts […]/[...]) ──
+
+    def test_unicode_omission_marker_splits_into_two_spans(self):
+        """[…] between sentences must produce two SentenceSpan objects."""
+        text = "First sentence here. […] Second sentence follows."
+        spans = _split_sentences(text)
+        assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}: {spans}"
+        assert "First" in spans[0].text
+        assert "Second" in spans[1].text
+
+    def test_ascii_omission_marker_splits_into_two_spans(self):
+        """[...] (ASCII) between sentences must produce two SentenceSpan objects."""
+        text = "First sentence here. [...] Second sentence follows."
+        spans = _split_sentences(text)
+        assert len(spans) == 2, f"Expected 2 spans, got {len(spans)}: {spans}"
+        assert "First" in spans[0].text
+        assert "Second" in spans[1].text
+
+    def test_spans_across_marker_have_correct_absolute_offsets(self):
+        """text[span.start:span.end] == span.text must hold across a […] marker."""
+        text = "The United Nations failed to intervene. […] The delay allowed the genocide to continue."
+        spans = _split_sentences(text)
+        assert len(spans) >= 2
+        for span in spans:
+            assert text[span.start:span.end] == span.text, (
+                f"Offset mismatch: text[{span.start}:{span.end}]={text[span.start:span.end]!r} "
+                f"!= span.text={span.text!r}"
+            )
+
+    def test_span_indices_are_sequential_across_marker(self):
+        """span.index must be 0, 1, 2, … across all segments separated by markers."""
+        text = "Part one ends here. […] Part two begins here. […] Part three finishes."
+        spans = _split_sentences(text)
+        assert len(spans) >= 3
+        for i, span in enumerate(spans):
+            assert span.index == i
+
+    def test_no_marker_text_unchanged(self):
+        """Without any omission marker the splitter must behave exactly as before."""
+        text = "Courts held that Section 230 applies. Critics argue reform is needed."
+        spans = _split_sentences(text)
+        assert len(spans) == 2
+        for span in spans:
+            assert text[span.start:span.end] == span.text
+
+    def test_rwanda_condensed_cut_body_splits_to_two_spans(self):
+        """The Rwanda condensed-card pattern (two sentences joined by […]) must split correctly.
+        Regression for the ratio_too_high false failure caused by the single-sentence bug."""
+        text = (
+            "In April 1994, the United Nations and the United States failed to intervene "
+            "in Rwanda as the genocide unfolded. "
+            "[…] "
+            "The delay allowed the genocide to continue for nearly one hundred days."
+        )
+        spans = _split_sentences(text)
+        assert len(spans) == 2, (
+            f"Expected 2 sentences from Rwanda condensed cut, got {len(spans)}: {[s.text for s in spans]}"
+        )
+        # Both spans must have correct offsets.
+        for span in spans:
+            assert text[span.start:span.end] == span.text
+
 
 # ── TestBuildCutFromSentences ─────────────────────────────────────────────────
 
@@ -1001,6 +1063,31 @@ class TestReadAloudValidation:
         v = validate_read_aloud_card(text + " More context here.", spans)
         assert v.passed
         assert "no_verb" not in v.issues
+
+    def test_ratio_too_high_fires_when_entire_long_card_is_highlighted(self):
+        """Highlighting 100% of a full card must always trigger ratio_too_high."""
+        cut_body = (
+            "Authoritarian regimes rely on violence and repression to maintain political control. "
+            "Washington has often tolerated that repression when it served broader security goals. "
+            "Scholars argue the responsibility to protect can override sovereignty when a government "
+            "commits genocide against its own people. Critics counter that intervention is often "
+            "selective and politically motivated by strategic interests."
+        )
+        # Highlight span covers the entire body.
+        spans = [SelectedSpan(start=0, end=len(cut_body), text=cut_body, sentence_index=0)]
+        v = validate_read_aloud_card(cut_body, spans)
+        assert "ratio_too_high" in v.issues
+
+    def test_ratio_too_high_absent_when_highlights_are_partial(self):
+        """Highlighting ~60% of the card must not trigger ratio_too_high."""
+        cut_body = (
+            "Authoritarian regimes rely on violence and repression to maintain political control. "
+            "Washington has often tolerated that repression when it served broader security goals."
+        )
+        partial = cut_body[:int(len(cut_body) * 0.6)]
+        spans = [SelectedSpan(start=0, end=len(partial), text=partial, sentence_index=0)]
+        v = validate_read_aloud_card(cut_body, spans)
+        assert "ratio_too_high" not in v.issues
 
     def test_flags_verbless_fragments(self):
         text = "Rwanda, Bosnia, Kosovo, Darfur, Libya here."

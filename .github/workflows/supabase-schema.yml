@@ -1,0 +1,145 @@
+name: Supabase Schema
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - "scripts/check_supabase_migrations.sh"
+      - "scripts/audit_remote_schema.sql"
+      - ".github/workflows/supabase-schema.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - "scripts/check_supabase_migrations.sh"
+      - "scripts/audit_remote_schema.sql"
+      - ".github/workflows/supabase-schema.yml"
+  # Manual trigger for production inspection and optional deployment.
+  # Automatic deployment is intentionally disabled: migrations are irreversible
+  # DDL and must never be applied without a human in the loop.
+  workflow_dispatch:
+    inputs:
+      deploy_to_production:
+        description: >
+          false = ledger check + dry-run only (read-only).
+          true  = dry-run then apply pending migrations.
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+# Only one schema validation or one production deployment may run at a time.
+concurrency:
+  group: supabase-schema-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Job 1: Validate migration chain (PRs, main pushes, manual dispatch) ──────
+  # No production secrets required — safe to run on every pull request.
+  validate:
+    name: Validate migration chain
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Official Supabase action — installs the CLI binary, no npm global needed.
+      - name: Install Supabase CLI 2.107.0
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.107.0
+
+      - name: Set up Python 3.11 (for static schema tests)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run filename + static schema validation
+        run: bash scripts/check_supabase_migrations.sh
+
+      - name: Start local Postgres (DB container only)
+        run: supabase db start --workdir .
+
+      - name: Replay all migrations from scratch
+        run: supabase db reset --local --no-seed --workdir .
+
+      - name: List applied migrations
+        run: supabase migration list --local --workdir .
+
+      - name: Stop local Postgres
+        if: always()
+        run: supabase stop --workdir . || true
+
+  # ── Job 2: Production inspection / deployment (workflow_dispatch only) ────────
+  # Single job with one environment approval gate. Secrets are withheld until
+  # a reviewer approves the protected 'production' environment.
+  #
+  # When deploy_to_production=false: ledger check + dry-run (read-only).
+  # When deploy_to_production=true:  dry-run then apply pending migrations.
+  # --include-all is never used.
+  production:
+    name: Production — inspect or deploy
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    environment: production    # single approval gate; secrets available here only
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI 2.107.0
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.107.0
+
+      - name: Link to production project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase link \
+            --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}" \
+            --password "${{ secrets.SUPABASE_DB_PASSWORD }}" \
+            --workdir .
+
+      - name: Show current migration ledger (local vs remote)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase migration list --linked --workdir .
+
+      - name: Dry-run — identify pending migrations (READ-ONLY)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          echo "==> Dry-run: pending migrations are listed below (nothing applied yet)."
+          supabase db push --dry-run --linked \
+            --password "${{ secrets.SUPABASE_DB_PASSWORD }}" \
+            --workdir .
+
+      - name: Apply pending migrations to production
+        # Only when explicitly requested. Never uses --include-all.
+        if: github.event.inputs.deploy_to_production == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          echo "==> Applying pending migrations to production..."
+          supabase db push --linked \
+            --password "${{ secrets.SUPABASE_DB_PASSWORD }}" \
+            --workdir .
+
+      - name: Show final migration ledger
+        if: github.event.inputs.deploy_to_production == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          echo "==> Migration ledger after deployment:"
+          supabase migration list --linked --workdir .

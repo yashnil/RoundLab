@@ -332,7 +332,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-OPENAI_API_KEY=sk-your-openai-key-here
+OPENAI_API_KEY=your-openai-api-key
 CORS_ORIGINS=http://localhost:3000
 ENVIRONMENT=development
 ```

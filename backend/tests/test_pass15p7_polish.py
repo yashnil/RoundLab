@@ -105,7 +105,8 @@ class TestClaimDecompositionLayout(unittest.TestCase):
 class TestStaleResponseProtection(unittest.TestCase):
 
     def _page(self) -> str:
-        return _component("app/evidence/page.tsx")
+        # evidence/page.tsx was moved into the (workspace) route group.
+        return _component("app/(workspace)/evidence/page.tsx")
 
     def test_search_seq_ref_declared(self):
         self.assertIn("searchSeqRef", self._page())

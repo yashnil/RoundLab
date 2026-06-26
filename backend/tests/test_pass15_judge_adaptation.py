@@ -26,7 +26,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock, patch
 
-from tests import REPO_ROOT
+from tests import REPO_ROOT, workspace_page
 
 
 # ── Judge profiles ─────────────────────────────────────────────────────────────
@@ -973,8 +973,12 @@ def test_frontend_types_file_exists():
 
 
 def test_judge_adaptation_page_exists():
-    """Verify judge adaptation page was created."""
-    assert (REPO_ROOT / "frontend/src/app/judge-adaptation/page.tsx").exists()
+    """Verify judge adaptation page lives in the workspace route group."""
+    new_path = workspace_page("judge-adaptation/page.tsx")
+    old_path = REPO_ROOT / "frontend/src/app/judge-adaptation/page.tsx"
+    assert new_path.exists(), f"Page not found at workspace path: {new_path}"
+    # Old bare path must not exist — Next.js would serve both URLs otherwise.
+    assert not old_path.exists(), f"Stale bare path still present: {old_path}"
 
 
 def test_nav_items_has_judge_adaptation():

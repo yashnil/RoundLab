@@ -208,31 +208,40 @@ class TestFrontendSavePayload(unittest.TestCase):
     def _read(self, path: Path) -> str:
         return path.read_text(encoding="utf-8")
 
+    def _evidence_page(self) -> str:
+        # evidence/page.tsx lives in the (workspace) route group.
+        return self._read(
+            FRONTEND_ROOT / "src" / "app" / "(workspace)" / "evidence" / "page.tsx"
+        )
+
     def test_duplicate_click_prevention(self):
-        src = self._read(FRONTEND_ROOT / "src" / "app" / "evidence" / "page.tsx")
-        self.assertIn("savingDraftId !== null", src)
+        self.assertIn("savingDraftId !== null", self._evidence_page())
 
     def test_structured_error_parsed(self):
-        src = self._read(FRONTEND_ROOT / "src" / "app" / "evidence" / "page.tsx")
         # The handler should parse JSON error with stage field
-        self.assertIn("parsed.stage", src)
+        self.assertIn("parsed.stage", self._evidence_page())
 
     def test_last_saved_card_id_state(self):
-        src = self._read(FRONTEND_ROOT / "src" / "app" / "evidence" / "page.tsx")
+        src = self._evidence_page()
         self.assertIn("lastSavedCardId", src)
         self.assertIn("setLastSavedCardId", src)
 
     def test_success_banner_view_in_library(self):
-        src = self._read(FRONTEND_ROOT / "src" / "app" / "evidence" / "page.tsx")
-        self.assertIn("View in Library", src)
+        self.assertIn("View in Library", self._evidence_page())
 
     def test_retry_button_present(self):
-        src = self._read(FRONTEND_ROOT / "src" / "app" / "evidence" / "page.tsx")
-        self.assertIn("Retry", src)
+        self.assertIn("Retry", self._evidence_page())
 
     def test_evidence_card_type_has_cite(self):
         src = self._read(FRONTEND_ROOT / "src" / "types" / "index.ts")
         self.assertIn("cite?:", src)
+
+    def test_evidence_page_in_workspace_route_group(self):
+        """Regression: evidence/page.tsx must be in (workspace), not the bare app/ root."""
+        new_path = FRONTEND_ROOT / "src" / "app" / "(workspace)" / "evidence" / "page.tsx"
+        old_path = FRONTEND_ROOT / "src" / "app" / "evidence" / "page.tsx"
+        self.assertTrue(new_path.exists(), f"Missing workspace page: {new_path}")
+        self.assertFalse(old_path.exists(), f"Stale bare path still present: {old_path}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

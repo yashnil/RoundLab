@@ -138,8 +138,14 @@ test.describe("Judge Adaptation page auth gate", () => {
 
 // ── API health check from browser ─────────────────────────────────────────
 
+// Skipped unless a live backend is explicitly provided.
+// To run locally: RUN_LIVE_BACKEND_E2E=1 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000 npx playwright test e2e/pilot-journeys.spec.ts
 test.describe("Backend health endpoint", () => {
-  test("health endpoint returns ok", async ({ page, baseURL }) => {
+  test.skip(
+    !process.env.RUN_LIVE_BACKEND_E2E,
+    "Skipped in CI — set RUN_LIVE_BACKEND_E2E=1 to enable live backend check",
+  );
+  test("health endpoint returns ok", async ({ page }) => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const response = await page.request.get(`${apiBase}/health`);
     expect(response.status()).toBe(200);

@@ -30,6 +30,7 @@ export const T = {
 
 export function fadeUp(delay = 0) {
   return {
+    suppressHydrationWarning: true,
     initial:    { opacity: 0, y: 16 },
     animate:    { opacity: 1, y: 0  },
     transition: { duration: 0.4, delay, ease: EASE },
@@ -38,6 +39,7 @@ export function fadeUp(delay = 0) {
 
 export function fadeIn(delay = 0) {
   return {
+    suppressHydrationWarning: true,
     initial:    { opacity: 0 },
     animate:    { opacity: 1 },
     transition: { duration: 0.3, delay, ease: EASE },
@@ -46,6 +48,7 @@ export function fadeIn(delay = 0) {
 
 export function fadeUpInView(delay = 0) {
   return {
+    suppressHydrationWarning: true,
     initial:    { opacity: 0, y: 14 },
     whileInView: { opacity: 1, y: 0 },
     viewport:   { once: true, margin: "-40px" },
@@ -55,6 +58,7 @@ export function fadeUpInView(delay = 0) {
 
 export function slideInLeft(delay = 0) {
   return {
+    suppressHydrationWarning: true,
     initial:    { opacity: 0, x: -16 },
     animate:    { opacity: 1, x: 0   },
     transition: { duration: 0.4, delay, ease: EASE },
@@ -63,6 +67,7 @@ export function slideInLeft(delay = 0) {
 
 export function slideInRight(delay = 0) {
   return {
+    suppressHydrationWarning: true,
     initial:    { opacity: 0, x: 16 },
     animate:    { opacity: 1, x: 0  },
     transition: { duration: 0.4, delay, ease: EASE },

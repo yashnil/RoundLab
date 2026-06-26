@@ -347,7 +347,7 @@ class TestNestedButtonFix:
         import os, re
         path = os.path.join(
             os.path.dirname(__file__),
-            "../../frontend/src/app/evidence/page.tsx",
+            "../../frontend/src/app/(workspace)/evidence/page.tsx",
         )
         if not os.path.exists(path):
             pytest.skip("evidence/page.tsx not found")
@@ -368,7 +368,7 @@ class TestNestedButtonFix:
         import os
         path = os.path.join(
             os.path.dirname(__file__),
-            "../../frontend/src/app/evidence/page.tsx",
+            "../../frontend/src/app/(workspace)/evidence/page.tsx",
         )
         if not os.path.exists(path):
             pytest.skip("evidence/page.tsx not found")

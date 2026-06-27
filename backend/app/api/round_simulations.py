@@ -851,6 +851,34 @@ def generate_decision(
         decision=decision,
     )
 
+    # Emit mastery evidence for full round completion (best-effort, non-fatal)
+    try:
+        from app.services.mastery_integration import emit_from_full_round
+        # Build skill_scores from decision scoring fields
+        skill_scores: Dict[str, float] = {}
+        if hasattr(decision, "skill_scores") and decision.skill_scores:
+            skill_scores = {k: float(v) for k, v in decision.skill_scores.items()}
+        elif hasattr(decision, "drops_score") or hasattr(decision, "warranting_score"):
+            # Fallback: extract from attribute-style scoring
+            _score_fields = {
+                "drops": "responses", "warranting": "warranting",
+                "weighing": "weighing", "clash": "clash",
+                "judge_adaptation": "judge_adaptation",
+            }
+            for attr, skill in _score_fields.items():
+                val = getattr(decision, f"{attr}_score", None)
+                if val is not None:
+                    skill_scores[skill] = float(val)
+        if skill_scores:
+            emit_from_full_round(
+                supabase=supabase,
+                user_id=user_id,
+                round_id=round_id,
+                skill_scores=skill_scores,
+            )
+    except Exception:
+        pass
+
     return decision
 
 

@@ -9,11 +9,13 @@
  * and are unaffected.
  */
 import AppShell from "@/components/shell/AppShell";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import type { ReactNode } from "react";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   return (
     <AppShell bare maxWidth="full">
+      <OfflineBanner />
       {children}
     </AppShell>
   );

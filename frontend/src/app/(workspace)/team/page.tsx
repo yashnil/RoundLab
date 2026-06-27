@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Users, Copy, Check, Plus,
-  ClipboardList, Inbox, BarChart2, BookTemplate,
+  ClipboardList, Inbox, BarChart2, BookTemplate, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,10 +19,11 @@ import AttentionQueue from "@/components/coach/AttentionQueue";
 import StudentRosterTable from "@/components/coach/StudentRosterTable";
 import AssignmentTemplatePanel from "@/components/coach/AssignmentTemplatePanel";
 import WeeklyReportPanel from "@/components/coach/WeeklyReportPanel";
+import CurriculumPanel from "@/components/coach/CurriculumPanel";
 import type { UserTeam, Assignment } from "@/types";
 import type { CommandCenterData } from "@/types/coach";
 
-type Panel = "roster" | "attention" | "templates" | "report";
+type Panel = "roster" | "attention" | "templates" | "report" | "curriculum";
 
 export default function TeamPage() {
   const router = useRouter();
@@ -314,6 +315,7 @@ export default function TeamPage() {
     { id: "roster", label: "Roster", icon: <Users size={14} aria-hidden /> },
     { id: "attention", label: "Attention", icon: <Inbox size={14} aria-hidden />, badge: cmdCenter?.attention_queue.length },
     { id: "templates", label: "Assign", icon: <BookTemplate size={14} aria-hidden /> },
+    { id: "curriculum", label: "Curriculum", icon: <BookOpen size={14} aria-hidden /> },
     { id: "report", label: "Report", icon: <BarChart2 size={14} aria-hidden /> },
   ];
 
@@ -433,6 +435,12 @@ export default function TeamPage() {
                 onAssigned={() => {
                   listAssignments(selectedTeam.team_id).then(setAssignments).catch(() => {});
                 }}
+              />
+            )}
+            {panel === "curriculum" && userId && (
+              <CurriculumPanel
+                teamId={selectedTeam.team_id}
+                coachId={userId}
               />
             )}
             {panel === "report" && (

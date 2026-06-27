@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="32" fill="#0a0a0f"/>
+  <rect x="16" y="16" width="160" height="160" rx="24" fill="#7c6cfc" opacity="0.15"/>
+  <!-- R letterform -->
+  <rect x="52" y="44" width="14" height="104" rx="4" fill="#7c6cfc"/>
+  <path d="M66 44 h34 a30 30 0 0 1 0 60 H66 Z" fill="#7c6cfc"/>
+  <path d="M90 104 L124 148" stroke="#7c6cfc" stroke-width="14" stroke-linecap="round"/>
+  <!-- Debate flow line accent -->
+  <line x1="52" y1="168" x2="140" y2="168" stroke="#4f46e5" stroke-width="3" stroke-linecap="round"/>
+</svg>

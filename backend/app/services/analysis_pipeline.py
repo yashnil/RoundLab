@@ -339,6 +339,27 @@ async def run_speech_analysis_pipeline(
                 derived_score, speech_id,
             )
 
+            # ── Mastery evidence emission (best-effort, non-fatal) ────────────
+            try:
+                from app.services.mastery_integration import emit_from_speech_analysis
+                emitted_skills = emit_from_speech_analysis(
+                    supabase=sb,
+                    user_id=user_id,
+                    speech_id=speech_id,
+                    scores=det_scores,
+                    overall_score=derived_score,
+                )
+                if emitted_skills:
+                    logger.info(
+                        "analysis_pipeline: mastery evidence emitted | "
+                        "skills=%s speech_id=%s", emitted_skills, speech_id,
+                    )
+            except Exception as _me:
+                logger.warning(
+                    "analysis_pipeline: mastery emission failed (non-fatal) | %s | speech_id=%s",
+                    type(_me).__name__, speech_id,
+                )
+
         # ── Step 4: Drill generation (skip if drills exist) ──────────────────
         update_job_progress(sb, job_id, "generating_drills", 82)
 

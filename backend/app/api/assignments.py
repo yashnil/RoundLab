@@ -390,7 +390,7 @@ async def review_assignment(
             .execute()
         )
         r = updated.data[0]
-        return RecipientStatus(
+        result_row = RecipientStatus(
             id=r["id"], user_id=r["user_id"], status=effective_status(r["status"], None),
             base_status=r["status"], submission_speech_id=r.get("submission_speech_id"),
             coach_feedback=r.get("coach_feedback"), reviewed_at=r.get("reviewed_at"),
@@ -400,6 +400,30 @@ async def review_assignment(
     except Exception as exc:
         logger.error("review_assignment: update failed | %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Failed to review") from exc
+
+    # Emit mastery evidence when coach approves a submission (best-effort, non-fatal).
+    # This is a coach_performance_review — the coach observed the student's actual
+    # assignment submission, so an artifact_id (the recipient_id) is present.
+    if body.action == "reviewed":
+        try:
+            assignment_row = recipient.get("assignments") or {}
+            skill_focus = assignment_row.get("skill_focus") or assignment_row.get("skill_target")
+            if skill_focus:
+                from app.services.mastery_integration import emit_from_coach_performance_review
+                emit_from_coach_performance_review(
+                    supabase=supabase,
+                    coach_id=caller,
+                    student_id=result_row.user_id,
+                    review_id=f"assignment_review:{recipient_id}",
+                    skill=skill_focus,
+                    score_pct=75.0,  # default passing score for reviewed assignment
+                    artifact_id=recipient_id,   # the assignment submission ID
+                    note=body.coach_feedback or "Assignment reviewed and approved",
+                )
+        except Exception:
+            pass
+
+    return result_row
 
 
 @router.get("/teams/{team_id}/review-queue", response_model=list[ReviewQueueItem])

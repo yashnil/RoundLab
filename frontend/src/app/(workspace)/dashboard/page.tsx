@@ -29,6 +29,7 @@ import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { deriveDashboardState } from "@/lib/dashboardModel";
 import { deriveWorkoutProgress, getNextIncompleteStep } from "@/lib/workoutHelpers";
 import NextMissionCard from "@/components/dashboard/NextMissionCard";
+import { ContinueTrainingCard } from "@/components/training/ContinueTrainingCard";
 import type { Speech, ProgressSummary, PilotSummary, Workout, StudentMission } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -170,6 +171,8 @@ export default function DashboardPage() {
   const [mission,       setMission]      = useState<StudentMission | null>(null);
   const [missionLoading, setMissionLoading] = useState(true);
   const [missionErr,    setMissionErr]   = useState("");
+  const [nextTrainingAction, setNextTrainingAction] = useState<Record<string, unknown> | null>(null);
+  const [trainingLoading, setTrainingLoading] = useState(true);
   const [loading,       setLoading]      = useState(true);
   const [err,           setErr]          = useState("");
   const [del,           setDel]          = useState<Speech | null>(null);
@@ -203,6 +206,12 @@ export default function DashboardPage() {
           .then((m) => { setMission(m); })
           .catch(() => { setMissionErr("Mission unavailable"); })
           .finally(() => { setMissionLoading(false); });
+
+        // Next Training Action — non-blocking, unified priority pipeline
+        apiFetch<Record<string, unknown>>(`/training/next-action?user_id=${data.user.id}`)
+          .then((action) => { setNextTrainingAction(action); })
+          .catch(() => { setNextTrainingAction(null); })
+          .finally(() => { setTrainingLoading(false); });
       })
       .catch((e) =>
         setErr(
@@ -274,6 +283,19 @@ export default function DashboardPage() {
                   error={missionErr || null}
                   mission={mission}
                   hasSpeech={speeches.length > 0}
+                />
+              </section>
+            </motion.div>
+
+            {/* 1c. Continue Training CTA */}
+            <motion.div variants={child}>
+              <section aria-label="Training plan">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-eyebrow text-ink-subtle">Continue training</span>
+                </div>
+                <ContinueTrainingCard
+                  nextAction={nextTrainingAction as Parameters<typeof ContinueTrainingCard>[0]["nextAction"]}
+                  loading={trainingLoading}
                 />
               </section>
             </motion.div>

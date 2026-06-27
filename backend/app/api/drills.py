@@ -305,6 +305,21 @@ async def update_drill(drill_id: str, body: DrillStatusUpdate, user_id: str = Qu
                 award_xp(user_id, "drill_completed", f"drill_completed:{drill_id}")
             except Exception as xp_exc:
                 logger.warning("update_drill: XP award failed | %s", type(xp_exc).__name__)
+            # Emit mastery evidence (best-effort, non-fatal)
+            try:
+                from app.services.mastery_integration import emit_from_drill_attempt
+                drill_row = result.data[0]
+                skill_target = drill_row.get("skill_target") or ""
+                score_pct = float(drill_row.get("score_pct") or 0)
+                emit_from_drill_attempt(
+                    supabase=supabase,
+                    user_id=user_id,
+                    drill_id=drill_id,
+                    skill_target=skill_target,
+                    score_pct=score_pct,
+                )
+            except Exception:
+                pass
 
         return result.data[0]
     except HTTPException:

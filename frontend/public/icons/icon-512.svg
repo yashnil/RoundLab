@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="80" fill="#0a0a0f"/>
+  <rect x="40" y="40" width="432" height="432" rx="64" fill="#7c6cfc" opacity="0.12"/>
+  <!-- R letterform (scaled) -->
+  <rect x="136" y="108" width="38" height="296" rx="10" fill="#7c6cfc"/>
+  <path d="M174 108 h94 a80 80 0 0 1 0 160 H174 Z" fill="#7c6cfc"/>
+  <path d="M236 268 L336 404" stroke="#7c6cfc" stroke-width="38" stroke-linecap="round"/>
+  <!-- Subtitle accent dots (flow sheet motif) -->
+  <circle cx="136" cy="450" r="6" fill="#4f46e5"/>
+  <circle cx="168" cy="450" r="6" fill="#4f46e5"/>
+  <circle cx="200" cy="450" r="6" fill="#4f46e5"/>
+</svg>

@@ -666,6 +666,23 @@ async def complete_mission(mission_id: str, body: CompleteMissionRequest) -> Mis
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to complete mission") from exc
 
+    # Emit mastery evidence for the completed mission (best-effort, non-fatal)
+    try:
+        from app.services.mastery_integration import emit_from_mission_completion
+        dim = _SKILL_TO_DIM.get(skill, skill)
+        after_raw = float((after_score or {}).get(dim, 0))
+        delta_raw = float((score_delta or {}).get(dim, 0))
+        emit_from_mission_completion(
+            supabase=sb,
+            user_id=body.user_id,
+            mission_id=mission_id,
+            skill=skill,
+            score_delta_pct=delta_raw,
+            after_score_raw=after_raw,
+        )
+    except Exception:
+        pass
+
     return _row_to_mission(updated.data[0])
 
 

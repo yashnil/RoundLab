@@ -122,6 +122,14 @@ export const APP_NAV_GROUPS: SidebarNavGroup[] = [
         loopStep: "improve",
       },
       {
+        href: "/training",
+        label: "Training",
+        icon: GraduationCap,
+        match: ["/training", "/diagnostic"],
+        hint: "Personalized training plan and skill mastery tracker",
+        loopStep: "improve",
+      },
+      {
         href: "/learn",
         label: "Drills & Learn",
         icon: GraduationCap,

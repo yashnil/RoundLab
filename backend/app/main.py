@@ -4,7 +4,7 @@ import logging.config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import argument_maps, assignments, blockfiles, coach, dev, documents, drills, evidence_library, feedback_reports, health, jobs, judge_adaptation, missions, output_feedback, pilot, research, round_simulations, shared_reports, speeches, teams, tournament_prep, transcripts, users, workouts
+from app.api import argument_maps, assignments, blockfiles, coach, dev, documents, drills, evidence_library, feedback_reports, health, jobs, judge_adaptation, missions, output_feedback, pilot, research, round_simulations, shared_reports, speeches, teams, tournament_prep, training, transcripts, users, workouts
 from app.config import settings
 from app.middleware.correlation import CorrelationMiddleware
 
@@ -73,6 +73,7 @@ app.include_router(judge_adaptation.router)
 app.include_router(round_simulations.router)
 app.include_router(missions.router)
 app.include_router(coach.router)
+app.include_router(training.router)
 
 # Dev-only endpoints (disabled in production via environment check)
 if settings.environment != "production":

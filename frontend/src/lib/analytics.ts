@@ -74,3 +74,98 @@ export function logWorkflowFailure(
 ): void {
   logEvent("workflow_stage_failed", userId, { stage, error_code: errorCode });
 }
+
+// ── Training OS analytics ──────────────────────────────────────────────────
+// IMPORTANT: Never include transcript text, audio, evidence body, student
+// names, email addresses, or sensitive notes in any of these events.
+
+export function logDiagnosticStarted(userId: string, experienceLevel: string): void {
+  logEvent("diagnostic_started", userId, { experience_level: experienceLevel });
+}
+
+export function logDiagnosticCompleted(userId: string, planId: string): void {
+  logEvent("diagnostic_completed", userId, { plan_id: planId });
+}
+
+export function logLessonStarted(userId: string, lessonId: string, skillId: string): void {
+  logEvent("lesson_started", userId, { lesson_id: lessonId, skill_id: skillId });
+}
+
+export function logLessonCompleted(
+  userId: string,
+  lessonId: string,
+  skillId: string,
+  score?: number,
+): void {
+  logEvent("lesson_completed", userId, { lesson_id: lessonId, skill_id: skillId, score });
+}
+
+export function logTrainingDrillStarted(userId: string, drillId: string, skillId: string): void {
+  logEvent("training_drill_started", userId, { drill_id: drillId, skill_id: skillId });
+}
+
+export function logTrainingDrillCompleted(
+  userId: string,
+  drillId: string,
+  skillId: string,
+  scorePct: number,
+): void {
+  logEvent("training_drill_completed", userId, {
+    drill_id: drillId,
+    skill_id: skillId,
+    score_pct: scorePct,
+  });
+}
+
+export function logSpeechSubmitted(userId: string, speechId: string, speechType: string): void {
+  logEvent("speech_submitted", userId, { speech_id: speechId, speech_type: speechType });
+}
+
+export function logRerecordCompleted(
+  userId: string,
+  speechId: string,
+  parentSpeechId: string,
+): void {
+  logEvent("rerecord_completed", userId, {
+    speech_id: speechId,
+    parent_speech_id: parentSpeechId,
+  });
+}
+
+export function logPlanResumed(userId: string, planId: string, week: number): void {
+  logEvent("plan_resumed", userId, { plan_id: planId, current_week: week });
+}
+
+export function logPlanAbandoned(userId: string, planId: string): void {
+  logEvent("plan_abandoned", userId, { plan_id: planId });
+}
+
+export function logCoachOverride(
+  userId: string,
+  studentId: string,
+  skillId: string,
+): void {
+  // Note: coach user ID only, never student names or sensitive details
+  logEvent("coach_mastery_override", userId, { skill_id: skillId });
+}
+
+export function logMasteryStateChange(
+  userId: string,
+  skillId: string,
+  fromState: string,
+  toState: string,
+): void {
+  logEvent("mastery_state_changed", userId, {
+    skill_id: skillId,
+    from_state: fromState,
+    to_state: toState,
+  });
+}
+
+export function logUploadFailure(userId: string, stage: string): void {
+  logEvent("upload_failed", userId, { stage });
+}
+
+export function logAnalysisFailure(userId: string, speechId: string, stage: string): void {
+  logEvent("analysis_failed", userId, { speech_id: speechId, stage });
+}

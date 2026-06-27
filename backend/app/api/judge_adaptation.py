@@ -345,6 +345,20 @@ def complete_workout(
         "judge_workouts_completed",
         metadata={"assignment_id": assignment_id},
     )
+    # Emit mastery evidence for judge_adaptation skill (best-effort, non-fatal)
+    try:
+        from app.services.mastery_integration import emit_from_judge_adaptation
+        judge_type = existing.data[0].get("judge_type", "unknown")
+        # Default to 70/100 when there is no explicit scoring
+        emit_from_judge_adaptation(
+            supabase=sb,
+            user_id=user_id,
+            exercise_id=assignment_id,
+            adaptation_score=70.0,
+            judge_type=judge_type,
+        )
+    except Exception:
+        pass
     return {"ok": True, "note": "Judge readiness updated. Evidence freshness and quality are unchanged."}
 
 

@@ -313,7 +313,29 @@ async def update_workout(workout_id: str, body: UpdateWorkoutRequest) -> Workout
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to update workout") from exc
 
-    return _row_to_workout(updated_res.data[0])
+    result_row = _row_to_workout(updated_res.data[0])
+
+    # Emit mastery evidence when workout is completed (best-effort, non-fatal)
+    if new_status == "completed" and current_status != "completed":
+        try:
+            from app.services.mastery_integration import emit_from_workout
+            # Build skill_scores from completed steps that have a skill_target
+            skill_scores: dict[str, float] = {}
+            for step in steps:
+                if step.get("completed") and step.get("skill_target"):
+                    # Use score_pct if present; default to 70 for completed steps
+                    skill_scores[step["skill_target"]] = float(step.get("score_pct", 70))
+            if skill_scores:
+                emit_from_workout(
+                    supabase=sb,
+                    user_id=body.user_id,
+                    workout_id=workout_id,
+                    skill_scores=skill_scores,
+                )
+        except Exception:
+            pass
+
+    return result_row
 
 
 # ── GET /workouts ─────────────────────────────────────────────────────────────

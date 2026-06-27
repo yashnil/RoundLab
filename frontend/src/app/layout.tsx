@@ -17,6 +17,16 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "RoundLab",
   description: "AI flow coach for Public Forum debaters",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "RoundLab",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "msapplication-TileColor": "#7c6cfc",
+  },
 };
 
 export default function RootLayout({

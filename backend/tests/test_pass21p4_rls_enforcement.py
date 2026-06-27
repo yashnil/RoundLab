@@ -46,6 +46,7 @@ import sys
 import pytest
 import requests
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -81,9 +82,31 @@ TEAM_B    = "00000000-0000-0000-0003-000000000002"
 PASSWORD = "RoundLab_Test1!"
 
 
+# ── Local-URL predicate (zero network calls) ──────────────────────────────────
+
+def _is_local_url(url: str) -> bool:
+    """Return True iff *url* targets the known-local Supabase stack.
+
+    Only http://localhost:54321, http://127.0.0.1:54321, and the IPv6
+    equivalent are considered local.  Remote Supabase cloud URLs
+    (placeholder.supabase.co, *.supabase.co, etc.) always return False
+    so no network request is ever attempted against them.
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port
+    except Exception:
+        return False
+    return hostname in {"localhost", "127.0.0.1", "::1"} and port == 54321
+
+
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 def _is_local_supabase_running() -> bool:
+    """Diagnostic helper: check reachability of a known-local URL only."""
+    if not _is_local_url(SUPABASE_URL):
+        return False
     try:
         resp = requests.get(f"{SUPABASE_URL}/auth/v1/health", timeout=3)
         return resp.status_code == 200
@@ -176,11 +199,22 @@ def _anon_rpc(fn_name: str, payload: dict) -> tuple[int, object]:
 
 
 # ── Skip gate ─────────────────────────────────────────────────────────────────
+#
+# Live RLS tests run ONLY when SUPABASE_URL points to the local stack
+# (hostname localhost/127.0.0.1/::1, port 54321).  Placeholder or remote
+# cloud URLs are never contacted — the predicate is a pure URL parse.
+#
+# Requirement: when SUPABASE_URL IS local but the stack is down, live tests
+# FAIL (rather than silently skipping) so the outage is visible.
 
-_SUPABASE_AVAILABLE = _is_local_supabase_running()
 _requires_local = pytest.mark.skipif(
-    not _SUPABASE_AVAILABLE,
-    reason="Local Supabase not running — run: bash scripts/setup_local_test_env.sh",
+    not _is_local_url(SUPABASE_URL),
+    reason=(
+        f"Live RLS integration tests require a local Supabase stack "
+        f"(SUPABASE_URL must be http://127.0.0.1:54321 or http://localhost:54321). "
+        f"Current SUPABASE_URL={SUPABASE_URL!r}. "
+        "Run: bash scripts/setup_local_test_env.sh"
+    ),
 )
 
 
@@ -209,7 +243,14 @@ def coach_b_token():
 
 class TestLocalSupabaseAvailability:
 
+    @_requires_local
     def test_supabase_health_endpoint(self):
+        """Health check against the local stack.
+
+        Skipped when SUPABASE_URL is not a local address — prevents any
+        network contact with placeholder or remote Supabase projects.
+        Fails (not skips) if the local stack is configured but down.
+        """
         resp = requests.get(f"{SUPABASE_URL}/auth/v1/health", timeout=5)
         assert resp.status_code == 200, (
             f"Local Supabase is not running at {SUPABASE_URL}. "
@@ -883,4 +924,35 @@ class TestRLSMatrixDocumentation:
         assert not direct_ref, (
             "Training OS policy contains a direct 'FROM team_members' subquery — "
             "this causes recursion. Use current_user_* helpers instead."
+        )
+
+    # ── Local-URL predicate regression ───────────────────────────────────────
+
+    def test_placeholder_supabase_url_is_not_local(self):
+        """Regression: CI placeholder and remote cloud URLs must never be treated as local.
+
+        This prevents the test suite from attempting network contact with
+        https://placeholder.supabase.co (or any *.supabase.co host) when
+        running in CI with placeholder credentials.
+        """
+        # Remote / placeholder URLs must return False
+        assert not _is_local_url("https://placeholder.supabase.co"), (
+            "https://placeholder.supabase.co was wrongly classified as local"
+        )
+        assert not _is_local_url("https://xyzxyz.supabase.co"), (
+            "Remote *.supabase.co URL was wrongly classified as local"
+        )
+        assert not _is_local_url("http://127.0.0.1:5432"), (
+            "Port 5432 (postgres, not Supabase API) must not be classified as local"
+        )
+        assert not _is_local_url(""), (
+            "Empty URL must not be classified as local"
+        )
+
+        # Known-local URLs must return True
+        assert _is_local_url("http://127.0.0.1:54321"), (
+            "http://127.0.0.1:54321 was not recognized as a local Supabase URL"
+        )
+        assert _is_local_url("http://localhost:54321"), (
+            "http://localhost:54321 was not recognized as a local Supabase URL"
         )

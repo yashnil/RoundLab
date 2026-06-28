@@ -1,5 +1,5 @@
 /**
- * Shared helpers for RoundLab e2e and accessibility tests.
+ * Shared helpers for Dissio e2e and accessibility tests.
  */
 
 import { Page, expect } from "@playwright/test";

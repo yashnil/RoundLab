@@ -183,7 +183,7 @@ export default function SpeechFlowSection() {
         <motion.div {...reducedSafe(fadeUpInView(0))} className="mb-7 flex flex-col gap-2">
           <p className="section-stamp">Speech understanding</p>
           <h2 className="text-headline text-ink max-w-xl">
-            RoundLab doesn&apos;t just transcribe.{" "}
+            Dissio doesn&apos;t just transcribe.{" "}
             <br className="hidden sm:block" />
             It understands the round.
           </h2>

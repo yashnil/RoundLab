@@ -18,7 +18,7 @@ import {
   ChevronDown, ChevronUp, ThumbsUp, AlertCircle, RefreshCw,
 } from "lucide-react";
 import CoachMarginNote from "@/components/CoachMarginNote";
-import RoundLabJourneyRail from "@/components/RoundLabJourneyRail";
+import DissioJourneyRail from "@/components/DissioJourneyRail";
 import DrillAttemptRecorder from "@/components/DrillAttemptRecorder";
 import DrillRating from "@/components/DrillRating";
 import ConfusionReport from "@/components/ConfusionReport";
@@ -648,7 +648,7 @@ export default function DrillPage() {
 
                   if (drill.status === "completed" || (!shouldRetry && criteriaMet)) {
                     heading = "Ready to re-record";
-                    body = "You've met the criteria. Record the speech again — RoundLab will compare the new report to the original.";
+                    body = "You've met the criteria. Record the speech again — Dissio will compare the new report to the original.";
                     primaryLabel = "Start re-record session";
                     primaryHref = rerecordHref;
                   } else if (shouldRetry) {
@@ -679,7 +679,7 @@ export default function DrillPage() {
                       {...fadeUp(0.30)}
                       className="mission-brief flex flex-col gap-3 p-5"
                     >
-                      <RoundLabJourneyRail
+                      <DissioJourneyRail
                         activeIndex={railIndex}
                         showLabels
                         className="mb-1"

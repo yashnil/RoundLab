@@ -453,7 +453,7 @@ describe("exportCardHtml", () => {
 
   it("includes Analysis and Debate Prep headings", () => {
     const html = exportCardHtml(richCard);
-    expect(html).toContain("RoundLab Analysis");
+    expect(html).toContain("Dissio Analysis");
     expect(html).toContain("Warrant:");
     expect(html).toContain("Debate Prep");
   });

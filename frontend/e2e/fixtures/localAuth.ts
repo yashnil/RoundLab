@@ -15,10 +15,10 @@
  *      script (see scripts/seed_test_users.sql).
  *
  * Seeded test accounts (only exist in local Supabase, never production):
- *   STUDENT_EMAIL     = "test_student@roundlab.local"
- *   COACH_EMAIL       = "test_coach@roundlab.local"   (same team as student)
- *   UNRELATED_COACH   = "test_coach2@roundlab.local"  (different team)
- *   UNRELATED_STUDENT = "test_student2@roundlab.local"
+ *   STUDENT_EMAIL     = "test_student@dissio.local"
+ *   COACH_EMAIL       = "test_coach@dissio.local"   (same team as student)
+ *   UNRELATED_COACH   = "test_coach2@dissio.local"  (different team)
+ *   UNRELATED_STUDENT = "test_student2@dissio.local"
  *
  * When local Supabase is not running (CI without Docker), tests that need
  * real auth call `test.skip()` rather than failing with a hard error.
@@ -32,23 +32,23 @@ import type { Page, BrowserContext } from "@playwright/test";
 
 export const TEST_ACCOUNTS = {
   student: {
-    email: process.env.TEST_USER_EMAIL ?? "test_student_a@roundlab.local",
-    password: process.env.TEST_USER_PASSWORD ?? "RoundLab_Test1!",
+    email: process.env.TEST_USER_EMAIL ?? "test_student_a@dissio.local",
+    password: process.env.TEST_USER_PASSWORD ?? "Dissio_Test1!",
     role: "student",
   },
   coach: {
-    email: process.env.TEST_COACH_EMAIL ?? "test_coach_a@roundlab.local",
-    password: process.env.TEST_COACH_PASSWORD ?? "RoundLab_Test1!",
+    email: process.env.TEST_COACH_EMAIL ?? "test_coach_a@dissio.local",
+    password: process.env.TEST_COACH_PASSWORD ?? "Dissio_Test1!",
     role: "coach",
   },
   unrelatedCoach: {
-    email: "test_coach_b@roundlab.local",
-    password: "RoundLab_Test1!",
+    email: "test_coach_b@dissio.local",
+    password: "Dissio_Test1!",
     role: "coach",
   },
   unrelatedStudent: {
-    email: "test_student_b@roundlab.local",
-    password: "RoundLab_Test1!",
+    email: "test_student_b@dissio.local",
+    password: "Dissio_Test1!",
     role: "student",
   },
 } as const;
@@ -62,7 +62,7 @@ const FAKE_SESSION_STUDENT = {
   refresh_token: "fake_refresh_student",
   user: {
     id: "test-student-01",
-    email: "test_student@roundlab.local",
+    email: "test_student@dissio.local",
     role: "authenticated",
   },
 };
@@ -74,7 +74,7 @@ const FAKE_SESSION_COACH = {
   refresh_token: "fake_refresh_coach",
   user: {
     id: "test-coach-01",
-    email: "test_coach@roundlab.local",
+    email: "test_coach@dissio.local",
     role: "authenticated",
   },
 };

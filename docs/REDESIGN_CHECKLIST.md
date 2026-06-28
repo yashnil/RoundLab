@@ -1,4 +1,4 @@
-# RoundLab Redesign Checklist
+# Dissio Redesign Checklist
 
 > **Foundation pass complete** (see `DESIGN_SYSTEM.md`).  
 > This checklist tracks per-file migration work. Complete P0 before shipping; P1 before beta.

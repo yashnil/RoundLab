@@ -1,5 +1,5 @@
 /**
- * Axe-core accessibility scans for critical RoundLab user journeys.
+ * Axe-core accessibility scans for critical Dissio user journeys.
  *
  * These tests require a running Next.js dev server (started automatically
  * by playwright.config.ts webServer config in local mode).

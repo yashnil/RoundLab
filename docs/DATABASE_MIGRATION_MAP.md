@@ -1,4 +1,4 @@
-# RoundLab Database Migration Map
+# Dissio Database Migration Map
 
 Last updated: 2026-06-23 (Pass 18)
 

@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 
-const DRAFT_PREFIX = "roundlab_draft:";
+const DRAFT_PREFIX = "dissio_draft:";
+/** Legacy prefix written by the RoundLab brand — migrated on first read. */
+const DRAFT_PREFIX_LEGACY = "roundlab_draft:";
 const MAX_DRAFT_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 interface DraftEntry<T> {
@@ -21,7 +23,16 @@ export function useLocalDraft<T>(key: string, initial: T) {
 
   const readDraft = useCallback((): T => {
     try {
-      const raw = localStorage.getItem(storageKey);
+      // Try new key first; fall back to legacy key and migrate on first hit
+      let raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        const legacyKey = `${DRAFT_PREFIX_LEGACY}${key}`;
+        raw = localStorage.getItem(legacyKey);
+        if (raw) {
+          localStorage.setItem(storageKey, raw);
+          localStorage.removeItem(legacyKey);
+        }
+      }
       if (!raw) return initial;
       const entry: DraftEntry<T> = JSON.parse(raw);
       if (Date.now() - entry.savedAt > MAX_DRAFT_AGE_MS) {
@@ -32,7 +43,7 @@ export function useLocalDraft<T>(key: string, initial: T) {
     } catch {
       return initial;
     }
-  }, [storageKey, initial]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [storageKey, key, initial]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [draft, setDraft] = useState<T>(initial);
 

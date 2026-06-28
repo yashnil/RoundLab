@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RoundLab evaluation runner.
+Dissio evaluation runner.
 
 Loads labeled speech fixtures and runs the analysis pipeline,
 comparing outputs against ground-truth labels using deterministic metrics.
@@ -371,7 +371,7 @@ def save_results(result: EvalRunResult) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="RoundLab eval runner — compare pipeline outputs against labeled fixtures."
+        description="Dissio eval runner — compare pipeline outputs against labeled fixtures."
     )
     parser.add_argument("--mock",    action="store_true", help="Use mock LLM responses (no API calls)")
     parser.add_argument("--limit",   type=int, default=None, help="Run only the first N fixtures")
@@ -386,7 +386,7 @@ def main() -> None:
         print("No fixtures found. Check evals/fixtures/ directory.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"RoundLab Eval Runner — {mode_label} mode — {len(fixtures)} fixture(s)")
+    print(f"Dissio Eval Runner — {mode_label} mode — {len(fixtures)} fixture(s)")
     print("=" * 60)
 
     samples: list[EvalSampleResult] = []

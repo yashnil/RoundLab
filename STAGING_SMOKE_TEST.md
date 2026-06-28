@@ -1,4 +1,4 @@
-# RoundLab Staging Smoke Test
+# Dissio Staging Smoke Test
 
 Run this checklist after deploying to staging (Vercel + Render/Railway) to verify all core flows work correctly.
 
@@ -6,8 +6,8 @@ Run this checklist after deploying to staging (Vercel + Render/Railway) to verif
 
 ## Prerequisites
 
-- Staging frontend URL (e.g., `https://roundlab-staging.vercel.app`)
-- Staging backend URL (e.g., `https://roundlab-api-staging.onrender.com`)
+- Staging frontend URL (e.g., `https://dissio-staging.vercel.app`)
+- Staging backend URL (e.g., `https://dissio-api-staging.onrender.com`)
 - Two test accounts (for team testing)
 - Test audio file or microphone access
 

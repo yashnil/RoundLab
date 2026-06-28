@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * RoundLabJourneyRail — practice-loop position indicator.
+ * DissioJourneyRail — practice-loop position indicator.
  *
  * Record → Flow → Ballot → Drill → Improve
  *
@@ -44,7 +44,7 @@ interface Props {
   className?: string;
 }
 
-export default function RoundLabJourneyRail({
+export default function DissioJourneyRail({
   activeIndex = -1,
   showLabels = true,
   className = "",

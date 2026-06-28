@@ -1,6 +1,6 @@
 # Deployment & Auth Checklist
 
-How to configure RoundLab so the authenticated team/assignment endpoints verify
+How to configure Dissio so the authenticated team/assignment endpoints verify
 real Supabase access tokens in production — for both modern (asymmetric JWKS) and
 legacy (HS256) Supabase projects.
 

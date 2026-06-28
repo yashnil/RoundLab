@@ -145,7 +145,7 @@ class CardIntelligence(BaseModel):
     # Part 9 — slot-aware debate intelligence
     opponent_response: str = ""   # likely counterargument from opponent
     crossfire_question: str = ""  # useful crossfire question based on card
-    # Overhaul — structured debate-prep coaching (RoundLab's own words)
+    # Overhaul — structured debate-prep coaching (Dissio's own words)
     warrant_analysis: str = ""        # why this evidence logically supports the claim
     impact_analysis: str = ""         # why it matters / how it helps win the round
     potential_weakness: str = ""      # the card's main limitation/vulnerability

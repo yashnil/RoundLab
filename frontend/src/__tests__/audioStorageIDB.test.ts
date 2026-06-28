@@ -1,30 +1,39 @@
 /**
- * Real IndexedDB tests for useAudioStorage (Pass 21.4).
+ * IndexedDB tests for useAudioStorage (Pass 21.4 + hardening).
  *
- * Uses fake-indexeddb to run IndexedDB operations in Jest (Node.js) without
- * a browser. Directly exercises the DB layer used by the hook.
+ * Uses fake-indexeddb to run IndexedDB operations in Jest (Node.js).
  *
- * Coverage:
- *  - openDB: creates object store with correct keyPath + indexes
- *  - savePending: stores Blob under uploadId key
- *  - getBlob: retrieves stored Blob by uploadId
- *  - markUploading: transitions status + increments attempts
- *  - markFailed: transitions status
- *  - markUploaded: deletes row (clean-up on success)
- *  - getPending: only returns pending/failed rows (not uploading/uploaded)
- *  - sweepExpired: removes rows older than MAX_AGE_MS (7 days)
- *  - in-flight dedup: second concurrent save for same uploadId is a no-op
- *  - quota_error: QuotaExceededError surfaces as false from savePending
- *  - idempotent: saving same uploadId twice with different status is a PUT (upsert)
+ * Sections 1-7: test the DB layer in isolation using local re-implementations
+ * of the IDB helpers (avoids importing the React-hook module for basic
+ * schema/CRUD verification).
+ *
+ * Section 8: LEGACY MIGRATION — imports and directly exercises the real
+ * production functions exported from useAudioStorage.ts so that these tests
+ * WILL FAIL if the production implementation breaks.
  */
 
-// Each test gets its own IDBFactory from fake-indexeddb to guarantee isolation.
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 
-// ── DB constants (mirrored from useAudioStorage.ts) ──────────────────────────
-const DB_NAME = "roundlab_audio";
-const STORE_NAME = "pending_recordings";
-const DB_VERSION = 1;
+// ── Section 8 imports: real production functions ─────────────────────────────
+import {
+  DB_NAME,
+  DB_NAME_LEGACY,
+  STORE_NAME,
+  DB_VERSION,
+  getLegacyPendingRecordings,
+  migrateLegacyRecordings,
+  idbPut as prodIdbPut,
+  idbGet as prodIdbGet,
+  idbGetAll as prodIdbGetAll,
+  _resetForTests,
+  _setMigrationOverride,
+  _openDB,
+} from "@/hooks/useAudioStorage";
+
+// ── DB constants (local mirror for sections 1-7) ──────────────────────────────
+const LOCAL_DB_NAME = "dissio_audio";
+const LOCAL_STORE_NAME = "pending_recordings";
+const LOCAL_DB_VERSION = 1;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type AudioStatus =
@@ -44,8 +53,7 @@ interface PendingRecording {
   attempts: number;
 }
 
-// ── Lightweight re-implementation of the DB helpers ──────────────────────────
-// We test the DB layer in isolation to avoid React hook machinery.
+// ── Local DB helpers (sections 1-7 only) ─────────────────────────────────────
 
 let _idbFactory: IDBFactory;
 let _db: IDBDatabase | null = null;
@@ -53,11 +61,11 @@ let _db: IDBDatabase | null = null;
 function openDB(): Promise<IDBDatabase> {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
-    const req = _idbFactory.open(DB_NAME, DB_VERSION);
+    const req = _idbFactory.open(LOCAL_DB_NAME, LOCAL_DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: "uploadId" });
+      if (!db.objectStoreNames.contains(LOCAL_STORE_NAME)) {
+        const store = db.createObjectStore(LOCAL_STORE_NAME, { keyPath: "uploadId" });
         store.createIndex("by_status", "status", { unique: false });
         store.createIndex("by_created", "createdAt", { unique: false });
       }
@@ -72,8 +80,8 @@ function openDB(): Promise<IDBDatabase> {
 
 function idbPut(db: IDBDatabase, record: PendingRecording): Promise<void> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(LOCAL_STORE_NAME, "readwrite");
+    const store = tx.objectStore(LOCAL_STORE_NAME);
     store.put(record);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -82,8 +90,8 @@ function idbPut(db: IDBDatabase, record: PendingRecording): Promise<void> {
 
 function idbGet(db: IDBDatabase, uploadId: string): Promise<PendingRecording | undefined> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).get(uploadId);
+    const tx = db.transaction(LOCAL_STORE_NAME, "readonly");
+    const req = tx.objectStore(LOCAL_STORE_NAME).get(uploadId);
     req.onsuccess = () => resolve(req.result as PendingRecording | undefined);
     req.onerror = () => reject(req.error);
   });
@@ -91,8 +99,8 @@ function idbGet(db: IDBDatabase, uploadId: string): Promise<PendingRecording | u
 
 function idbDelete(db: IDBDatabase, uploadId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).delete(uploadId);
+    const tx = db.transaction(LOCAL_STORE_NAME, "readwrite");
+    tx.objectStore(LOCAL_STORE_NAME).delete(uploadId);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -100,8 +108,8 @@ function idbDelete(db: IDBDatabase, uploadId: string): Promise<void> {
 
 function idbGetAll(db: IDBDatabase): Promise<PendingRecording[]> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).getAll();
+    const tx = db.transaction(LOCAL_STORE_NAME, "readonly");
+    const req = tx.objectStore(LOCAL_STORE_NAME).getAll();
     req.onsuccess = () => resolve(req.result as PendingRecording[]);
     req.onerror = () => reject(req.error);
   });
@@ -110,8 +118,8 @@ function idbGetAll(db: IDBDatabase): Promise<PendingRecording[]> {
 function sweepExpired(db: IDBDatabase): Promise<number> {
   const cutoff = new Date(Date.now() - MAX_AGE_MS).toISOString();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(LOCAL_STORE_NAME, "readwrite");
+    const store = tx.objectStore(LOCAL_STORE_NAME);
     const idx = store.index("by_created");
     const range = IDBKeyRange.upperBound(cutoff);
     let deleted = 0;
@@ -129,7 +137,7 @@ function sweepExpired(db: IDBDatabase): Promise<number> {
   });
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeBlob(text = "audio data"): Blob {
   return new Blob([text], { type: "audio/webm" });
@@ -147,7 +155,7 @@ function makeRecord(uploadId: string, overrides?: Partial<PendingRecording>): Pe
   };
 }
 
-// Each test gets a fresh IDBFactory (and thus a fresh in-memory database).
+// Each test (sections 1-7) gets a fresh IDBFactory.
 beforeEach(() => {
   _idbFactory = new IDBFactory();
   _db = null;
@@ -160,30 +168,30 @@ beforeEach(() => {
 describe("IndexedDB initialization", () => {
   it("opens and creates the correct object store", async () => {
     const db = await openDB();
-    expect(db.objectStoreNames.contains(STORE_NAME)).toBe(true);
+    expect(db.objectStoreNames.contains(LOCAL_STORE_NAME)).toBe(true);
     db.close();
   });
 
   it("creates by_status index", async () => {
     const db = await openDB();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(LOCAL_STORE_NAME, "readonly");
+    const store = tx.objectStore(LOCAL_STORE_NAME);
     expect(store.indexNames.contains("by_status")).toBe(true);
     db.close();
   });
 
   it("creates by_created index", async () => {
     const db = await openDB();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(LOCAL_STORE_NAME, "readonly");
+    const store = tx.objectStore(LOCAL_STORE_NAME);
     expect(store.indexNames.contains("by_created")).toBe(true);
     db.close();
   });
 
   it("uses uploadId as keyPath", async () => {
     const db = await openDB();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    expect(tx.objectStore(STORE_NAME).keyPath).toBe("uploadId");
+    const tx = db.transaction(LOCAL_STORE_NAME, "readonly");
+    expect(tx.objectStore(LOCAL_STORE_NAME).keyPath).toBe("uploadId");
     db.close();
   });
 
@@ -297,7 +305,7 @@ describe("Status transitions", () => {
 
   it("multiple retries increment attempts correctly", async () => {
     const db = await openDB();
-    let record = makeRecord("upl-004", { status: "pending", attempts: 0 });
+    const record = makeRecord("upl-004", { status: "pending", attempts: 0 });
     await idbPut(db, record);
 
     for (let i = 1; i <= 3; i++) {
@@ -470,5 +478,229 @@ describe("AudioStatus type", () => {
   it("pending and failed are the 'recoverable' states", () => {
     const recoverable = ALL_STATUSES.filter((s) => s === "pending" || s === "failed");
     expect(recoverable).toEqual(["pending", "failed"]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. Legacy migration — roundlab_audio → dissio_audio
+//
+// These tests import and directly exercise the REAL production functions from
+// useAudioStorage.ts.  A bug in the production code will cause these tests to
+// fail — unlike local reimplementations, which would pass regardless.
+//
+// Seven scenarios:
+//  1. Normal new recordings go into dissio_audio
+//  2. Pending/failed records in roundlab_audio are detected
+//  3. Legacy records are migrated into dissio_audio
+//  4. Running migration twice does not duplicate records
+//  5. Migration succeeds (returns []) when the legacy DB does not exist
+//  6. openDB() / _openDB() awaits migration before returning the DB
+//  7. Migration is retried after a simulated failure
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("Legacy migration — roundlab_audio → dissio_audio (production functions)", () => {
+  // Each test in this describe gets fresh module singletons + a fresh main factory.
+  // Tests that need a legacy factory create one inline.
+  beforeEach(() => {
+    _resetForTests(new IDBFactory());
+  });
+
+  // ── Local seeding helpers ─────────────────────────────────────────────────
+  // These helpers open a DB in an explicit factory and seed it.
+  // They do NOT duplicate production code — they are test fixtures.
+
+  function openDBInFactory(name: string, factory: IDBFactory): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = factory.open(name, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = (e.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: "uploadId" });
+          store.createIndex("by_status", "status", { unique: false });
+          store.createIndex("by_created", "createdAt", { unique: false });
+        }
+      };
+      req.onsuccess = (e) => resolve((e.target as IDBOpenDBRequest).result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Seed the legacy roundlab_audio DB inside the given factory.
+  async function seedLegacyDB(
+    factory: IDBFactory,
+    records: PendingRecording[],
+  ): Promise<void> {
+    const db = await openDBInFactory(DB_NAME_LEGACY, factory);
+    for (const r of records) await prodIdbPut(db, r);
+    db.close();
+  }
+
+  // Open the main dissio_audio DB inside the given factory (no migration).
+  function openMainDB(factory: IDBFactory): Promise<IDBDatabase> {
+    return openDBInFactory(DB_NAME, factory);
+  }
+
+  // ── 1. Normal use of dissio_audio ─────────────────────────────────────────
+
+  it("1. normal: DB_NAME constant is dissio_audio and records land there", async () => {
+    expect(DB_NAME).toBe("dissio_audio");
+    expect(DB_NAME_LEGACY).toBe("roundlab_audio");
+
+    const mainFactory = new IDBFactory();
+    const db = await openMainDB(mainFactory);
+    await prodIdbPut(db, makeRecord("normal-001"));
+    const stored = await prodIdbGet(db, "normal-001");
+    expect(stored?.uploadId).toBe("normal-001");
+    db.close();
+  });
+
+  // ── 2. Detection of legacy records ────────────────────────────────────────
+
+  it("2. detection: getLegacyPendingRecordings() finds pending/failed, excludes uploaded", async () => {
+    const legacyFactory = new IDBFactory();
+    await seedLegacyDB(legacyFactory, [
+      makeRecord("leg-001", { status: "pending" }),
+      makeRecord("leg-002", { status: "failed" }),
+      makeRecord("leg-003", { status: "uploaded" }), // must be excluded
+    ]);
+
+    // Call the REAL production function with an injected factory.
+    const found = await getLegacyPendingRecordings(legacyFactory);
+    const ids = found.map((r) => r.uploadId).sort();
+    expect(ids).toEqual(["leg-001", "leg-002"]);
+    expect(ids).not.toContain("leg-003");
+  });
+
+  // ── 3. Migration into the current database ────────────────────────────────
+
+  it("3. migration: migrateLegacyRecordings() copies records into dissio_audio", async () => {
+    const mainFactory = new IDBFactory();
+    const legacyFactory = new IDBFactory();
+
+    await seedLegacyDB(legacyFactory, [
+      makeRecord("mig-001", { status: "pending" }),
+      makeRecord("mig-002", { status: "failed" }),
+    ]);
+
+    const targetDb = await openMainDB(mainFactory);
+
+    // Call the REAL production function.
+    const count = await migrateLegacyRecordings(targetDb, legacyFactory);
+    expect(count).toBe(2);
+
+    // Verify via the REAL idbGet.
+    const r1 = await prodIdbGet(targetDb, "mig-001");
+    const r2 = await prodIdbGet(targetDb, "mig-002");
+    expect(r1).toBeDefined();
+    expect(r1!.status).toBe("pending");
+    expect(r2).toBeDefined();
+    expect(r2!.status).toBe("failed");
+
+    targetDb.close();
+  });
+
+  // ── 4. Duplicate prevention ────────────────────────────────────────────────
+
+  it("4. dedup: running migrateLegacyRecordings() twice does not duplicate records", async () => {
+    const mainFactory = new IDBFactory();
+    const legacyFactory = new IDBFactory();
+
+    await seedLegacyDB(legacyFactory, [
+      makeRecord("dup-001", { status: "pending" }),
+    ]);
+
+    const targetDb = await openMainDB(mainFactory);
+
+    const firstRun = await migrateLegacyRecordings(targetDb, legacyFactory);
+    const secondRun = await migrateLegacyRecordings(targetDb, legacyFactory);
+
+    expect(firstRun).toBe(1);
+    expect(secondRun).toBe(0); // skipped — uploadId already present
+
+    const all = await prodIdbGetAll(targetDb);
+    expect(all.filter((r) => r.uploadId === "dup-001")).toHaveLength(1);
+    targetDb.close();
+  });
+
+  // ── 5. Missing legacy database ────────────────────────────────────────────
+
+  it("5. resilience: getLegacyPendingRecordings() returns [] when legacy DB does not exist", async () => {
+    // Fresh factory with no databases → onupgradeneeded fires with oldVersion=0 → isNew=true → []
+    const emptyFactory = new IDBFactory();
+    const found = await getLegacyPendingRecordings(emptyFactory);
+    expect(found).toEqual([]);
+  });
+
+  it("5b. resilience: migrateLegacyRecordings() returns 0 when legacy DB does not exist", async () => {
+    const mainFactory = new IDBFactory();
+    const emptyFactory = new IDBFactory();
+
+    const targetDb = await openMainDB(mainFactory);
+    const count = await migrateLegacyRecordings(targetDb, emptyFactory);
+    expect(count).toBe(0);
+
+    const all = await prodIdbGetAll(targetDb);
+    expect(all).toHaveLength(0);
+    targetDb.close();
+  });
+
+  // ── 6. Migration completes before first recovery read ─────────────────────
+
+  it("6. timing: _openDB() resolves only after migration; records visible on first read", async () => {
+    const mainFactory = new IDBFactory();
+    const legacyFactory = new IDBFactory();
+
+    await seedLegacyDB(legacyFactory, [
+      makeRecord("timing-001", { status: "pending" }),
+      makeRecord("timing-002", { status: "failed" }),
+    ]);
+
+    // Inject both factories so openDB() uses them internally.
+    _resetForTests(mainFactory, legacyFactory);
+
+    // _openDB() awaits migration before resolving.
+    const db = await _openDB();
+
+    // The migrated records must already be present — no second await needed.
+    const all = await prodIdbGetAll(db);
+    const ids = all.map((r) => r.uploadId).sort();
+    expect(ids).toContain("timing-001");
+    expect(ids).toContain("timing-002");
+    db.close();
+  });
+
+  // ── 7. Retry behavior after simulated migration failure ────────────────────
+
+  it("7. retry: _openDB() retries migration on the next call after a failure", async () => {
+    const mainFactory = new IDBFactory();
+    const legacyFactory = new IDBFactory();
+
+    await seedLegacyDB(legacyFactory, [
+      makeRecord("retry-001", { status: "pending" }),
+    ]);
+
+    _resetForTests(mainFactory, legacyFactory);
+
+    // First call: override causes migration to throw.
+    _setMigrationOverride(async () => {
+      throw new Error("Simulated migration failure");
+    });
+
+    const db1 = await _openDB();
+
+    // DB is returned (non-fatal path) but records were NOT migrated.
+    const afterFail = await prodIdbGetAll(db1);
+    expect(afterFail.map((r) => r.uploadId)).not.toContain("retry-001");
+
+    // Restore real migration.
+    _setMigrationOverride(null);
+
+    // Second call: _readyPromise was cleared on failure → retry.
+    const db2 = await _openDB();
+    expect(db2).toBe(db1); // same underlying IDB connection
+
+    const afterRetry = await prodIdbGetAll(db2);
+    expect(afterRetry.map((r) => r.uploadId)).toContain("retry-001");
+    db2.close();
   });
 });

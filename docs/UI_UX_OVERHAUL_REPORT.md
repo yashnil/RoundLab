@@ -1,4 +1,4 @@
-# RoundLab Frontend — Production-Readiness Overhaul Report
+# Dissio Frontend — Production-Readiness Overhaul Report
 
 > **Branch:** ui/homepage-transformation  
 > **Date:** 2026-06-19  

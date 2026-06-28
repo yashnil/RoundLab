@@ -1,4 +1,4 @@
-# RoundLab Live UI Audit
+# Dissio Live UI Audit
 
 _Last updated: 2026-06-17 — audit scope for the anti–vibe-coded product transformation._
 
@@ -6,7 +6,7 @@ _Last updated: 2026-06-17 — audit scope for the anti–vibe-coded product tran
 
 This audit is **code-grounded**. No browser-automation tooling (Playwright/Puppeteer
 or a browser MCP) is available in this environment, and the deployed app at
-`https://round-lab.vercel.app/` is client-rendered, so `WebFetch` cannot capture
+`https://dissio.vercel.app/` is client-rendered, so `WebFetch` cannot capture
 meaningful rendered screenshots. Findings below are derived from reading the actual
 route components in `frontend/src/app/**` and shared components in
 `frontend/src/components/**`, cross-referenced against the live product behavior they
@@ -67,7 +67,7 @@ remaining routes are audited here to seed later phases.
   not from density/scale/layout changes.
 - **Thin product proof (spec §2.4).** The page asserts capabilities ("judge-style", "PF-native")
   but never shows the improvement loop, evidence provenance, or a coach workflow — the three
-  things that distinguish RoundLab from a generic LLM.
+  things that distinguish Dissio from a generic LLM.
 - **Anti-vibe signals present:** decorative mini-waveform built from a hardcoded bar array
   (fake telemetry), an XP chip ("Start drill → 50 XP") in the hero console, and a feature
   bento with interchangeable mini-visuals.

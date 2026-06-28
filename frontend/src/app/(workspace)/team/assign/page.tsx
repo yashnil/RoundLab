@@ -98,7 +98,7 @@ export default function AssignmentBuilderPage() {
             <ArrowLeft size={12} aria-hidden /> Back to team
           </Link>
           <h1 className="text-title text-ink">New assignment</h1>
-          <p className="text-sm text-ink-subtle">Set the practice, pick who does it, and RoundLab hands the context straight into their recorder.</p>
+          <p className="text-sm text-ink-subtle">Set the practice, pick who does it, and Dissio hands the context straight into their recorder.</p>
         </div>
 
         {loading ? (

@@ -72,7 +72,7 @@ export default function AppNav({ rightSlot }: AppNavProps) {
   useEffect(() => {
     setMounted(true);
 
-    const savedTheme = localStorage.getItem("roundlab-theme") as "dark" | "light" | null;
+    const savedTheme = localStorage.getItem("dissio-theme") as "dark" | "light" | null;
     const initialTheme = savedTheme || "dark";
     setTheme(initialTheme);
     document.documentElement.classList.remove("dark", "light");
@@ -95,7 +95,7 @@ export default function AppNav({ rightSlot }: AppNavProps) {
   function toggleTheme() {
     const newTheme = theme === "dark" ? "light" : "dark";
     setTheme(newTheme);
-    localStorage.setItem("roundlab-theme", newTheme);
+    localStorage.setItem("dissio-theme", newTheme);
     document.documentElement.classList.remove("dark", "light");
     document.documentElement.classList.add(newTheme);
   }
@@ -116,7 +116,7 @@ export default function AppNav({ rightSlot }: AppNavProps) {
           </div>
           <div className="flex flex-col gap-0">
             <span className="text-sm font-semibold leading-tight tracking-tight text-ink">
-              RoundLab
+              Dissio
             </span>
             {sectionLabel && (
               <span

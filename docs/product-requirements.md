@@ -1,7 +1,7 @@
 # Product Requirements
 
 ## MVP Goal
-Build RoundLab V1: an AI flow coach for Public Forum debaters.
+Build Dissio V1: an AI flow coach for Public Forum debaters.
 
 ## Core User Flow
 1. User records or uploads a PF speech.

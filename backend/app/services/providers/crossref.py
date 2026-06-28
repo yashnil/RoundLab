@@ -117,7 +117,7 @@ def lookup_crossref_doi(
     url = f"{_BASE_URL}/{clean_doi}"
     headers: dict[str, str] = {}
     if contact_email:
-        headers["User-Agent"] = f"RoundLab/1.0 (mailto:{contact_email})"
+        headers["User-Agent"] = f"Dissio/1.0 (mailto:{contact_email})"
 
     try:
         with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:

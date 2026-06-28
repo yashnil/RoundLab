@@ -1,7 +1,7 @@
-# RoundLab UI Research Notes
+# Dissio UI Research Notes
 
 Research informing the product-wide visual transformation. Sources examined,
-patterns adopted/rejected, and how they map to RoundLab specifically.
+patterns adopted/rejected, and how they map to Dissio specifically.
 
 ## Sources examined
 
@@ -10,20 +10,20 @@ patterns adopted/rejected, and how they map to RoundLab specifically.
 - **AI processing / job-progress UX** — Smashing Magazine "Practical Interface
   Patterns for AI Transparency," Telerik "Loading UI/UX Patterns for AI Apps,"
   codewithcaptain "AI Progress Indicators," Salesforce "Trustworthy AI UX."
-- Internal: existing RoundLab shell, tokens, and `useSpeechProcessing` lifecycle.
+- Internal: existing Dissio shell, tokens, and `useSpeechProcessing` lifecycle.
 
 ## Patterns adopted
 
 - **Audit all 7 states per component** (Vercel): hover, focus-visible, active,
-  disabled, loading, empty, error. Missing states are findings. → RoundLab
+  disabled, loading, empty, error. Missing states are findings. → Dissio
   interaction tokens (§5) standardize these.
 - **Visible focus ring always** (never `outline:none` without replacement),
   **44×44px** touch targets, semantic `<a href>` / `<button>`, labels associated
   with every control. → Already in the shell; reinforced product-wide.
 - **Dynamic checklists / timeline chips beat progress bars** for unpredictable
   AI timing — users stay patient when they can see *where* the system is. → Keep
-  RoundLab's honest stage list; never a fake percentage.
-- **Name what's being analyzed** ("Evaluating transaction patterns"). → RoundLab
+  Dissio's honest stage list; never a fake percentage.
+- **Name what's being analyzed** ("Evaluating transaction patterns"). → Dissio
   processing names the real categories: argument structure, evidence, clash,
   weighing, judge adaptation, delivery, drills.
 - **Honesty over concealment** — transparency signals trust. → "saved unless
@@ -37,9 +37,9 @@ patterns adopted/rejected, and how they map to RoundLab specifically.
   debate-semantic colors instead).
 - Radar charts where unreadable; giant equal-weight stat-card grids.
 
-## RoundLab-specific design direction
+## Dissio-specific design direction
 
-RoundLab's identity comes from **debate structure**, not generic SaaS chrome:
+Dissio's identity comes from **debate structure**, not generic SaaS chrome:
 
 - **Flow semantics** — live / contested / dropped arguments get consistent,
   meaning-bearing colors everywhere (flow, report, drills, progress).

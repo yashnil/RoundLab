@@ -1,8 +1,8 @@
-# RoundLab Pilot Runbook — Pass 18
+# Dissio Pilot Runbook — Pass 18
 
 ## Overview
 
-This runbook covers how to run the RoundLab pilot with 5–30 students and coaches. It covers setup, launch, monitoring, and shutdown.
+This runbook covers how to run the Dissio pilot with 5–30 students and coaches. It covers setup, launch, monitoring, and shutdown.
 
 ---
 

@@ -4,7 +4,7 @@
 
 | Action | Format | How |
 |---|---|---|
-| Copy Debate | Compact RoundLab format | Copy button in CitationDetailsPanel |
+| Copy Debate | Compact Dissio format | Copy button in CitationDetailsPanel |
 | Copy MLA | MLA 9th edition | Format selector → copy |
 | Copy APA | APA 7th edition | Format selector → copy |
 | Copy Chicago | Chicago 17th author-date | Format selector → copy |
@@ -31,7 +31,7 @@ Collisions are handled by uniqueness tracking within a single export call.
 **Ordering:** Records are output in the order passed.  Callers should sort
 before calling (e.g. alphabetical by author surname for bibliographies).
 
-## RoundLab debate citation format
+## Dissio debate citation format
 
 The `debate` format is a compact header suitable for card reading aloud:
 

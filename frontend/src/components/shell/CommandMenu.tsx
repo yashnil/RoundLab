@@ -30,7 +30,7 @@ import {
 import { getStoredTheme, toggleTheme } from "@/lib/theme";
 
 /** Dispatch this event anywhere to open the command menu. */
-export const OPEN_COMMAND_EVENT = "roundlab:open-command";
+export const OPEN_COMMAND_EVENT = "dissio:open-command";
 
 export function openCommandMenu() {
   if (typeof window !== "undefined") {
@@ -191,7 +191,7 @@ export default function CommandMenu() {
   const groups = Array.from(new Set(actions.map((a) => a.group)));
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} label="RoundLab command menu">
+    <CommandDialog open={open} onOpenChange={setOpen} label="Dissio command menu">
       <CommandInput placeholder="Search actions and destinations…" />
       <CommandList>
         <CommandEmpty>No matching actions.</CommandEmpty>

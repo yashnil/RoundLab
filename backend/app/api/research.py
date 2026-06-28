@@ -278,7 +278,7 @@ async def extract_url(body: ExtractUrlRequest) -> ExtractUrlResponse:
                 if not _safe:
                     raise ValueError(_reason)
                 with _httpx.Client(follow_redirects=True, timeout=20) as _c:
-                    _resp = _c.get(body.url, headers={"User-Agent": "Mozilla/5.0 (compatible; RoundLabBot/1.0)"})
+                    _resp = _c.get(body.url, headers={"User-Agent": "Mozilla/5.0 (compatible; DissioBot/1.0)"})
                 _doc = extract_pdf(_resp.content, source_url=body.url)
                 article = ExtractedArticle(
                     url=body.url,
@@ -302,7 +302,7 @@ async def extract_url(body: ExtractUrlRequest) -> ExtractUrlResponse:
                 if not _safe:
                     raise ValueError(_reason)
                 with _httpx.Client(follow_redirects=True, timeout=20) as _c:
-                    _resp = _c.get(body.url, headers={"User-Agent": "Mozilla/5.0 (compatible; RoundLabBot/1.0)"})
+                    _resp = _c.get(body.url, headers={"User-Agent": "Mozilla/5.0 (compatible; DissioBot/1.0)"})
                 _doc = extract_docx(_resp.content, source_url=body.url)
                 article = ExtractedArticle(
                     url=body.url,

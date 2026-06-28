@@ -1,6 +1,6 @@
 # Supabase Migration Guide
 
-How RoundLab manages its database schema safely across local development, CI, and production.
+How Dissio manages its database schema safely across local development, CI, and production.
 
 ---
 

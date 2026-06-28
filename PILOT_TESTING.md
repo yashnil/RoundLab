@@ -1,4 +1,4 @@
-# RoundLab Pilot Testing Guide
+# Dissio Pilot Testing Guide
 
 This guide outlines how to run a safe, structured pilot test with real users.
 

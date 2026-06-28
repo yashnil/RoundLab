@@ -1,7 +1,7 @@
 /**
  * Honest processing-stage model.
  *
- * RoundLab's backend exposes a coarse job status (queued/running/succeeded/
+ * Dissio's backend exposes a coarse job status (queued/running/succeeded/
  * failed), not per-category telemetry. So we present a small, truthful set of
  * high-level stages and list the analysis CATEGORIES as an *explanatory* view —
  * never marking a category complete from elapsed time, never a fake percentage.
@@ -27,7 +27,7 @@ export interface ProcessingStageInput {
 }
 
 /**
- * The categories RoundLab examines during "analysis running". Shown as an
+ * The categories Dissio examines during "analysis running". Shown as an
  * explanatory checklist — they are NOT independently completed in the UI.
  */
 export const ANALYSIS_CATEGORIES = [

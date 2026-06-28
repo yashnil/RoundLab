@@ -22,12 +22,12 @@ export default function ProductHeader({ leftSlot, rightSlot }: ProductHeaderProp
         <Link
           href="/dashboard"
           className="flex items-center gap-2 md:hidden"
-          aria-label="RoundLab home"
+          aria-label="Dissio home"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-lav">
             <Mic size={14} className="text-white" />
           </span>
-          <span className="text-sm font-semibold tracking-tight text-ink">RoundLab</span>
+          <span className="text-sm font-semibold tracking-tight text-ink">Dissio</span>
         </Link>
         <div className="hidden min-w-0 md:block">{leftSlot}</div>
       </div>

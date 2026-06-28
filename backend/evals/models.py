@@ -1,4 +1,4 @@
-"""Pydantic models for the RoundLab evaluation harness.
+"""Pydantic models for the Dissio evaluation harness.
 
 EvalSpeechFixture  — labeled ground-truth speech (what we expect the AI to produce)
 IssueDetectionMetrics — precision/recall/F1 for structured_issues

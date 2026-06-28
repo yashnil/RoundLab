@@ -37,7 +37,7 @@ export function DiagnosticIntake({ onComplete, loading }: Props) {
       <div>
         <h1 className="text-xl font-bold text-ink">Where do you start?</h1>
         <p className="text-[13px] text-ink-subtle mt-1">
-          Answer honestly — RoundLab uses this to build your personal training plan.
+          Answer honestly — Dissio uses this to build your personal training plan.
         </p>
       </div>
 

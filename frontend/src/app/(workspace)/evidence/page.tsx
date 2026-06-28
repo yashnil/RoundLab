@@ -1525,7 +1525,7 @@ export default function EvidencePage() {
                 )}
               </div>
               <p className="mt-2 text-xs text-ink-subtle">
-                RoundLab extracts evidence cards from your file. It never invents citations.
+                Dissio extracts evidence cards from your file. It never invents citations.
               </p>
             </section>
 
@@ -1619,7 +1619,7 @@ export default function EvidencePage() {
                   <div>
                     <p className="text-sm font-semibold text-ink">No case files yet</p>
                     <p className="text-xs text-ink-subtle mt-0.5">
-                      Upload a case file or evidence packet above. RoundLab will extract evidence cards you can cite.
+                      Upload a case file or evidence packet above. Dissio will extract evidence cards you can cite.
                     </p>
                   </div>
                 </div>

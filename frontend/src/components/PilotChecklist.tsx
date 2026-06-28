@@ -182,7 +182,7 @@ export default function PilotChecklist({ progress, pilot }: Props) {
       {completed === items.length && (
         <div className="rounded-lg border border-ok/20 bg-ok/5 px-3 py-2">
           <p className="text-xs font-medium text-ok">
-            Loop complete — you&apos;ve run the full RoundLab practice cycle.
+            Loop complete — you&apos;ve run the full Dissio practice cycle.
           </p>
         </div>
       )}

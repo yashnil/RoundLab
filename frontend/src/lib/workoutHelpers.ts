@@ -77,7 +77,7 @@ export function formatWorkoutPlan(workout: Workout): string {
   const { steps, re_record_goal, coach_note } = workout.workout_json;
   const totalMin = estimateWorkoutMinutes(steps);
 
-  lines.push(`RoundLab Tournament Prep Workout`);
+  lines.push(`Dissio Tournament Prep Workout`);
   lines.push(`${workout.title}`);
   lines.push(`Estimated time: ${totalMin} minutes`);
   if (workout.focus_area) {

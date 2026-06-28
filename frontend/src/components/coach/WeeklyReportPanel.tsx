@@ -32,7 +32,7 @@ function csvFromReport(report: WeeklyReport, teamName: string): string {
     r.active_mission_skill ? (SKILL_LABEL[r.active_mission_skill] ?? r.active_mission_skill) : "—",
   ]);
   const csv = [header, ...rows].map((r) => r.map(String).map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
-  return `RoundLab Weekly Report — ${teamName}\nPeriod: ${report.period_start.slice(0, 10)} to ${report.period_end.slice(0, 10)}\n\n${csv}`;
+  return `Dissio Weekly Report — ${teamName}\nPeriod: ${report.period_start.slice(0, 10)} to ${report.period_end.slice(0, 10)}\n\n${csv}`;
 }
 
 export default function WeeklyReportPanel({ teamId, teamName }: Props) {
@@ -65,7 +65,7 @@ export default function WeeklyReportPanel({ teamId, teamName }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `roundlab-weekly-${report.period_end.slice(0, 10)}.csv`;
+    a.download = `dissio-weekly-${report.period_end.slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

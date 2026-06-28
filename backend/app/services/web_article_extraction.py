@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 _TIMEOUT_SECONDS    = 15
 _USER_AGENT         = (
-    "Mozilla/5.0 (compatible; RoundLabBot/1.0; +https://roundlab.app/bot)"
+    "Mozilla/5.0 (compatible; DissioBot/1.0; +https://dissio.app/bot)"
 )
 
 _PRIVATE_NETWORKS = [

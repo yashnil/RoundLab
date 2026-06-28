@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RoundLab — Local test environment setup.
+# Dissio — Local test environment setup.
 #
 # Starts local Supabase when needed, applies all migrations, creates
 # deterministic authentication users, seeds Training OS fixtures, and writes
@@ -274,7 +274,7 @@ COACH_B_ID="00000000-0000-0000-0002-000000000002"
 TEAM_A_ID="00000000-0000-0000-0003-000000000001"
 TEAM_B_ID="00000000-0000-0000-0003-000000000002"
 
-TEST_PASSWORD="RoundLab_Test1!"
+TEST_PASSWORD="Dissio_Test1!"
 
 delete_test_user() {
   local user_id="$1"
@@ -387,19 +387,19 @@ fi
 printf 'Seeding authentication users through the Admin API...\n'
 
 create_or_update_user \
-  "test_student_a@roundlab.local" \
+  "test_student_a@dissio.local" \
   "$STUDENT_A_ID"
 
 create_or_update_user \
-  "test_coach_a@roundlab.local" \
+  "test_coach_a@dissio.local" \
   "$COACH_A_ID"
 
 create_or_update_user \
-  "test_student_b@roundlab.local" \
+  "test_student_b@dissio.local" \
   "$STUDENT_B_ID"
 
 create_or_update_user \
-  "test_coach_b@roundlab.local" \
+  "test_coach_b@dissio.local" \
   "$COACH_B_ID"
 
 ok "Authentication users created or updated"
@@ -441,13 +441,13 @@ USER_COUNT="$(
       SELECT COUNT(*)
       FROM auth.users
       WHERE
-        (id = '$STUDENT_A_ID'::uuid AND email = 'test_student_a@roundlab.local')
+        (id = '$STUDENT_A_ID'::uuid AND email = 'test_student_a@dissio.local')
         OR
-        (id = '$COACH_A_ID'::uuid AND email = 'test_coach_a@roundlab.local')
+        (id = '$COACH_A_ID'::uuid AND email = 'test_coach_a@dissio.local')
         OR
-        (id = '$STUDENT_B_ID'::uuid AND email = 'test_student_b@roundlab.local')
+        (id = '$STUDENT_B_ID'::uuid AND email = 'test_student_b@dissio.local')
         OR
-        (id = '$COACH_B_ID'::uuid AND email = 'test_coach_b@roundlab.local');
+        (id = '$COACH_B_ID'::uuid AND email = 'test_coach_b@dissio.local');
     "
 )"
 
@@ -554,9 +554,9 @@ TEST_TEAM_A_ID=$TEAM_A_ID
 TEST_TEAM_B_ID=$TEAM_B_ID
 
 # Playwright test credentials
-TEST_USER_EMAIL=test_student_a@roundlab.local
+TEST_USER_EMAIL=test_student_a@dissio.local
 TEST_USER_PASSWORD=$TEST_PASSWORD
-TEST_COACH_EMAIL=test_coach_a@roundlab.local
+TEST_COACH_EMAIL=test_coach_a@dissio.local
 TEST_COACH_PASSWORD=$TEST_PASSWORD
 
 BASE_URL=http://localhost:3000
@@ -621,10 +621,10 @@ printf '  API:        %s\n' "$SUPABASE_URL"
 printf '  Studio:     http://127.0.0.1:54323\n'
 
 printf '\n  Accounts (password: %s):\n' "$TEST_PASSWORD"
-printf '    test_student_a@roundlab.local  — student, Team A\n'
-printf '    test_coach_a@roundlab.local    — coach, Team A\n'
-printf '    test_student_b@roundlab.local  — student, Team B\n'
-printf '    test_coach_b@roundlab.local    — coach, Team B\n'
+printf '    test_student_a@dissio.local  — student, Team A\n'
+printf '    test_coach_a@dissio.local    — coach, Team A\n'
+printf '    test_student_b@dissio.local  — student, Team B\n'
+printf '    test_coach_b@dissio.local    — coach, Team B\n'
 
 printf '\n  Next steps:\n'
 printf '    cd backend\n'

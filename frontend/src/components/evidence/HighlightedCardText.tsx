@@ -72,7 +72,7 @@ const BEST_USE_LABEL: Record<string, string> = {
  *   SOURCE: Author Year — Publication / Title
  *   EVIDENCE: …
  *   MLA: …
- *   ROUNDLAB ANALYSIS: Warrant / Impact
+ *   DISSIO ANALYSIS: Warrant / Impact
  *   DEBATE PREP: proves / weakness / answer / counter / crossfire Q&A / use
  *
  * Sections with no data are omitted. Used by both Copy Card and Download.
@@ -131,7 +131,7 @@ export function exportCardText(
   const warrant = intel?.warrant_analysis?.trim();
   const impact = intel?.impact_analysis?.trim();
   if (warrant || impact) {
-    lines.push("", "ROUNDLAB ANALYSIS:");
+    lines.push("", "DISSIO ANALYSIS:");
     if (warrant) lines.push(`Warrant: ${warrant}`);
     if (impact) lines.push(`Impact: ${impact}`);
   }
@@ -211,7 +211,7 @@ export function exportCardHtml(
   const warrant = intel?.warrant_analysis?.trim();
   const impact = intel?.impact_analysis?.trim();
   if (warrant || impact) {
-    blocks.push(`<p style="margin:8px 0 2px"><b>RoundLab Analysis</b></p>`);
+    blocks.push(`<p style="margin:8px 0 2px"><b>Dissio Analysis</b></p>`);
     if (warrant) blocks.push(`<p style="margin:0 0 2px"><b>Warrant:</b> ${escapeHtml(warrant)}</p>`);
     if (impact) blocks.push(`<p style="margin:0 0 6px"><b>Impact:</b> ${escapeHtml(impact)}</p>`);
   }
@@ -288,7 +288,7 @@ export function downloadCardAsTxt(
 ): void {
   const text = exportCardText(card, spans);
   const slug = (card.short_cite || "card").replace(/[^a-z0-9]/gi, "_").toLowerCase().slice(0, 30);
-  const filename = `roundlab_card_${slug}.txt`;
+  const filename = `dissio_card_${slug}.txt`;
   const blob = new Blob([text], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

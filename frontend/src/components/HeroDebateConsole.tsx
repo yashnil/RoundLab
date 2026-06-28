@@ -151,7 +151,7 @@ export default function HeroDebateConsole() {
   return (
     <motion.div
       role="img"
-      aria-label="RoundLab product preview: speech analysed into flow, judge ballot, and drill"
+      aria-label="Dissio product preview: speech analysed into flow, judge ballot, and drill"
       className="relative w-full"
       {...ap(animated, { opacity: 0, y: 16 }, { opacity: 1, y: 0 }, 0.08, 0.5)}
     >

@@ -1,8 +1,8 @@
-# Project Plan: RoundLab
+# Project Plan: Dissio
 
 ## 1. Core concept
 
-**RoundLab** is an AI practice and feedback platform for speech and debate students.
+**Dissio** is an AI practice and feedback platform for speech and debate students.
 
 The initial version should focus on **Public Forum debate** , because PF has a clear structure, a
 large novice/JV user base, and strong alignment with your own experience and FSI network.
@@ -10,7 +10,7 @@ large novice/JV user base, and strong alignment with your own experience and FSI
 ### One-line pitch
 
 ```
-RoundLab helps debaters record speeches, get AI-generated flows and
+Dissio helps debaters record speeches, get AI-generated flows and
 ballot-style feedback, identify dropped or underdeveloped arguments, and
 practice targeted drills to improve faster.
 ```
@@ -43,7 +43,7 @@ The opportunity is to make something more **coach-like and improvement-loop orie
 
 
 ```
-Existing tools help students practice. RoundLab should help students understand
+Existing tools help students practice. Dissio should help students understand
 why they are losing rounds and what exact skill to practice next.
 ```
 Your novelty should be:
@@ -105,7 +105,7 @@ They need to:
 Start with one promise:
 
 ```
-Upload or record a PF speech. RoundLab flows it, judges it, and gives you
+Upload or record a PF speech. Dissio flows it, judges it, and gives you
 three personalized drills.
 ```
 That is the MVP.
@@ -328,7 +328,7 @@ Start with one uploaded speech. Later support full-round flow.
 ```
 ### Novelty
 
-This is where RoundLab becomes debate-native. Many tools can transcribe and summarize;
+This is where Dissio becomes debate-native. Many tools can transcribe and summarize;
 fewer can produce a usable debate flow.
 
 ## Module E: Debate feedback engine
@@ -1218,12 +1218,12 @@ That will make it more ethical and more educational.
 
 ## Against Yoodli
 
-Yoodli helps with public speaking and communication practice. RoundLab helps with
+Yoodli helps with public speaking and communication practice. Dissio helps with
 **competitive debate strategy** : flows, drops, warrants, extensions, and judge decisions. (Yoodli)
 
 ## Against Symbai
 
-Symbai offers AI debate coaching and critical-thinking practice. RoundLab should differentiate
+Symbai offers AI debate coaching and critical-thinking practice. Dissio should differentiate
 by going deep into **PF-specific speech analysis, flow tables, ballot-style RFDs, and drills
 generated from actual uploaded speeches**. (Symbai)
 
@@ -1231,13 +1231,13 @@ generated from actual uploaded speeches**. (Symbai)
 
 
 PublicForumAI already offers PF AI flowing, case generation, and full practice rounds.
-RoundLab should not simply copy “practice against AI.” Its wedge should be **post-speech
+Dissio should not simply copy “practice against AI.” Its wedge should be **post-speech
 improvement analytics and coach/team workflows**. (Public Forum AI)
 
 ## Unique positioning
 
 ```
-RoundLab is the AI assistant coach that turns every practice speech into a
+Dissio is the AI assistant coach that turns every practice speech into a
 flow, a ballot, and a personalized training plan.
 ```
 # 15. Summer build roadmap
@@ -1517,7 +1517,7 @@ Topic briefs, case testing, frontlines, judge adaptation, round simulation.
 
 # 19. Final product vision
 
-Long-term, RoundLab could become:
+Long-term, Dissio could become:
 
 ```
 The AI practice infrastructure for speech and debate teams.
@@ -1546,7 +1546,7 @@ That loop is concrete, useful, and defensible.
 
 Build this first:
 
-## RoundLab V1: AI Flow Coach for Public Forum Debate
+## Dissio V1: AI Flow Coach for Public Forum Debate
 
 ### Core functionality
 

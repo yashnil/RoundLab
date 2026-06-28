@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# RoundLab — Remote Migration Repair Example
+# Dissio — Remote Migration Repair Example
 # =============================================================================
 #
 # WARNING: This script is for EXAMPLE PURPOSES ONLY.
@@ -31,7 +31,7 @@ set -euo pipefail
 # ── Configuration ─────────────────────────────────────────────────────────────
 DB_URL="${SUPABASE_DB_URL:?SUPABASE_DB_URL must be set}"
 
-echo "=== RoundLab Remote Migration Repair ==="
+echo "=== Dissio Remote Migration Repair ==="
 echo "WARNING: This modifies the remote database. Review every step first."
 echo ""
 read -p "Type 'yes' to confirm you have audited the remote schema: " CONFIRM

@@ -96,9 +96,9 @@ export default function FirstRunCommandCenter({ userId }: FirstRunCommandCenterP
               First rep
             </span>
           </div>
-          <p className="text-base font-semibold text-ink">Start your first RoundLab rep</p>
+          <p className="text-base font-semibold text-ink">Start your first Dissio rep</p>
           <p className="mt-1 text-xs text-ink-subtle leading-relaxed">
-            Upload or record a PF speech — RoundLab builds your flow, generates judge-style feedback, and assigns targeted drills.
+            Upload or record a PF speech — Dissio builds your flow, generates judge-style feedback, and assigns targeted drills.
           </p>
           <div className="mt-3">
             <PipelineLoop />
@@ -119,7 +119,7 @@ export default function FirstRunCommandCenter({ userId }: FirstRunCommandCenterP
           <PathCard
             icon={FlaskConical}
             title="Try a demo report"
-            description="See what a complete RoundLab session looks like — flow, ballot, drills, and re-record comparison."
+            description="See what a complete Dissio session looks like — flow, ballot, drills, and re-record comparison."
             ctaLabel="Open demo report"
             href="/demo"
             onClick={() => logEvent("onboarding_demo_clicked", userId)}
@@ -127,7 +127,7 @@ export default function FirstRunCommandCenter({ userId }: FirstRunCommandCenterP
           <PathCard
             icon={FileText}
             title="Upload evidence first"
-            description="Optional: add your case file so RoundLab can check whether your speech evidence actually supports your claims."
+            description="Optional: add your case file so Dissio can check whether your speech evidence actually supports your claims."
             ctaLabel="Add case file"
             href="/evidence"
             onClick={() => logEvent("onboarding_evidence_clicked", userId)}

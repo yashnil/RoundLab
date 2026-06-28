@@ -118,7 +118,7 @@ export function captureStatusView(status: CapturePersistenceStatus): CaptureStat
     case "saved":
       return {
         status, tone: "success", canSafelyLeave: true, retryable: false,
-        title: "Saved to RoundLab",
+        title: "Saved to Dissio",
         description: "Your speech is saved. You can analyze it now.",
       };
     case "analysis-starting":

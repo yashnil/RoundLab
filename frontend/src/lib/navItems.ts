@@ -1,5 +1,5 @@
 /**
- * Shared navigation model for RoundLab.
+ * Shared navigation model for Dissio.
  *
  * - APP_NAV_ITEMS: flat list used by the public landing nav (unchanged contract).
  * - APP_NAV_GROUPS: grouped, icon-bearing model used by the authenticated

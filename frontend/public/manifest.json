@@ -1,6 +1,6 @@
 {
-  "name": "RoundLab",
-  "short_name": "RoundLab",
+  "name": "Dissio",
+  "short_name": "Dissio",
   "description": "AI flow coach for Public Forum debaters",
   "start_url": "/training",
   "scope": "/",

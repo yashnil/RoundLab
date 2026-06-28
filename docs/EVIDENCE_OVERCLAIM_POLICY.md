@@ -1,6 +1,6 @@
 # Evidence Overclaim Policy (Pass 11)
 
-RoundLab detects and flags overclaims in evidence cards — cases where the generated tag or the user's claim overstates what the source evidence actually says.
+Dissio detects and flags overclaims in evidence cards — cases where the generated tag or the user's claim overstates what the source evidence actually says.
 
 ## What counts as an overclaim?
 

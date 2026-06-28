@@ -64,7 +64,11 @@ export default function RoundSimulationPage() {
 
   useEffect(() => {
     if (authState !== "signed-in") return;
-    const saved = typeof window !== "undefined" ? localStorage.getItem("roundlab_active_round") : null;
+    // Read from new key, fall back to legacy key and migrate
+    const saved = typeof window !== "undefined"
+      ? localStorage.getItem("dissio_active_round") ??
+        (() => { const v = localStorage.getItem("roundlab_active_round"); if (v) { localStorage.setItem("dissio_active_round", v); localStorage.removeItem("roundlab_active_round"); } return v; })()
+      : null;
     if (!saved) return;
     // Silently try to recover; clear if not found
     roundApi.getRoundState(saved).then((state) => {
@@ -76,10 +80,10 @@ export default function RoundSimulationPage() {
         if (state.decision) setDecision(state.decision);
         setView("round");
       } else {
-        localStorage.removeItem("roundlab_active_round");
+        localStorage.removeItem("dissio_active_round");
       }
     }).catch(() => {
-      localStorage.removeItem("roundlab_active_round");
+      localStorage.removeItem("dissio_active_round");
     });
   }, [authState]);
 
@@ -95,7 +99,7 @@ export default function RoundSimulationPage() {
       if (state.decision) setDecision(state.decision);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
-        localStorage.removeItem("roundlab_active_round");
+        localStorage.removeItem("dissio_active_round");
         setView("setup");
         setSimulation(null);
       }
@@ -109,7 +113,7 @@ export default function RoundSimulationPage() {
     setError(null);
     try {
       const sim = await roundApi.createRound(config);
-      localStorage.setItem("roundlab_active_round", sim.id);
+      localStorage.setItem("dissio_active_round", sim.id);
       const started = await roundApi.startRound(sim.id);
       setSimulation(started);
       await refreshState(sim.id);
@@ -216,7 +220,7 @@ export default function RoundSimulationPage() {
   }
 
   function handleAbandonRound() {
-    localStorage.removeItem("roundlab_active_round");
+    localStorage.removeItem("dissio_active_round");
     setSimulation(null);
     setRoundState(null);
     setSpeeches([]);

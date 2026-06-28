@@ -188,7 +188,7 @@ export function selectNextAction({
       eyebrow: "Get started",
       title: "Record your first practice speech",
       description:
-        "Give a 1–4 minute speech and RoundLab returns a flow, a judge-style ballot, and three drills built from it.",
+        "Give a 1–4 minute speech and Dissio returns a flow, a judge-style ballot, and three drills built from it.",
       ctaLabel: "Record your first speech",
       href: "/session",
       icon: "Mic",

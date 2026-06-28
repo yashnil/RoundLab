@@ -34,7 +34,7 @@ export default function MarketingNav({
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-lav transition-colors group-hover:bg-lav-hi">
           <Mic size={12} className="text-white" aria-hidden />
         </div>
-        <span className="text-sm font-semibold tracking-tight text-ink">RoundLab</span>
+        <span className="text-sm font-semibold tracking-tight text-ink">Dissio</span>
       </Link>
 
       {/* Desktop links */}

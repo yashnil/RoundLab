@@ -1,5 +1,5 @@
 /**
- * Shared motion presets for RoundLab.
+ * Shared motion presets for Dissio.
  * Import from here — never hardcode transition values in components.
  *
  * Usage:

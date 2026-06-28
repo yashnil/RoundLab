@@ -1,7 +1,7 @@
 """Deterministic source quality heuristics for Research-to-Card Evidence Builder.
 
 Rates sources as high/medium/low/unknown based on domain, metadata, and content
-signals. These are estimates — RoundLab does not make authoritative editorial
+signals. These are estimates — Dissio does not make authoritative editorial
 judgments about any source.
 """
 
@@ -91,7 +91,7 @@ def rate_source_quality(
         notes_parts.append("User-generated content platform — verify sourcing carefully.")
     else:
         base_quality = "unknown"
-        notes_parts.append("Domain not in RoundLab's quality database.")
+        notes_parts.append("Domain not in Dissio's quality database.")
 
     # ── Metadata bonus/malus ─────────────────────────────────────────────
     has_author = bool(metadata.author)
@@ -130,7 +130,7 @@ def rate_source_quality(
 
     # ── Credibility note ────────────────────────────────────────────────
     notes_parts.append(
-        "RoundLab source-quality estimate — not an authoritative editorial judgment. "
+        "Dissio source-quality estimate — not an authoritative editorial judgment. "
         "Users should verify sources independently."
     )
 

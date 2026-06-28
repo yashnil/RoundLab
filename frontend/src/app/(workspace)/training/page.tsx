@@ -159,7 +159,7 @@ export default function TrainingPage() {
         <div>
           <h1 className="text-xl font-bold text-ink">Training Plan</h1>
           <p className="text-[13px] text-ink-subtle mt-1">
-            RoundLab builds a personalized plan based on your skill level.
+            Dissio builds a personalized plan based on your skill level.
           </p>
         </div>
         <div className="rounded-2xl border border-lav/20 bg-lav/5 px-6 py-8 text-center space-y-4">
@@ -169,7 +169,7 @@ export default function TrainingPage() {
           <div>
             <p className="text-[15px] font-bold text-ink">Start with a quick diagnostic</p>
             <p className="text-[13px] text-ink-subtle mt-1">
-              Takes 5 minutes. Tells RoundLab where to start your training.
+              Takes 5 minutes. Tells Dissio where to start your training.
             </p>
           </div>
           <Link href="/diagnostic">

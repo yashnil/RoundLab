@@ -24,9 +24,9 @@ from app.services.evidence_extraction import (
 
 # ── Shared fixture text ────────────────────────────────────────────────────────
 
-# A realistic 5-card structured evidence file matching roundlab_test_evidence.txt format
+# A realistic 5-card structured evidence file matching dissio_test_evidence.txt format
 _FIVE_CARD_DOC = """
-ROUNDLAB TEST EVIDENCE FILE
+DISSIO TEST EVIDENCE FILE
 TOPIC: Resolved: The United States federal government should substantially reform its social media regulation policies.
 
 This file contains five evidence cards for testing extraction.
@@ -135,7 +135,7 @@ class TestCardMarkerChunking:
     def test_intro_is_not_a_chunk(self):
         chunks = _chunks_from_doc(_FIVE_CARD_DOC)
         for chunk in chunks:
-            assert "ROUNDLAB TEST EVIDENCE FILE" not in chunk.chunk_text
+            assert "DISSIO TEST EVIDENCE FILE" not in chunk.chunk_text
             assert "TOPIC:" not in chunk.chunk_text
 
     def test_chunk_bodies_do_not_contain_card_markers(self):
@@ -240,7 +240,7 @@ class TestStructuredExtraction:
         chunks = self._card_chunks()
         cards = extract_evidence_cards(chunks, generate_summaries=False)
         for card in cards:
-            assert "ROUNDLAB TEST EVIDENCE FILE" not in card.card_text
+            assert "DISSIO TEST EVIDENCE FILE" not in card.card_text
             assert "TOPIC:" not in (card.tag or "")
 
     def test_all_cards_have_tags(self):

@@ -1,8 +1,8 @@
-# RoundLab
+# Dissio
 
 **AI-powered speech and debate training for Public Forum debaters.**
 
-RoundLab is a full-stack practice platform that turns recorded speeches into argument flows, judge-style ballots, targeted drills, and longitudinal skill improvement. It closes the coaching gap for students who practice without consistent access to a coach.
+Dissio is a full-stack practice platform that turns recorded speeches into argument flows, judge-style ballots, targeted drills, and longitudinal skill improvement. It closes the coaching gap for students who practice without consistent access to a coach.
 
 **Status:** Active development · Pilot-ready core features · Pre-public launch
 
@@ -39,7 +39,7 @@ RoundLab is a full-stack practice platform that turns recorded speeches into arg
 
 Most Public Forum debaters practice without a coach in the room. They record rounds, re-watch them without structured feedback, and improve slowly — or not at all. Generic AI writing tools produce case text but do not diagnose what went wrong in a live speech.
 
-### RoundLab's coaching loop
+### Dissio's coaching loop
 
 ```
 Record or upload a speech
@@ -56,7 +56,7 @@ Record or upload a speech
 ### Why it's different
 
 - **Debate-native, not generic.** The system understands Public Forum structure: contentions, crossfire, weighing, extensions, drops. Feedback is expressed in debate language, not SAT-prep language.
-- **Coaching, not cheating.** RoundLab grades and drills your own speeches. It does not write your case or cut your cards. Evidence is never rewritten.
+- **Coaching, not cheating.** Dissio grades and drills your own speeches. It does not write your case or cut your cards. Evidence is never rewritten.
 - **Judge-conditioned evaluation.** The same speech is scored through multiple judge priority frameworks simultaneously — not just a single algorithmic score.
 - **Causal improvement tracking.** Progress is shown as a change in specific debate behavior (warrant named, weighing added, extension strengthened), not just a higher number.
 
@@ -110,7 +110,7 @@ Record or upload a speech
 
 ## Homepage Product Story
 
-The public homepage (`/`) demonstrates RoundLab's coaching loop through a single continuous debate example: **C1 Economic Burden Shift** (refugee resettlement, fiscal burden, weighing gap). Each section uses this same argument so visitors experience the full causal chain.
+The public homepage (`/`) demonstrates Dissio's coaching loop through a single continuous debate example: **C1 Economic Burden Shift** (refugee resettlement, fiscal burden, weighing gap). Each section uses this same argument so visitors experience the full causal chain.
 
 ### Interactive sections (in order)
 
@@ -180,7 +180,7 @@ FastAPI backend (Render / Railway)
 ## Repository Structure
 
 ```text
-RoundLab/
+Dissio/
 ├── frontend/                   Next.js frontend
 │   ├── src/
 │   │   ├── app/                App Router pages and layouts
@@ -217,7 +217,7 @@ RoundLab/
 │   └── migrations/             SQL migration files (timestamped, applied in order)
 │
 ├── docs/                       Design docs, rubrics, planning docs
-│   ├── ROUNDLAB_DESIGN_DIRECTION.md
+│   ├── DISSIO_DESIGN_DIRECTION.md
 │   ├── VISUAL_REVIEW_CHECKLIST.md
 │   ├── ai-pipeline.md
 │   ├── debate-rubric.md
@@ -244,7 +244,7 @@ RoundLab/
 
 ```bash
 git clone <repository-url>
-cd RoundLab
+cd Dissio
 ```
 
 ### 2. Frontend setup
@@ -350,7 +350,7 @@ ENVIRONMENT=development
 
 ## Database and Migrations
 
-RoundLab uses Supabase Postgres with Row Level Security (RLS). Every user-owned table is scoped by `user_id` with RLS policies that enforce ownership.
+Dissio uses Supabase Postgres with Row Level Security (RLS). Every user-owned table is scoped by `user_id` with RLS policies that enforce ownership.
 
 The service-role key used in the backend bypasses RLS for server-side operations. It must never enter the browser.
 
@@ -497,7 +497,7 @@ No full WCAG certification has been conducted.
 
 See [`DESIGN.md`](DESIGN.md) for the complete token reference and design principles.
 
-See [`docs/ROUNDLAB_DESIGN_DIRECTION.md`](docs/ROUNDLAB_DESIGN_DIRECTION.md) for phase-by-phase design decisions and visual review records.
+See [`docs/DISSIO_DESIGN_DIRECTION.md`](docs/DISSIO_DESIGN_DIRECTION.md) for phase-by-phase design decisions and visual review records.
 
 See [`docs/VISUAL_REVIEW_CHECKLIST.md`](docs/VISUAL_REVIEW_CHECKLIST.md) for the pre-PR visual review protocol.
 
@@ -579,8 +579,8 @@ feature branch
 To compare two branches side by side in the browser:
 
 ```bash
-git worktree add /tmp/roundlab-compare <other-branch>
-cd /tmp/roundlab-compare/frontend && npm install && npm run dev -- --port 3001
+git worktree add /tmp/dissio-compare <other-branch>
+cd /tmp/dissio-compare/frontend && npm install && npm run dev -- --port 3001
 # Main branch runs on :3000, comparison branch on :3001
 ```
 
@@ -661,7 +661,7 @@ git checkout -b ui/section-name
 3. Run `npm run build` — must complete without error
 4. Run `npx playwright test` — all projects must pass
 5. If you added or changed UI: visual review at all five standard viewports
-6. If you changed a marketing section: review `docs/ROUNDLAB_DESIGN_DIRECTION.md` for prior decisions
+6. If you changed a marketing section: review `docs/DISSIO_DESIGN_DIRECTION.md` for prior decisions
 
 ### Design expectations for UI work
 
@@ -692,7 +692,7 @@ Before removing a homepage section or component, document: what it does, what re
 - **User data is scoped.** RLS policies on all user-owned tables enforce that users can only access their own speeches, reports, and drills. Coaches see student data only for teams they manage.
 - **Audio recordings may be sensitive.** Uploaded speech files are stored in Supabase Storage under the user's account. Contributors must not commit any real user recordings.
 - **Credentials are never committed.** `.env`, `.env.local`, and any file containing real keys must remain in `.gitignore`.
-- **No compliance certification** (FERPA, COPPA, GDPR) has been formally conducted. RoundLab is currently in pilot with consenting participants.
+- **No compliance certification** (FERPA, COPPA, GDPR) has been formally conducted. Dissio is currently in pilot with consenting participants.
 
 ---
 

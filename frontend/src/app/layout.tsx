@@ -15,13 +15,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RoundLab",
+  title: "Dissio",
   description: "AI flow coach for Public Forum debaters",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "RoundLab",
+    title: "Dissio",
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -46,7 +46,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const theme = localStorage.getItem('roundlab-theme') || 'dark';
+                const theme = localStorage.getItem('dissio-theme') || localStorage.getItem('roundlab-theme') || 'dark';
                 document.documentElement.classList.add(theme);
               })();
             `,

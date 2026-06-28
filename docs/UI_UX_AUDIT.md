@@ -1,4 +1,4 @@
-# RoundLab UI/UX Audit
+# Dissio UI/UX Audit
 
 > **Date:** 2026-06-19 | **Branch:** ui/homepage-transformation  
 > **Scope:** Shared foundation pass — identify structural gaps before any page-specific redesigns.

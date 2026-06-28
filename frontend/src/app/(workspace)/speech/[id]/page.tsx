@@ -772,7 +772,7 @@ export default function SpeechPage() {
                       <p className="text-sm font-medium text-ink">Upload a case file to verify evidence</p>
                       <p className="text-xs text-ink-subtle leading-relaxed max-w-sm">
                         Go to your Evidence Library and upload a case file.
-                        RoundLab will check whether your speech claims are supported by your own uploaded evidence.
+                        Dissio will check whether your speech claims are supported by your own uploaded evidence.
                       </p>
                       <a
                         href="/evidence"
@@ -790,7 +790,7 @@ export default function SpeechPage() {
                         Check claims against your evidence library
                       </p>
                       <p className="text-xs text-ink-subtle leading-relaxed">
-                        RoundLab will compare each argument in this speech to your uploaded case files
+                        Dissio will compare each argument in this speech to your uploaded case files
                         and tell you whether your cited evidence actually supports the claim you made.
                       </p>
                       <Button

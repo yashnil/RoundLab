@@ -1,4 +1,4 @@
-# RoundLab Design System
+# Dissio Design System
 
 > Reference for Claude Code and contributors. Read this before touching any UI component.
 > Source of truth for tokens: `frontend/src/app/globals.css`. Principles defined here.
@@ -330,4 +330,4 @@ Brief inline feedback via `sonner` toast or `ok`-colored badge. No full-page suc
 
 ---
 
-*Last updated: 2026-06-20. See `docs/ROUNDLAB_DESIGN_DIRECTION.md` for the full improvement plan.*
+*Last updated: 2026-06-20. See `docs/DISSIO_DESIGN_DIRECTION.md` for the full improvement plan.*

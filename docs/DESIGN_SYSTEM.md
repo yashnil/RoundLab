@@ -1,4 +1,4 @@
-# RoundLab Design System
+# Dissio Design System
 
 > Single source of truth for tokens, components, and usage patterns.  
 > Tailwind 4 + shadcn/ui + Space Grotesk + JetBrains Mono.

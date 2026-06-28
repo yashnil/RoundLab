@@ -1,4 +1,4 @@
-"""Deterministic, pure scoring helpers for the RoundLab eval harness.
+"""Deterministic, pure scoring helpers for the Dissio eval harness.
 
 No LLM calls. No network. Every function here is unit-testable in isolation.
 """

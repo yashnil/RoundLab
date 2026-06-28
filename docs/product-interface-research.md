@@ -1,7 +1,7 @@
-# RoundLab Product Interface Research
+# Dissio Product Interface Research
 
 _Patterns studied during the homepage transformation (Phase 2). Each entry records the
-source, its original use, the RoundLab adaptation, why it helps the debate workflow, and
+source, its original use, the Dissio adaptation, why it helps the debate workflow, and
 what was intentionally **not** copied._
 
 > Method note: this round focused on patterns directly applicable to a public product
@@ -13,7 +13,7 @@ what was intentionally **not** copied._
 - **Source / original use:** Stripe and Linear marketing pages reveal one capability per
   scroll "act," each with a distinct layout and a concrete artifact, instead of a uniform
   feature grid.
-- **RoundLab adaptation:** Homepage is re-sequenced into acts that each expose a *different*
+- **Dissio adaptation:** Homepage is re-sequenced into acts that each expose a *different*
   product surface — capture, flow diagnostic, judge lens, improvement loop, evidence
   provenance, coach workflow. No artifact repeats across acts.
 - **Why it helps:** A debater scanning the page learns the full practice loop without seeing
@@ -25,10 +25,10 @@ what was intentionally **not** copied._
 
 - **Source / original use:** Perplexity shows answer → numbered source cards; Zotero preserves
   exact source metadata separate from user notes.
-- **RoundLab adaptation:** The Evidence section renders a left-to-right **provenance trail**
+- **Dissio adaptation:** The Evidence section renders a left-to-right **provenance trail**
   — `Claim → Source (publisher/date) → Exact quote → AI tag → Citation → Saved card` — with
   the exact quote visually marked as untouched source text and the tag marked as AI-proposed.
-- **Why it helps:** RoundLab's core trust claim is "we never rewrite the source." Making the
+- **Why it helps:** Dissio's core trust claim is "we never rewrite the source." Making the
   provenance chain literal on the homepage proves it before signup.
 - **Not copied:** Perplexity's chat framing. Evidence here is a research artifact, not a
   conversation.
@@ -37,7 +37,7 @@ what was intentionally **not** copied._
 
 - **Source / original use:** Athletic/learning tools show a baseline, an intervention, and a
   measurable change rather than a single vanity number.
-- **RoundLab adaptation:** The Improvement section uses **two parallel lanes** (Original vs
+- **Dissio adaptation:** The Improvement section uses **two parallel lanes** (Original vs
   Re-record) and annotates exactly what was *added* (warrant, weighing, extension) — not just
   a higher score.
 - **Why it helps:** Reinforces "coaching, not cheating": improvement is shown as new debate
@@ -49,7 +49,7 @@ what was intentionally **not** copied._
 
 - **Source / original use:** Teacher dashboards summarize "who needs attention" and route to a
   per-student action.
-- **RoundLab adaptation:** The Team section shows a compact coach workflow strip
+- **Dissio adaptation:** The Team section shows a compact coach workflow strip
   (`Assign → Students complete → Review queue → Skill gap → Assign drill`) so schools can see
   the value before creating a team.
 - **Why it helps:** The buyer (coach/program) is different from the daily user (student); the
@@ -60,7 +60,7 @@ what was intentionally **not** copied._
 
 - **Source / original use:** Radix Dialog primitive (focus trap, ESC, `aria` wiring) behind a
   shadcn-style sheet.
-- **RoundLab adaptation:** Reused the repo's existing `components/ui/sheet.tsx` (Radix Dialog)
+- **Dissio adaptation:** Reused the repo's existing `components/ui/sheet.tsx` (Radix Dialog)
   for a mobile marketing menu, preserving the primary CTA and exposing section anchors.
 - **Why it helps:** Fixes the real bug that logged-out phone users had no navigation.
 - **Not copied:** A second nav library — we reused the in-repo primitive (no new dependency).
@@ -69,7 +69,7 @@ what was intentionally **not** copied._
 
 - **Source / original use:** Linear/Vercel changelog-style honesty — show what shipped, link to
   it, keep "next" small and credible.
-- **RoundLab adaptation:** Replaced the stale `#roadmap` ("coming soon" for already-shipped
+- **Dissio adaptation:** Replaced the stale `#roadmap` ("coming soon" for already-shipped
   features) with a **Supported today** grid listing live capabilities, plus a small honest
   "in progress" line. Enforced by a unit test that fails on roadmap/"coming soon" language.
 - **Why it helps:** Trust. Claiming shipped features are "coming" undersells the product and

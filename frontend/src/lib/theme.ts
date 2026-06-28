@@ -1,19 +1,29 @@
 /**
- * Theme helpers — single source of truth for RoundLab's light/dark theme.
+ * Theme helpers — single source of truth for Dissio's light/dark theme.
  *
  * The theme class (`dark` | `light`) lives on <html>. It is first applied by an
  * inline script in app/layout.tsx (pre-hydration, prevents flash), then managed
- * here. Persisted under localStorage key `roundlab-theme`.
+ * here. Persisted under localStorage key `dissio-theme`.
  */
 
 export type Theme = "dark" | "light";
 
-export const THEME_STORAGE_KEY = "roundlab-theme";
+export const THEME_STORAGE_KEY = "dissio-theme";
+/** Legacy key written by the RoundLab brand — migrated on first read. */
+const THEME_STORAGE_KEY_LEGACY = "roundlab-theme";
 
 export function getStoredTheme(): Theme {
   if (typeof window === "undefined") return "dark";
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "light" ? "light" : "dark";
+  if (stored !== null) return stored === "light" ? "light" : "dark";
+  // One-time migration from the old key
+  const legacy = window.localStorage.getItem(THEME_STORAGE_KEY_LEGACY);
+  if (legacy !== null) {
+    window.localStorage.setItem(THEME_STORAGE_KEY, legacy);
+    window.localStorage.removeItem(THEME_STORAGE_KEY_LEGACY);
+    return legacy === "light" ? "light" : "dark";
+  }
+  return "dark";
 }
 
 export function applyTheme(theme: Theme): void {
@@ -23,7 +33,7 @@ export function applyTheme(theme: Theme): void {
   root.classList.add(theme);
 }
 
-const THEME_EVENT = "roundlab:theme-change";
+const THEME_EVENT = "dissio:theme-change";
 
 export function setTheme(theme: Theme): void {
   if (typeof window === "undefined") return;

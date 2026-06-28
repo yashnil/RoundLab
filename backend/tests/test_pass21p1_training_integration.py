@@ -484,7 +484,7 @@ class TestLessonMetadataCompleteness:
 
     def test_all_lessons_have_author(self):
         for lesson in self._curriculum():
-            assert lesson.get("author") == "RoundLab Curriculum Team", (
+            assert lesson.get("author") == "Dissio Curriculum Team", (
                 f"Missing/wrong author on {lesson.get('id')}"
             )
 

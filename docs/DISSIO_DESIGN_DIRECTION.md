@@ -1,4 +1,4 @@
-# RoundLab Design Direction
+# Dissio Design Direction
 
 > **Date:** 2026-06-20  
 > **Branch:** main (working, not yet committed)  
@@ -7,9 +7,9 @@
 
 ---
 
-## 1. RoundLab Visual Identity
+## 1. Dissio Visual Identity
 
-RoundLab's identity comes from **debate structure**, not from AI-product aesthetics.
+Dissio's identity comes from **debate structure**, not from AI-product aesthetics.
 
 The visual language must read like a serious judge's decision, not a chatbot or a homework helper.
 
@@ -67,13 +67,13 @@ The following elements are working well and must not be changed or removed:
 
 ## 3. Design Principles
 
-These are extracted from studying Linear, Vercel/Geist, Resend, Raycast, and RoundLab-specific needs. They are translated — not copied.
+These are extracted from studying Linear, Vercel/Geist, Resend, Raycast, and Dissio-specific needs. They are translated — not copied.
 
 ### P1 · Product interface IS the marketing
 
 Linear shows the actual issue list. Vercel shows the actual deployment log. Raycast shows the actual command palette.
 
-RoundLab's HeroDebateConsole is the right instinct. **Every marketing section must show a real RoundLab UI state, not an abstract illustration.**
+Dissio's HeroDebateConsole is the right instinct. **Every marketing section must show a real Dissio UI state, not an abstract illustration.**
 
 The argumentHealthMatrix, judgeLensComparison, improvementLanes, evidenceProvenanceStrip, and teamWorkflowStrip already do this. The PipelineShowcase does too, but it duplicates the hero.
 
@@ -290,7 +290,7 @@ danger        oklch(0.640 0.215 25)   = red
 - Replace the `WorkflowRail` (numbered list) with an interactive tabbed section.
 - Four steps: **Speak → Flow → Ballot → Drill**
 - Left column: step selector (vertical tab list on desktop, segmented control on mobile).
-- Right column: actual RoundLab UI state for the selected step.
+- Right column: actual Dissio UI state for the selected step.
   - Speak: audio upload UI excerpt (from session page visual)
   - Flow: ArgumentHealthMatrix (reuse)
   - Ballot: judge verdict panel (ballot score + top three feedback lines)
@@ -553,7 +553,7 @@ If Stage 4 evidence typography fixes reveal a pattern that needs a utility, add 
 ## 13. Stage 3 Research: Product Storytelling Reference Pass
 
 > **Date:** 2026-06-20  
-> **Purpose:** Before implementing the Stage 3 interactive speech-to-flow section, five crafted product sites were studied to extract principles — and to explicitly record what was rejected so the result remains uniquely RoundLab.
+> **Purpose:** Before implementing the Stage 3 interactive speech-to-flow section, five crafted product sites were studied to extract principles — and to explicitly record what was rejected so the result remains uniquely Dissio.
 
 ### References reviewed
 
@@ -571,35 +571,35 @@ If Stage 4 evidence typography fixes reveal a pattern that needs a utility, add 
 Every section must show actual debate artifacts: a real argument chain, a real ballot excerpt, a real flow annotation. No generic graphs, no abstract category illustrations. The product is the intelligence itself.
 
 **P2 — One continuous example (from Linear)**  
-Linear progresses Intake → Plan → Build → Monitor using the same project. RoundLab's Stage 3 homepage uses the same C1 speech example across every demonstration section: transcript → extracted flow → judge reading → drill. Seeing the same argument transform across multiple analyses is the product story.
+Linear progresses Intake → Plan → Build → Monitor using the same project. Dissio's Stage 3 homepage uses the same C1 speech example across every demonstration section: transcript → extracted flow → judge reading → drill. Seeing the same argument transform across multiple analyses is the product story.
 
 **P3 — Technical vocabulary as signal, not barrier (from Resend + Raycast)**  
-Resend doesn't simplify "DKIM" or "SPF" for non-developers. Raycast doesn't explain what ⌘K is. RoundLab should not apologize for "warrant," "weighing," "dropped argument." These terms are features. Debaters will recognize them; coaches will trust them; parents will learn them by seeing them used confidently.
+Resend doesn't simplify "DKIM" or "SPF" for non-developers. Raycast doesn't explain what ⌘K is. Dissio should not apologize for "warrant," "weighing," "dropped argument." These terms are features. Debaters will recognize them; coaches will trust them; parents will learn them by seeing them used confidently.
 
 **P4 — Complexity revealed by interaction, not hidden from it (from Linear + Raycast)**  
 Static state must be complete and fully readable. Interaction reveals additional depth — a phrase lights up its corresponding flow node, not replaces it. Nothing is locked behind a click.
 
 **P5 — Consistent visual grammar (from Raycast)**  
-Raycast's keyboard motif appears in every section. RoundLab's visual grammar is the argument chain: [CLAIM] → [WARRANT] → [EVIDENCE] → [IMPACT] with status indicators (strong/weak/missing). This exact chip pattern anchors the hero console, the flow section, and the diagnostic board — never redesigned, only zoomed in.
+Raycast's keyboard motif appears in every section. Dissio's visual grammar is the argument chain: [CLAIM] → [WARRANT] → [EVIDENCE] → [IMPACT] with status indicators (strong/weak/missing). This exact chip pattern anchors the hero console, the flow section, and the diagnostic board — never redesigned, only zoomed in.
 
 ### Ideas explicitly rejected
 
 **Outcome abstraction without UI (Stripe model)**  
-Stripe hides the API response behind a metric card. RoundLab must not do this — the flow chart, the ballot text, the argument chain ARE the value. Hiding them behind "78/100" alone would lose the entire product claim.
+Stripe hides the API response behind a metric card. Dissio must not do this — the flow chart, the ballot text, the argument chain ARE the value. Hiding them behind "78/100" alone would lose the entire product claim.
 
 **Scroll-jacking or reveal-on-scroll animations**  
 Several sites use aggressive scroll capture. Rejected: violates the "no scroll hijacking" constraint, breaks screen readers, and obscures content from users who need it immediately.
 
 **Multiple accent colors for visual differentiation**  
-Stripe uses purple/green/blue across sections to create visual rhythm. Rejected: RoundLab's color system maps colors to MEANING (ok/warn/danger = live/contested/dropped). Using color for decoration would break that semantic contract.
+Stripe uses purple/green/blue across sections to create visual rhythm. Rejected: Dissio's color system maps colors to MEANING (ok/warn/danger = live/contested/dropped). Using color for decoration would break that semantic contract.
 
 **Generic carousel / "how it works" slide deck**  
-Common pattern across SaaS marketing. Rejected: it flattens an interesting problem (structured debate analysis) into a flat list. RoundLab's product is about the relationships between parts of an argument — the UI must show those relationships.
+Common pattern across SaaS marketing. Rejected: it flattens an interesting problem (structured debate analysis) into a flat list. Dissio's product is about the relationships between parts of an argument — the UI must show those relationships.
 
 **Product tour overlay with guided steps**  
 Linear avoids this; Raycast avoids this. Their UIs speak for themselves. A walkthrough overlay would signal that the product needs explanation rather than demonstrating self-evident value.
 
-### How the result remains uniquely RoundLab
+### How the result remains uniquely Dissio
 
 The Phase A interactive transcript section is built around something no general productivity tool could replicate: **the internal structure of a Public Forum argument**. The claim/warrant/evidence/impact chain is not a generic workflow step — it's the specific analytical grammar of competitive debate. The issue detection (missing weighing, weak warrant) uses actual flow judge notation. The opponent response branch shows cross-case analysis, not just a single argument in isolation.
 
@@ -712,7 +712,7 @@ Sections in page.tsx now use inline `motion.div` blocks with `section-stamp` + `
 
 ### Final homepage narrative sequence
 
-1. Hero — what RoundLab is
+1. Hero — what Dissio is
 2. Proof rail — grounding proof points
 3. SpeechFlowSection — how it understands a speech
 4. JudgeLensSection — how judges interpret it
@@ -740,7 +740,7 @@ Sections in page.tsx now use inline `motion.div` blocks with `section-stamp` + `
 
 **SupportedToday removed** (`#supported`): The live capability grid was informative but arrived too late in the scroll to change a visitor's decision. The trust section and CTA reach visitors at lower attention-cost.
 
-**Trust section expanded to 6**: Added "Every judgment is inspectable" — explains that RoundLab shows its inference provenance and uncertainty, making feedback reviewable. Implemented with `Eye` icon from existing lucide-react import.
+**Trust section expanded to 6**: Added "Every judgment is inspectable" — explains that Dissio shows its inference provenance and uncertainty, making feedback reviewable. Implemented with `Eye` icon from existing lucide-react import.
 
 **SpeechFlowSection balance**: Removed `items-start` from the two-panel grid (panels now stretch to equal height), widened the right column (`352px → 388px` at `lg`, `368px → 408px` at `xl`), gave the nodes list `flex-1` to fill the panel, tightened transcript line-height (`leading-[1.9] → leading-[1.75]`), equalized padding in the flow panel (`px-4 py-3 → px-5 py-4`).
 

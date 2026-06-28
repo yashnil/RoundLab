@@ -121,7 +121,7 @@ export interface TrustPoint {
 export const TRUST_POINTS: TrustPoint[] = [
   {
     title: "Coaching, not cheating",
-    body: "RoundLab grades and drills your own speeches. It never writes your case or your cards for you.",
+    body: "Dissio grades and drills your own speeches. It never writes your case or your cards for you.",
   },
   {
     title: "Evidence is never rewritten",
@@ -141,7 +141,7 @@ export const TRUST_POINTS: TrustPoint[] = [
   },
   {
     title: "Every judgment is inspectable",
-    body: "RoundLab shows what it inferred, which speech or source material informed it, and what remains uncertain—so feedback is reviewable rather than a black box.",
+    body: "Dissio shows what it inferred, which speech or source material informed it, and what remains uncertain—so feedback is reviewable rather than a black box.",
   },
 ];
 

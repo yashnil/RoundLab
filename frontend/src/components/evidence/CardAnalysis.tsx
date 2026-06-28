@@ -3,7 +3,7 @@
 import type { CardIntelligence } from "@/types";
 
 /**
- * RoundLab's own short analysis of a card, shown directly under the evidence:
+ * Dissio's own short analysis of a card, shown directly under the evidence:
  *   - Warrant: why this evidence logically supports the claim
  *   - Impact:  why it matters / how it helps win the round
  *
@@ -25,7 +25,7 @@ export function CardAnalysis({
       className={`rounded-xl border border-hairline bg-surface-2 px-4 py-3.5 flex flex-col gap-3 ${className}`}
     >
       <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
-        RoundLab analysis
+        Dissio analysis
       </p>
       {warrant && (
         <div className="flex gap-2.5">

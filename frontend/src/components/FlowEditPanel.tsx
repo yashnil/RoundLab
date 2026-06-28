@@ -178,7 +178,7 @@ export default function FlowEditPanel({
       {/* ── Helper note ───────────────────────────────────────────────────────── */}
       <div className="border-b border-hairline px-4 py-2.5">
         <p className="text-xs text-ink-faint leading-relaxed">
-          Edit only if RoundLab missed or mislabeled something. Corrections will be used when you regenerate coaching.
+          Edit only if Dissio missed or mislabeled something. Corrections will be used when you regenerate coaching.
         </p>
       </div>
 

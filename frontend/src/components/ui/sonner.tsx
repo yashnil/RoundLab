@@ -6,7 +6,7 @@ import { useTheme } from "@/hooks/useTheme";
 
 /**
  * App-wide toast host. Mounted once in the authenticated shell.
- * Reads the persisted RoundLab theme so toasts match light/dark.
+ * Reads the persisted Dissio theme so toasts match light/dark.
  */
 function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
   const { theme } = useTheme();

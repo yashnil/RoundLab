@@ -1,4 +1,4 @@
-# RoundLab Visual Review Checklist
+# Dissio Visual Review Checklist
 
 > Complete this checklist manually before approving any homepage or application redesign stage.  
 > Technical tests (TypeScript, Jest, Playwright) are necessary but not sufficient.
@@ -64,7 +64,7 @@
 - [ ] Clicking/pressing a step updates the preview panel
 - [ ] Arrow key navigation works between steps (keyboard)
 - [ ] At 390px, steps render as a stacked/accordion, not a horizontal row
-- [ ] Product preview on the right is a real RoundLab UI state, not an abstract illustration
+- [ ] Product preview on the right is a real Dissio UI state, not an abstract illustration
 - [ ] Section is usable without JavaScript (first step open by default)
 
 ### Debate proof section (`#product-proof`)

@@ -7,7 +7,7 @@ import {
 
 describe("theme helpers (SSR-safe branches)", () => {
   it("exposes a stable storage key", () => {
-    expect(THEME_STORAGE_KEY).toBe("roundlab-theme");
+    expect(THEME_STORAGE_KEY).toBe("dissio-theme");
   });
 
   it("defaults to dark when there is no window", () => {

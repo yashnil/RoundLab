@@ -83,7 +83,7 @@ export default function SharedReportPage({ params }: Props) {
           href="/"
           className="mt-2 text-sm text-lav underline-offset-2 hover:underline"
         >
-          Go to RoundLab
+          Go to Dissio
         </a>
       </div>
     );
@@ -97,7 +97,7 @@ export default function SharedReportPage({ params }: Props) {
       {/* Minimal public header — no auth nav */}
       <header className="border-b border-hairline bg-surface px-6 py-3 flex items-center justify-between no-print print:hidden">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-bold text-ink">RoundLab</span>
+          <span className="text-sm font-bold text-ink">Dissio</span>
           <span className="text-xs text-ink-faint">
             Shared report · {speechTypeLabel(data.speech_type)}
           </span>
@@ -117,7 +117,7 @@ export default function SharedReportPage({ params }: Props) {
             href="/"
             className="no-print text-xs text-ink-faint underline-offset-2 hover:underline"
           >
-            Try RoundLab
+            Try Dissio
           </a>
         </div>
       </header>

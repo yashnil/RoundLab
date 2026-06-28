@@ -59,7 +59,7 @@ export default function FeedbackRating({ speechId, userId, initialRating, onRate
     return (
       <div className="flex items-center gap-2 py-1">
         <CheckCircle2 size={13} className="shrink-0 text-ok" />
-        <p className="text-xs text-ink-subtle">Thanks — this helps improve RoundLab.</p>
+        <p className="text-xs text-ink-subtle">Thanks — this helps improve Dissio.</p>
       </div>
     );
   }
@@ -97,7 +97,7 @@ export default function FeedbackRating({ speechId, userId, initialRating, onRate
             className="w-full rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-xs text-ink placeholder:text-ink-faint focus:border-lav/40 focus:outline-none"
             onKeyDown={(e) => { if (e.key === "Enter") submit(selected); }}
           />
-          <p className="text-[10px] text-ink-faint">Your rating helps improve RoundLab.</p>
+          <p className="text-[10px] text-ink-faint">Your rating helps improve Dissio.</p>
         </div>
       )}
 

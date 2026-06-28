@@ -299,7 +299,7 @@ export function derivePracticeNextAction(
       state: "start_first_speech",
       loopStep: 0,
       title: "Record your first practice speech",
-      description: "Speak for 30–90 seconds. RoundLab builds a flow, generates a judge ballot, and assigns targeted drills.",
+      description: "Speak for 30–90 seconds. Dissio builds a flow, generates a judge ballot, and assigns targeted drills.",
       primaryLabel: "Start practice session",
       primaryHref: "/session",
     };
@@ -313,7 +313,7 @@ export function derivePracticeNextAction(
         state: "wait_for_analysis",
         loopStep: 1,
         title: "Analysis in progress",
-        description: "RoundLab is building your flow and judge ballot — usually 30–60 seconds.",
+        description: "Dissio is building your flow and judge ballot — usually 30–60 seconds.",
         primaryLabel: "Open session",
         primaryHref: latestSpeech ? `/speech/${latestSpeech.id}` : "/dashboard",
       };

@@ -24,7 +24,7 @@ _APP_VERSION = "0.18.0"
 
 @router.get("/health")
 async def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "roundlab-api", "version": _APP_VERSION}
+    return {"status": "ok", "service": "dissio-api", "version": _APP_VERSION}
 
 
 @router.get("/health/supabase")

@@ -119,7 +119,7 @@ function LoginContent() {
             <Mic size={18} className="text-white" />
           </div>
           <div className="flex flex-col gap-1">
-            <h1 className="text-title text-ink">RoundLab</h1>
+            <h1 className="text-title text-ink">Dissio</h1>
             <p className="text-sm text-ink-subtle">AI flow coach for Public Forum</p>
           </div>
         </div>

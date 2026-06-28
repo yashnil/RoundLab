@@ -55,7 +55,7 @@ Deterministic renderer functions — no external library required.
 
 | Function | Output |
 |---|---|
-| `render_debate(record)` | RoundLab compact debate citation |
+| `render_debate(record)` | Dissio compact debate citation |
 | `render_mla(record)` | MLA 9th edition string |
 | `render_apa(record)` | APA 7th edition string |
 | `render_chicago(record)` | Chicago 17th author-date string |

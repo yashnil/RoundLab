@@ -171,7 +171,7 @@ def search_openalex(
     headers: dict[str, str] = {}
     if contact_email:
         # Polite pool: include email in User-Agent, never in result
-        headers["User-Agent"] = f"RoundLab/1.0 (mailto:{contact_email})"
+        headers["User-Agent"] = f"Dissio/1.0 (mailto:{contact_email})"
 
     try:
         with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:

@@ -338,7 +338,7 @@ function ArgumentCheckRow({
 
           {/* Disclaimer */}
           <p className="text-[10px] text-ink-faint leading-relaxed border-t border-hairline pt-2">
-            RoundLab only checked your uploaded evidence library. Outside knowledge is never used.
+            Dissio only checked your uploaded evidence library. Outside knowledge is never used.
           </p>
 
           {result.support_level === "unverifiable" && (
@@ -391,7 +391,7 @@ export default function EvidenceSupportPanel({
         <BookOpen size={20} className="mx-auto mb-2 text-ink-subtle" />
         <p className="text-sm font-medium text-ink">Upload a case file to verify evidence</p>
         <p className="mt-1 text-xs text-ink-subtle leading-relaxed">
-          Go to your Evidence Library and upload a case file. RoundLab will check
+          Go to your Evidence Library and upload a case file. Dissio will check
           whether your speech claims are supported by your own uploaded evidence —
           not outside knowledge.
         </p>
@@ -428,7 +428,7 @@ export default function EvidenceSupportPanel({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-ink-subtle leading-relaxed">
-        Results are based only on your uploaded evidence — RoundLab does not use outside knowledge.{" "}
+        Results are based only on your uploaded evidence — Dissio does not use outside knowledge.{" "}
         {savedChecks.length > 0 && freshResults.length === 0 && (
           <span className="text-ink-muted">Showing previously saved results. Click &ldquo;Re-check&rdquo; on any argument to update.</span>
         )}

@@ -208,7 +208,7 @@ export default function SessionPage() {
             {isRerecordMode ? "Set up your re-record" : "Build your practice"}
           </h1>
           <p className="max-w-xl text-sm leading-relaxed text-ink-subtle">
-            Pick the speech and round context — RoundLab calibrates the judge lens and builds a
+            Pick the speech and round context — Dissio calibrates the judge lens and builds a
             flow, ballot, and drills from what you record.
           </p>
         </div>
@@ -221,7 +221,7 @@ export default function SessionPage() {
                 ? "Loading your original session context…"
                 : contextError
                   ? contextError
-                  : "Re-recording to improve — RoundLab will compare this to the original and show your progress."}
+                  : "Re-recording to improve — Dissio will compare this to the original and show your progress."}
             </p>
           </div>
         )}

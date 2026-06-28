@@ -1,4 +1,4 @@
--- RoundLab Remote Schema Audit — SELECT-only, covers all 31 migrations
+-- Dissio Remote Schema Audit — SELECT-only, covers all 31 migrations
 --
 -- Run this in the Supabase SQL Editor (safe — no DDL, no DML).
 -- Produces one summary row per migration: fully_applied, checks_passed,

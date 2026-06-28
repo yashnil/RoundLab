@@ -565,7 +565,7 @@ export default function EvidenceStudioCard({
           <p className="text-[10px] text-warn leading-snug" role="alert">{cutWarnings[0]}</p>
         )}
 
-        {/* RoundLab analysis (warrant + impact) directly under the card */}
+        {/* Dissio analysis (warrant + impact) directly under the card */}
         <CardAnalysis intelligence={card.intelligence} />
 
         {/* Debate prep, full-width below the analysis (not cramped in a rail) */}

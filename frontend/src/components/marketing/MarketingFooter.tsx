@@ -42,7 +42,7 @@ export default function MarketingFooter() {
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-lav">
               <Mic size={12} className="text-white" aria-hidden />
             </div>
-            <span className="text-sm font-semibold tracking-tight text-ink">RoundLab</span>
+            <span className="text-sm font-semibold tracking-tight text-ink">Dissio</span>
           </Link>
           <p className="text-xs leading-relaxed text-ink-subtle">
             An AI flow coach for Public Forum debaters. Turn every practice speech into a

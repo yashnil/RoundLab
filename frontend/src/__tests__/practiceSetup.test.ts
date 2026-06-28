@@ -84,7 +84,7 @@ describe("setupCtaLabel", () => {
 
 describe("smart defaults (SSR-safe)", () => {
   it("exposes a stable storage key and defaults to empty without a window", () => {
-    expect(LAST_JUDGE_KEY).toBe("roundlab-last-judge");
+    expect(LAST_JUDGE_KEY).toBe("dissio-last-judge");
     expect(typeof window).toBe("undefined");
     expect(readLastJudgeType()).toBe("");
   });

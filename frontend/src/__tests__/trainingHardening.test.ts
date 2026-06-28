@@ -104,7 +104,7 @@ describe("useLocalDraft hook", () => {
 
   it("has draft prefix to avoid collisions", () => {
     expect(src).toContain("DRAFT_PREFIX");
-    expect(src).toContain("roundlab_draft:");
+    expect(src).toContain("dissio_draft:");
   });
 
   it("auto-expires old drafts", () => {

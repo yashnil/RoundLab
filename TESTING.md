@@ -1,4 +1,4 @@
-# RoundLab Testing Guide
+# Dissio Testing Guide
 
 This guide covers testing workflows, golden samples for calibration, and dev-only tools.
 
@@ -8,7 +8,7 @@ This guide covers testing workflows, golden samples for calibration, and dev-onl
 
 ### What is the Golden Sample?
 
-RoundLab includes a high-quality PF summary speech transcript designed to score 85-95/100. Use it to:
+Dissio includes a high-quality PF summary speech transcript designed to score 85-95/100. Use it to:
 - Calibrate what a tournament-ready performance looks like
 - Test the scoring rubric
 - Verify feedback quality at the high end

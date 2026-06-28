@@ -4,7 +4,7 @@ Renders a CitationRecord into multiple citation formats.
 All renderers are deterministic fallbacks — no external library required.
 
 Formats supported:
-  * debate   — RoundLab compact debate citation
+  * debate   — Dissio compact debate citation
   * mla      — MLA 9th edition
   * apa      — APA 7th edition
   * chicago  — Chicago 17th author-date
@@ -80,7 +80,7 @@ def _clean(s: str) -> str:
 # ── Debate citation ───────────────────────────────────────────────────────────
 
 def render_debate(record: CitationRecord) -> str:
-    """RoundLab compact debate citation for card headers.
+    """Dissio compact debate citation for card headers.
 
     Format:  Surname Year — Institution, Container/Publication
     Rules:

@@ -4,13 +4,13 @@
  * DashboardCockpitBand — compact top section of the dashboard.
  *
  * Shows:
- * - Practice loop position as a RoundLabJourneyRail
+ * - Practice loop position as a DissioJourneyRail
  * - XP, level, and feedback report count as mono stats
  *
  * Replaces the old "Your practice loop" TrainingLoopMap card.
  */
 
-import RoundLabJourneyRail from "./RoundLabJourneyRail";
+import DissioJourneyRail from "./DissioJourneyRail";
 import type { ProgressSummary } from "@/types";
 
 function deriveRailIndex(p: ProgressSummary): number {
@@ -64,7 +64,7 @@ export default function DashboardCockpitBand({ progress }: Props) {
               </span>
             )}
           </span>
-          <RoundLabJourneyRail activeIndex={railIndex} showLabels />
+          <DissioJourneyRail activeIndex={railIndex} showLabels />
         </div>
 
         {/* Stats divider */}

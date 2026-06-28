@@ -12,7 +12,7 @@ export const MIN_WORDS = 75;
 
 /** What text-only analysis cannot judge — surfaced verbatim in the paste UI. */
 export const PASTE_DELIVERY_LIMITATION =
-  "RoundLab can evaluate argument structure from pasted text, but it can't assess pacing, filler words, pauses, or vocal delivery without audio.";
+  "Dissio can evaluate argument structure from pasted text, but it can't assess pacing, filler words, pauses, or vocal delivery without audio.";
 
 export function wordCount(text: string): number {
   const trimmed = text.trim();

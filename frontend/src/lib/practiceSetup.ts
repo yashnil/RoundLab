@@ -139,7 +139,7 @@ export function setupCtaLabel(isRerecord: boolean): string {
 
 // ── Smart defaults (last-used judge type) ────────────────────────────────────
 
-export const LAST_JUDGE_KEY = "roundlab-last-judge";
+export const LAST_JUDGE_KEY = "dissio-last-judge";
 
 export function readLastJudgeType(): string {
   if (typeof window === "undefined") return "";

@@ -1,6 +1,6 @@
-# RoundLab Deployment Guide
+# Dissio Deployment Guide
 
-This guide walks through deploying RoundLab for production use.
+This guide walks through deploying Dissio for production use.
 
 ---
 
@@ -75,7 +75,7 @@ CORS_ORIGINS=https://your-frontend-domain.vercel.app,https://www.your-domain.com
 
 ### 2. Apply Database Migrations
 
-RoundLab uses SQL migrations in `supabase/migrations/`. Apply them **in order** using the Supabase SQL Editor:
+Dissio uses SQL migrations in `supabase/migrations/`. Apply them **in order** using the Supabase SQL Editor:
 
 1. Go to your Supabase project → SQL Editor
 2. Copy the contents of each migration file and run them in order:
@@ -155,7 +155,7 @@ RoundLab uses SQL migrations in `supabase/migrations/`. Apply them **in order** 
 
 ⚠️ **Important OAuth Setup**: 
 - The `/auth/callback` route is **required** for Google OAuth to work
-- RoundLab uses browser-side PKCE flow (code verifier stored in cookies via `@supabase/ssr`)
+- Dissio uses browser-side PKCE flow (code verifier stored in cookies via `@supabase/ssr`)
 - If you see "PKCE code verifier missing" errors:
   - Verify redirect URLs are configured correctly in Supabase Auth → URL Configuration
   - Ensure `@supabase/ssr` is installed and `createBrowserClient` is used consistently
@@ -207,7 +207,7 @@ Vercel auto-deploys on every push to `main`. For manual redeployment:
 1. Go to [render.com](https://render.com) → New → Web Service
 2. Connect your GitHub repository
 3. Configure:
-   - **Name**: `roundlab-api`
+   - **Name**: `dissio-api`
    - **Root Directory**: `backend`
    - **Runtime**: Python 3
    - **Build Command**: `pip install -r requirements.txt`
@@ -224,7 +224,7 @@ Vercel auto-deploys on every push to `main`. For manual redeployment:
 
 5. Deploy
 
-6. Copy the backend URL (e.g., `https://roundlab-api.onrender.com`) and set it as `NEXT_PUBLIC_API_URL` in Vercel
+6. Copy the backend URL (e.g., `https://dissio-api.onrender.com`) and set it as `NEXT_PUBLIC_API_URL` in Vercel
 
 ### Option B: Railway
 
@@ -246,7 +246,7 @@ The backend allows requests from origins listed in the `CORS_ORIGINS` environmen
 
 **Production example:**
 ```bash
-CORS_ORIGINS=https://roundlab.vercel.app,https://www.roundlab.com
+CORS_ORIGINS=https://dissio.vercel.app,https://www.dissio.com
 ```
 
 **Development example:**

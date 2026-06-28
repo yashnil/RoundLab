@@ -182,8 +182,8 @@ describe("useAudioStorage hook exports", () => {
 describe("PWA manifest validation", () => {
   // Mirrors the expected state of frontend/public/manifest.json
   const MANIFEST = {
-    name: "RoundLab",
-    short_name: "RoundLab",
+    name: "Dissio",
+    short_name: "Dissio",
     description: "AI flow coach for Public Forum debaters",
     start_url: "/training",
     scope: "/",
@@ -209,8 +209,8 @@ describe("PWA manifest validation", () => {
     prefer_related_applications: false,
   };
 
-  test("name is RoundLab", () => {
-    expect(MANIFEST.name).toBe("RoundLab");
+  test("name is Dissio", () => {
+    expect(MANIFEST.name).toBe("Dissio");
   });
 
   test("start_url points to /training", () => {

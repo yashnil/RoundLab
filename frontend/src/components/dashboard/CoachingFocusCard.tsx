@@ -57,7 +57,7 @@ export default function CoachingFocusCard({
         </>
       ) : (
         <p className="text-sm leading-relaxed text-ink-subtle">
-          RoundLab will identify your top skill to work on after your first speech is
+          Dissio will identify your top skill to work on after your first speech is
           analyzed. Record a constructive to get your first coaching focus.
         </p>
       )}

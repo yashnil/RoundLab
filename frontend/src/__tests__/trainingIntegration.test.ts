@@ -72,8 +72,8 @@ describe("PWA manifest", () => {
     manifest = JSON.parse(readPublic("manifest.json"));
   });
 
-  it("has name = RoundLab", () => {
-    expect(manifest.name).toBe("RoundLab");
+  it("has name = Dissio", () => {
+    expect(manifest.name).toBe("Dissio");
   });
 
   it("has start_url = /training", () => {

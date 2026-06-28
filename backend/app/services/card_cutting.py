@@ -1974,7 +1974,7 @@ def _lookup_crossref_doi(doi: str, timeout: float = 5.0) -> Optional[dict]:
                 break
         resp = httpx.get(
             f"https://api.crossref.org/works/{clean_doi}",
-            headers={"User-Agent": "RoundLab/1.0 (mailto:support@roundlab.app)"},
+            headers={"User-Agent": "Dissio/1.0 (mailto:support@dissio.app)"},
             timeout=timeout,
         )
         if resp.status_code == 200:
@@ -2745,7 +2745,7 @@ def derive_card_intelligence(
     if crossfire_question and "[opponent's impact]" in crossfire_question:
         crossfire_question = crossfire_question.replace("[opponent's impact]", "your opponent's impact")
 
-    # ── Structured debate-prep coaching (RoundLab's own words) ────────────────
+    # ── Structured debate-prep coaching (Dissio's own words) ────────────────
     entities_for_analysis = extract_case_entities(passage, topic) if passage else []
     warrant_analysis, impact_analysis, weighing_angle = _card_specific_analysis(
         evidence_role, best_supported_claim or claim, topic,

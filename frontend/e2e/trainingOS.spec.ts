@@ -79,7 +79,7 @@ test.describe("PWA manifest", () => {
     const manifest = await resp.json();
 
     // Core installability fields
-    expect(manifest.name).toBe("RoundLab");
+    expect(manifest.name).toBe("Dissio");
     expect(manifest.short_name).toBeTruthy();
     expect(manifest.start_url).toBe("/training");
     expect(manifest.display).toBe("standalone");

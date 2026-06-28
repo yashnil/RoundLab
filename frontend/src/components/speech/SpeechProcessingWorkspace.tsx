@@ -141,7 +141,7 @@ export default function SpeechProcessingWorkspace({
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-ink">Get your coaching report</p>
                             <p className="text-xs text-ink-subtle">
-                              RoundLab will build your flow, analyze your arguments, and generate judge-style feedback with personalized drills.
+                              Dissio will build your flow, analyze your arguments, and generate judge-style feedback with personalized drills.
                             </p>
                           </div>
                         </div>
@@ -187,7 +187,7 @@ export default function SpeechProcessingWorkspace({
                           <p className="text-xs leading-relaxed text-ink-subtle">
                             <span className="font-medium text-ink">Your recording is saved.</span>{" "}
                             Keeping this page open is the fastest path to your report. If you leave, return
-                            to this speech to reconnect to the active analysis — RoundLab doesn’t send
+                            to this speech to reconnect to the active analysis — Dissio doesn’t send
                             notifications yet.
                           </p>
                         </div>
@@ -689,7 +689,7 @@ export default function SpeechProcessingWorkspace({
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-ink">Create personalized drills</p>
                             <p className="text-xs text-ink-subtle">
-                              RoundLab analyzes your feedback to generate 3 targeted practice exercises. Each drill helps you improve a specific skill.
+                              Dissio analyzes your feedback to generate 3 targeted practice exercises. Each drill helps you improve a specific skill.
                             </p>
                           </div>
                         </div>

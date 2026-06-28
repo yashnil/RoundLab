@@ -1,4 +1,4 @@
--- RoundLab — Deterministic test-user application-data seed.
+-- Dissio — Deterministic test-user application-data seed.
 --
 -- Auth users are created separately via the Supabase Auth Admin API
 -- (see scripts/setup_local_test_env.sh) because direct bcrypt inserts
@@ -8,10 +8,10 @@
 -- mastery scores, training plans, sessions, etc.
 --
 -- Stable UUIDs (used in Playwright constants and RLS test helpers):
---   Student A: 00000000-0000-0000-0001-000000000001  test_student_a@roundlab.local
---   Coach A:   00000000-0000-0000-0002-000000000001  test_coach_a@roundlab.local
---   Student B: 00000000-0000-0000-0001-000000000002  test_student_b@roundlab.local
---   Coach B:   00000000-0000-0000-0002-000000000002  test_coach_b@roundlab.local
+--   Student A: 00000000-0000-0000-0001-000000000001  test_student_a@dissio.local
+--   Coach A:   00000000-0000-0000-0002-000000000001  test_coach_a@dissio.local
+--   Student B: 00000000-0000-0000-0001-000000000002  test_student_b@dissio.local
+--   Coach B:   00000000-0000-0000-0002-000000000002  test_coach_b@dissio.local
 --
 -- Idempotent: safe to run multiple times.
 
@@ -160,9 +160,9 @@ COMMIT;
 -- Summary
 DO $$ BEGIN
   RAISE NOTICE 'Seed complete. Users seeded:';
-  RAISE NOTICE '  test_student_a@roundlab.local (00000000-0000-0000-0001-000000000001)';
-  RAISE NOTICE '  test_coach_a@roundlab.local   (00000000-0000-0000-0002-000000000001)';
-  RAISE NOTICE '  test_student_b@roundlab.local (00000000-0000-0000-0001-000000000002)';
-  RAISE NOTICE '  test_coach_b@roundlab.local   (00000000-0000-0000-0002-000000000002)';
-  RAISE NOTICE '  Password for all accounts: RoundLab_Test1!';
+  RAISE NOTICE '  test_student_a@dissio.local (00000000-0000-0000-0001-000000000001)';
+  RAISE NOTICE '  test_coach_a@dissio.local   (00000000-0000-0000-0002-000000000001)';
+  RAISE NOTICE '  test_student_b@dissio.local (00000000-0000-0000-0001-000000000002)';
+  RAISE NOTICE '  test_coach_b@dissio.local   (00000000-0000-0000-0002-000000000002)';
+  RAISE NOTICE '  Password for all accounts: Dissio_Test1!';
 END $$;

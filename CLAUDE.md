@@ -1,6 +1,6 @@
-# RoundLab Claude Instructions
+# Dissio Claude Instructions
 
-RoundLab is an AI flow coach for novice and JV Public Forum debaters.
+Dissio is an AI flow coach for novice and JV Public Forum debaters.
 
 Core MVP:
 Record/upload PF speech → transcribe → extract claim/warrant/evidence/impact → generate flow table → generate ballot-style feedback → generate 3 personalized drills → allow re-recording and progress tracking.

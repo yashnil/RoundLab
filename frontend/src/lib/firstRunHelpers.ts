@@ -1,7 +1,7 @@
 import type { ProgressSummary, PilotSummary, Speech } from "@/types";
 
 /**
- * Describes where a user is in the RoundLab first-run loop.
+ * Describes where a user is in the Dissio first-run loop.
  * Derived from real progress/pilot data — never faked.
  */
 export type FirstRunState =

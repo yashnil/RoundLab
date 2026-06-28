@@ -1,6 +1,6 @@
 """Evidence Library API (Pass 13).
 
-Endpoints follow the existing RoundLab pattern: no auth middleware — user_id
+Endpoints follow the existing Dissio pattern: no auth middleware — user_id
 is passed in request bodies and validated against table rows before writes.
 
 Prefix: /library

@@ -90,7 +90,7 @@ export default function SpeechProcessingTimeline({
 
                 {stage.id === "analysis" && analysisActive && (
                   <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-                    RoundLab is examining these categories together — they aren’t finished one at a time.
+                    Dissio is examining these categories together — they aren’t finished one at a time.
                   </p>
                 )}
               </div>

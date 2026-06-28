@@ -33,7 +33,7 @@ logging.config.dictConfig({
     },
 })
 
-app = FastAPI(title="RoundLab API", version="0.1.0")
+app = FastAPI(title="Dissio API", version="0.1.0")
 
 # CORS: support multiple origins from environment (comma-separated)
 cors_origins = [origin.strip() for origin in settings.cors_origins.split(",")]

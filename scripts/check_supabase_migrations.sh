@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RoundLab — Supabase migration validation script.
+# Dissio — Supabase migration validation script.
 #
 # Validates migration filenames, checks for ordering/duplicate issues, runs
 # the static schema tests, and optionally replays the full migration chain on
@@ -40,7 +40,7 @@ _supabase() {
   fi
 }
 
-echo "==> RoundLab migration validator"
+echo "==> Dissio migration validator"
 echo "    migrations : $MIGRATIONS_DIR"
 echo "    mode       : ${MODE:-filename+tests}"
 echo ""

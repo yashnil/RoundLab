@@ -1,5 +1,5 @@
 /**
- * Keyboard navigation tests for critical RoundLab journeys.
+ * Keyboard navigation tests for critical Dissio journeys.
  *
  * These tests exercise keyboard-only interaction through the application shell,
  * evidence workbench candidate navigation, and modal focus management.

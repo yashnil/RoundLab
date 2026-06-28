@@ -68,7 +68,7 @@ export function JudgeLensPreview({ judge }: { judge: JudgeValue }) {
   if (!judge) {
     return (
       <p className="text-xs leading-relaxed text-ink-faint">
-        Pick a judge lens to preview how RoundLab will weight your feedback.
+        Pick a judge lens to preview how Dissio will weight your feedback.
       </p>
     );
   }

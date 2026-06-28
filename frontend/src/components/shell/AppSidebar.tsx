@@ -18,7 +18,7 @@ const LOOP_LABELS = ["Practice", "Analyze", "Drill", "Improve"] as const;
 export default function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = usePersistentToggle(
-    "roundlab-sidebar-collapsed",
+    "dissio-sidebar-collapsed",
   );
 
   return (
@@ -42,7 +42,7 @@ export default function AppSidebar() {
           </span>
           {!collapsed && (
             <span className="text-sm font-semibold tracking-tight text-ink">
-              RoundLab
+              Dissio
             </span>
           )}
         </Link>

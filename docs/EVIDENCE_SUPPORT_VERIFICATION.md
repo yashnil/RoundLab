@@ -1,6 +1,6 @@
 # Evidence Support Verification (Pass 11)
 
-RoundLab verifies that each generated evidence card actually supports the user's claim and tag before adding it to the results. This document describes the verification architecture.
+Dissio verifies that each generated evidence card actually supports the user's claim and tag before adding it to the results. This document describes the verification architecture.
 
 ## Overview
 

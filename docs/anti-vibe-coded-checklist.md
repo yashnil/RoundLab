@@ -3,7 +3,7 @@
 A standing checklist applied before calling any surface "done." Status reflects the
 **public homepage** after the Phase 2 pass; other surfaces are tracked for their phases.
 
-> **What makes this interface unmistakably RoundLab?**
+> **What makes this interface unmistakably Dissio?**
 > Left-to-right **argument/provenance flow lines** (Claim → Warrant → Evidence → Impact;
 > Search → Source → Quote → Card), **parallel debate lanes** (Original vs Re-record,
 > source vs AI), a consistent **judge-lens** that reorders meaning rather than swapping a

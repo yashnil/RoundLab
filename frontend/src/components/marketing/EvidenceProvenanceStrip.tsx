@@ -2,7 +2,7 @@ import { Search, FileText, Quote, Tag, BookMarked, ArrowRight } from "lucide-rea
 import type { LucideIcon } from "lucide-react";
 
 /**
- * Evidence section visual — the provenance trail that distinguishes RoundLab from a
+ * Evidence section visual — the provenance trail that distinguishes Dissio from a
  * generic LLM: Claim → Source → Exact quote → AI tag → Citation → Saved card.
  *
  * The exact quote is marked as untouched source text; the tag is marked AI-proposed.

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * TrainingLoopMap — Connected node path showing the RoundLab practice loop.
+ * TrainingLoopMap — Connected node path showing the Dissio practice loop.
  *
  * Speech Rep → Flow Report → Targeted Drill → Re-record → Improvement
  *

@@ -11,7 +11,7 @@ export function usePersistentToggle(
   key: string,
   fallback = false,
 ): readonly [boolean, (next: boolean) => void] {
-  const eventName = `roundlab:toggle:${key}`;
+  const eventName = `dissio:toggle:${key}`;
 
   const subscribe = useCallback(
     (cb: () => void) => {

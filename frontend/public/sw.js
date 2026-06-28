@@ -1,5 +1,5 @@
 /**
- * RoundLab Service Worker — offline app-shell + pending audio recovery.
+ * Dissio Service Worker — offline app-shell + pending audio recovery.
  *
  * Strategy:
  *  - Cache-first for static assets (JS/CSS/fonts/images)
@@ -8,10 +8,13 @@
  *
  * Pending audio recovery:
  *  - Listens for background sync tag "audio-upload-retry"
- *  - On sync: reads pending recordings from IndexedDB and retries upload
+ *  - On sync: uploads pending recordings from dissio_audio and the legacy
+ *    roundlab_audio database via retryPendingUploads() (defined in swHelpers.js).
+ *  - After a successful upload the record is removed from every store that
+ *    contained it, preventing cross-sync duplicate uploads.
  */
 
-const CACHE_NAME = "roundlab-shell-v1";
+const CACHE_NAME = "dissio-shell-v1";
 const OFFLINE_PAGE = "/training";
 
 // Assets to pre-cache on install
@@ -89,58 +92,14 @@ self.addEventListener("fetch", (event) => {
 
 // ── Background Sync: audio upload retry ───────────────────────────────────
 
-const DB_NAME = "roundlab_audio";
-const STORE_NAME = "pending_recordings";
-const UPLOAD_ENDPOINT = "/api/speech/upload";
-
-function openAudioDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function retryPendingUploads() {
-  let db;
-  try {
-    db = await openAudioDB();
-  } catch {
-    return; // DB not yet created — nothing to retry
-  }
-
-  const records = await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-
-  for (const record of records) {
-    if (record.status !== "pending" && record.status !== "failed") continue;
-    try {
-      const form = new FormData();
-      form.append("file", record.blob, `${record.uploadId}.${record.mimeType.split("/")[1] || "webm"}`);
-      form.append("upload_id", record.uploadId);
-
-      const res = await fetch(UPLOAD_ENDPOINT, { method: "POST", body: form });
-      if (res.ok) {
-        // Remove from IDB on success
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        tx.objectStore(STORE_NAME).delete(record.uploadId);
-      } else {
-        // Mark failed
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        tx.objectStore(STORE_NAME).put({ ...record, status: "failed", attempts: record.attempts + 1 });
-      }
-    } catch {
-      // Network still offline — will retry on next sync
-    }
-  }
-}
+// Load helpers (openAudioDB, getAllFromDB, deleteRecord, markRecordFailed,
+// retryPendingUploads, SW_DB_NAME, SW_DB_NAME_LEGACY, ...) into the SW scope.
+importScripts("./swHelpers.js");
 
 self.addEventListener("sync", (event) => {
   if (event.tag === "audio-upload-retry") {
+    // retryPendingUploads() is defined by swHelpers.js (loaded above).
+    // In production it uses the global indexedDB and fetch.
     event.waitUntil(retryPendingUploads());
   }
 });

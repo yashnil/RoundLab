@@ -3,7 +3,7 @@
 /**
  * /demo — Isolated product showcase using fixture data only.
  *
- * Shows the full RoundLab loop:
+ * Shows the full Dissio loop:
  *   speech metadata → transcript → flow board → judge ballot →
  *   structured issues → assigned drills → re-record comparison
  *
@@ -101,7 +101,7 @@ export default function DemoPage() {
             <div className="flex flex-col gap-1 flex-1">
               <p className="text-xs font-semibold text-ink">Demo mode — sample data only</p>
               <p className="text-xs text-ink-subtle leading-relaxed">
-                This is a static example of what RoundLab generates. No audio was recorded and no data is saved to any account.
+                This is a static example of what Dissio generates. No audio was recorded and no data is saved to any account.
               </p>
             </div>
             <Link
@@ -268,7 +268,7 @@ export default function DemoPage() {
           <motion.div {...fadeUp(0.19)} className="flex flex-col gap-3">
             <SectionLabel>Evidence support (optional feature)</SectionLabel>
             <HelpNote>
-              If you upload a case file, RoundLab checks whether your speech evidence actually appears in your uploaded cards. This is only compared to your own files — not outside knowledge.
+              If you upload a case file, Dissio checks whether your speech evidence actually appears in your uploaded cards. This is only compared to your own files — not outside knowledge.
             </HelpNote>
             <div className="rounded-xl border border-hairline bg-surface-1 p-4 flex flex-col gap-3">
               {[

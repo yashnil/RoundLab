@@ -175,7 +175,7 @@ export default function LandingPage() {
                     </h1>
 
                     <p className="max-w-md text-base leading-relaxed text-ink-subtle lg:text-lg">
-                      RoundLab turns a practice speech into a flow, a judge-style ballot, and
+                      Dissio turns a practice speech into a flow, a judge-style ballot, and
                       your next adjustment — in under a minute.
                     </p>
                   </motion.div>
@@ -250,7 +250,7 @@ export default function LandingPage() {
             <p className="section-stamp">Capture</p>
             <h2 className="text-headline text-ink">Watch a speech become a flow</h2>
             <p className="max-w-2xl text-sm leading-relaxed text-ink-subtle">
-              Record, upload, or paste. RoundLab transcribes, extracts
+              Record, upload, or paste. Dissio transcribes, extracts
               claim–warrant–evidence–impact structure, and assembles the report automatically.
             </p>
           </motion.div>
@@ -331,7 +331,7 @@ export default function LandingPage() {
             <p className="section-stamp">Trust</p>
             <h2 className="text-headline text-ink">Why students and coaches trust it</h2>
             <p className="max-w-lg text-sm leading-relaxed text-ink-subtle">
-              RoundLab is a coach, not a shortcut — and it&apos;s explicit about what&apos;s
+              Dissio is a coach, not a shortcut — and it&apos;s explicit about what&apos;s
               source, what&apos;s AI, and what it can&apos;t judge.
             </p>
           </motion.div>

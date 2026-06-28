@@ -79,7 +79,7 @@ COACH_B   = "00000000-0000-0000-0002-000000000002"
 TEAM_A    = "00000000-0000-0000-0003-000000000001"
 TEAM_B    = "00000000-0000-0000-0003-000000000002"
 
-PASSWORD = "RoundLab_Test1!"
+PASSWORD = "Dissio_Test1!"
 
 
 # ── Local-URL predicate (zero network calls) ──────────────────────────────────
@@ -222,19 +222,19 @@ _requires_local = pytest.mark.skipif(
 
 @pytest.fixture(scope="session")
 def student_a_token():
-    return _sign_in("test_student_a@roundlab.local")
+    return _sign_in("test_student_a@dissio.local")
 
 @pytest.fixture(scope="session")
 def coach_a_token():
-    return _sign_in("test_coach_a@roundlab.local")
+    return _sign_in("test_coach_a@dissio.local")
 
 @pytest.fixture(scope="session")
 def student_b_token():
-    return _sign_in("test_student_b@roundlab.local")
+    return _sign_in("test_student_b@dissio.local")
 
 @pytest.fixture(scope="session")
 def coach_b_token():
-    return _sign_in("test_coach_b@roundlab.local")
+    return _sign_in("test_coach_b@dissio.local")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -260,10 +260,10 @@ class TestLocalSupabaseAvailability:
     @_requires_local
     def test_all_four_accounts_authenticate(self):
         for email in [
-            "test_student_a@roundlab.local",
-            "test_coach_a@roundlab.local",
-            "test_student_b@roundlab.local",
-            "test_coach_b@roundlab.local",
+            "test_student_a@dissio.local",
+            "test_coach_a@dissio.local",
+            "test_student_b@dissio.local",
+            "test_coach_b@dissio.local",
         ]:
             token = _sign_in(email)
             assert token and len(token) > 20, f"Sign-in failed for {email}"

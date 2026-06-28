@@ -49,7 +49,7 @@ function NodeBox({ node, accent }: { node: AnatomyNode; accent: boolean }) {
 
 /**
  * Debate-anatomy visualization for the processing room — an explanatory map of
- * how RoundLab assembles a flow from the transcript. It does NOT fabricate
+ * how Dissio assembles a flow from the transcript. It does NOT fabricate
  * argument text or claim per-stage backend telemetry; the `active` accent only
  * signals that analysis is in flight. Vertical on mobile, branched on desktop.
  */
@@ -57,7 +57,7 @@ export default function DebateAnatomy({ active = false, argumentsFound }: Debate
   return (
     <figure className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface-2/40 p-4">
       <figcaption className="flex items-center justify-between">
-        <span className="text-eyebrow text-ink-faint">RoundLab&apos;s argument engine</span>
+        <span className="text-eyebrow text-ink-faint">Dissio&apos;s argument engine</span>
         {argumentsFound != null && argumentsFound > 0 && (
           <span className="text-[10px] text-ink-faint">
             {argumentsFound} argument{argumentsFound !== 1 ? "s" : ""} detected
@@ -105,7 +105,7 @@ export default function DebateAnatomy({ active = false, argumentsFound }: Debate
       </div>
 
       <p className="text-[11px] leading-relaxed text-ink-faint">
-        This is the structure RoundLab maps from your speech — not a live progress bar. Your
+        This is the structure Dissio maps from your speech — not a live progress bar. Your
         flow, ballot, and drill target are assembled together, then shown when ready.
       </p>
     </figure>

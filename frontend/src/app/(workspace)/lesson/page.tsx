@@ -184,7 +184,7 @@ function SpeechStepView({
         <Mic size={28} className="mx-auto text-lav" aria-hidden />
         <p className="text-[13px] font-semibold text-ink">Record a practice speech</p>
         <p className="text-[12px] text-ink-subtle">
-          RoundLab will analyze it and update your {lesson.title} mastery score.
+          Dissio will analyze it and update your {lesson.title} mastery score.
         </p>
         <Link href={`/session?lesson=${lessonId}`}>
           <Button className="px-6">Go to Recording Studio</Button>

@@ -244,7 +244,7 @@ describe("Round simulation page auth gate", () => {
 
   it("page recovers active round from localStorage", () => {
     const src = readSrc("app/(workspace)/round-simulation/page.tsx");
-    expect(src).toContain("roundlab_active_round");
+    expect(src).toContain("dissio_active_round");
     expect(src).toContain("localStorage");
   });
 

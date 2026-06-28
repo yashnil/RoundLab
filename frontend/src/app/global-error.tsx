@@ -31,7 +31,7 @@ export default function GlobalError({
             Something went wrong
           </h1>
           <p style={{ fontSize: 14, lineHeight: 1.6, color: "#8a8f98", margin: 0 }}>
-            RoundLab hit an unexpected error. Your saved work is unaffected. Try
+            Dissio hit an unexpected error. Your saved work is unaffected. Try
             again, and if it keeps happening, reload the page.
           </p>
           {error.digest && (
